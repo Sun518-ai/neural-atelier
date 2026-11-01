@@ -40,14 +40,17 @@ The later puzzles add memory and execution-cost constraints to the numerical goa
 | --- | --- |
 | Connect modules | Click a **round output port**, then a **square input port**, or drag between them. |
 | Delete a wire | Click the wire (or its connected input port), then **Delete wire**. **Delete / Backspace** also removes the selected wire. |
+| Delete a module | In construction levels, click a module, then **Delete module** beside it. Undo restores the module and its wires. |
 | Arrange the workbench | Drag a module to move it. |
 | Build from the shelf | Drag a module card onto the table; its 3D preview follows your cursor. Click a card, then a free spot as an alternative. **Return module** removes that copy and its wires. |
 | Explore the scene | Drag empty space to rotate; scroll to zoom. During a run, dragging the workbench or a module rotates the view without moving the module. |
-| Inspect a module | Double-click it to open its card. |
+| Inspect a module | Double-click it on the workbench or shelf to open its card. Shelf previews work even when stock is exhausted; Enter also opens a focused shelf item. |
 | Test your circuit | Click **Run my network** and watch the vectors move. |
 | Pause a run | Click **Pause** beside the run button. Rotate or zoom while frozen, then click **Resume** to continue from the same moment. |
 | Change levels | Open the level menu. Each level keeps its own circuit. |
 | Return to the title screen | Click the **N / Neural Atelier** brand at the top left. |
+
+The left shelf starts in its smallest size. Use **− / +** to resize it, **Hide shelf** to collapse it, and **Module shelf** to reopen it. Your chosen size is remembered.
 
 The first five lessons provide fixed modules. **[Take a module](https://hacking.pub/games/neural-atelier/#workshop)** is a short placement tutorial with just one familiar projection. Later construction levels allow multiple copies, each with independent connections. The shelf shows remaining stock and the table limit: **8** modules for the FFN, **12** for Attention, and **7** for the Transformer block. Each module type has two copies; returning one restores its stock.
 

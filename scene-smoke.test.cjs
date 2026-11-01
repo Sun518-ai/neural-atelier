@@ -346,6 +346,40 @@ test('dragging a module card previews the operator, places one copy and dismisse
  event(doc.querySelector('[data-add-module="project"]'),'pointerdown',{clientX:120,clientY:160});event(doc,'pointermove',{clientX:700,clientY:380});event(doc,'pointerup',{clientX:1500,clientY:380});assert.equal(ghost(),undefined);assert.equal(app.api.getState().nodes.length,0,'dropping outside does not create or spend a copy');
 });
 
+test('shelf cards inspect every available kind without placing a node, including exhausted stock',async()=>{
+ const app=await boot({languages:['en-US']}),doc=app.document,M=app.c.NeuralPrologue;doc.querySelector('#welcome').close();
+ const event=(target,type,properties={})=>{const e=new app.window.Event(type,{bubbles:true,cancelable:true});Object.assign(e,properties);target.dispatchEvent(e);};
+ for(const level of ['workshop','ffn','attention','block']){
+  app.api.switchLevel(level);const saved=JSON.stringify(app.api.getState()),view=app.view();
+  for(const kind of Object.keys(M.inventory(M.levels[level]))){
+   const card=doc.querySelector(`[data-add-module="${kind}"]`);event(card,'click');event(card,'dblclick');await new Promise(setImmediate);
+   assert.equal(doc.querySelector('#module-card').open,true,kind);assert.equal(doc.querySelector('#card-name').textContent,M.definitions[kind].name);
+   assert.doesNotMatch(doc.querySelector('#module-card').textContent,/[\u3400-\u9fff]/,kind);
+   assert.ok(app.scenes.at(-1).children.some(o=>o.userData.shelfPreview));assert.equal(JSON.stringify(app.api.getState()),saved);
+   doc.querySelector('#camera-reset').onclick();await new Promise(setImmediate);doc.querySelector('#card-close').onclick();
+   assert.equal(app.scenes.at(-1).children.some(o=>o.userData.shelfPreview),false);assert.deepEqual(app.view(),view);assert.equal(app.api.placeModule(0,0),false,'inspection leaves no placement gesture pending');
+  }
+ }
+ app.api.switchLevel('workshop');app.api.setState(M.solutions('workshop'));app.api.getWorld().rebuild();app.api.refresh();
+ const card=doc.querySelector('[data-add-module="project"]');assert.equal(card.dataset.addDisabled,'true');assert.equal(card.getAttribute('aria-disabled'),'false');
+ const saved=JSON.stringify(app.api.getState());event(card,'dblclick');await new Promise(setImmediate);assert.equal(doc.querySelector('#module-card').open,true);doc.querySelector('#card-close').onclick();assert.equal(JSON.stringify(app.api.getState()),saved);
+ await app.api.run();assert.equal(doc.querySelectorAll('#test-results .pass').length,3,'preview did not replace the real operator used for execution');
+});
+
+test('clicking a placed module offers deletion, preserves other wiring and remains compatible with double-click',async()=>{
+ const app=await boot(),doc=app.document,M=app.c.NeuralPrologue;doc.querySelector('#welcome').close();app.api.switchLevel('ffn');app.api.setState(M.solutions('ffn'));app.api.getWorld().rebuild();app.api.refresh();
+ const event=(target,type,properties={})=>{const e=new app.window.Event(type,{bubbles:true,cancelable:true});Object.assign(e,properties);target.dispatchEvent(e);};
+ doc.querySelector('#scene').getBoundingClientRect=()=>({left:0,top:0,width:1400,height:760,right:1400,bottom:760});
+ const saved=JSON.stringify(app.api.getState());event(doc.querySelector('[data-node="down"]'),'click');assert.ok(doc.querySelector('[data-delete-node="down"]'));
+ event(doc.querySelector('[data-close-node]'),'click');assert.equal(doc.querySelector('.node-actions'),null);assert.equal(JSON.stringify(app.api.getState()),saved);
+ event(doc.querySelector('[data-node="down"]'),'click');event(doc.querySelector('[data-delete-node="down"]'),'click');
+ assert.equal(app.api.getState().nodes.some(n=>n.id==='down'),false);assert.deepEqual(Array.from(app.api.getState().nodes.find(n=>n.id==='add').links),['R',null]);assert.equal(app.api.getState().nodes.find(n=>n.id==='multiply').links[1],'up');assert.equal(M.stock(app.api.getState(),'down'),2);
+ doc.querySelector('#undo').onclick();assert.equal(JSON.stringify(app.api.getState()),saved);
+ for(let i=0;i<2;i++){event(doc.querySelector('[data-node="down"]'),'pointerdown',{clientX:650,clientY:350});event(doc,'pointerup',{clientX:650,clientY:350});if(!i)assert.ok(doc.querySelector('.node-actions'));}
+ await new Promise(setImmediate);assert.equal(doc.querySelector('#module-card').open,true);assert.equal(doc.querySelector('.node-actions'),null);doc.querySelector('#card-close').onclick();assert.equal(JSON.stringify(app.api.getState()),saved);
+ app.api.switchLevel('projection');event(doc.querySelector('[data-node="project"]'),'click');assert.equal(doc.querySelector('.node-actions'),null,'fixed introductory modules remain fixed');
+});
+
 test('duplicate modules render cards, distinct processing and correctly sized weight matrices',async()=>{
  let app;const seen=new Set();
  app=await boot({reduced:false,frameMs:120,onFrame:({document})=>{for(const el of document.querySelectorAll('.processing-packet'))if(!el.hidden)seen.add(el.dataset.node);}});

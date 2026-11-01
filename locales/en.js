@@ -1,5 +1,9 @@
 // English copy. Chinese source phrases are stable lookup keys.
 globalThis.AtelierEnglish = {
+  "收起组件架": "Hide shelf",
+  "展开组件架": "Show shelf",
+  "双击查看说明": "Double-click to inspect",
+  "删除组件": "Delete module",
   "缩小组件架": "Smaller module shelf",
   "放大组件架": "Larger module shelf",
   "序章 / 06": "PROLOGUE / 06",
