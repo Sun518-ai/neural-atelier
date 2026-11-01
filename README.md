@@ -43,7 +43,7 @@ The later puzzles add memory and execution-cost constraints to the numerical goa
 | Arrange the workbench | Drag a module to move it. |
 | Try a different arrangement | **Shuffle layout** moves the modules without changing their wires. New starting layouts are randomized. |
 | Build from the shelf | In the FFN, full-attention, and Transformer-block challenges, drag modules from the **Module shelf**, or select one and click a free spot. **Return module** removes it and its wires. |
-| Explore the scene | Drag empty space to rotate; scroll to zoom. |
+| Explore the scene | Drag empty space to rotate; scroll to zoom. During a run, dragging the workbench or a module rotates the view without moving the module. |
 | Inspect a module | Double-click it to open its card. |
 | Test your circuit | Click **Run my network** and watch the vectors move. |
 | Change levels | Open the level menu. Each level keeps its own circuit. |
@@ -54,6 +54,8 @@ The later puzzles add memory and execution-cost constraints to the numerical goa
 The animated title screen introduces the workbench. Music starts after you enter and pauses while the tab is in the background. You can mute it or replay the introduction from Settings.
 
 SiLU has its own activation animation: values travel along curved channels and shrink according to their sigmoid gates. Matrix projections retain their weighted-contribution animation. Existing saves keep your placed modules and wiring; use **Shuffle layout** to rearrange them or **Reset** to start the level again.
+
+Moving vectors share a small tray with features arranged left to right, matching the input and output racks. A sequence keeps its token rows separate. You can rotate and zoom during execution; wiring and module placement stay locked until the run stops.
 
 Progress and circuits are saved in this browser's `localStorage`. Links such as `#wire` or `#projection` select a level; they do not share your circuit or progress. The game requires a desktop browser with WebGL 2. Mobile layouts are not supported.
 

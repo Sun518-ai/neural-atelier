@@ -6,15 +6,53 @@ async function boot({reduced=true,frameMs=1000,onFrame=()=>{},languages=['zh-CN'
  document.createElement=function(name){const el=native(name);if(name==='canvas')el.getContext=()=>({fillRect(){},fillText(){},measureText(t){return {width:String(t).length*60}}});return el;};
  for(const el of document.querySelectorAll('dialog')){el.showModal=function(){this.open=true};el.close=function(){this.open=false};}
  for(const el of document.querySelectorAll('*')){Object.defineProperty(el,'clientWidth',{get:()=>el.id==='scene'?1400:100});Object.defineProperty(el,'clientHeight',{get:()=>el.id==='scene'?760:60});el.focus=()=>{};el.scrollIntoView=()=>{};}
- const scenes=[];class Renderer{constructor(){this.domElement=native('canvas');this.shadowMap={};this.capabilities={getMaxAnisotropy:()=>8};}setPixelRatio(){}setClearColor(){}setSize(){}render(scene,camera){scenes.push(scene);scene.updateMatrixWorld();camera.updateMatrixWorld();scene.traverse(o=>{if(o.isMesh)assert.ok(o.matrixWorld.elements.every(Number.isFinite),'nonfinite transform '+o.type);});}}
+ let view;const scenes=[];class Renderer{constructor(){this.domElement=native('canvas');this.shadowMap={};this.capabilities={getMaxAnisotropy:()=>8};}setPixelRatio(){}setClearColor(){}setSize(){}render(scene,camera){view={position:camera.position.toArray(),width:camera.right-camera.left};scenes.push(scene);scene.updateMatrixWorld();camera.updateMatrixWorld();scene.traverse(o=>{if(o.isMesh)assert.ok(o.matrixWorld.elements.every(Number.isFinite),'nonfinite transform '+o.type);});}}
  const storage=new Map();let now=0;const c={document,console,navigator:{languages},T:{...Three,WebGLRenderer:Renderer},devicePixelRatio:2,ResizeObserver:class{observe(){}},requestAnimationFrame:cb=>setImmediate(()=>{now+=frameMs;onFrame({now,document,window});cb(now);}),cancelAnimationFrame:clearImmediate,performance:{now:()=>now},matchMedia:()=>({matches:reduced}),setTimeout,localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)}};c.window=c;vm.createContext(c);
  for(const f of ['locales/en.js','i18n.js','music.js','shell.js','model.js','campaign.js','engine-model.js'])vm.runInContext(fs.readFileSync(__dirname+'/'+f,'utf8'),c,{filename:f});
  for(const f of ['module-cards.js','level-progress.js','scene-art.js'])vm.runInContext(fs.readFileSync(__dirname+'/'+f,'utf8').replaceAll('export ',''),c,{filename:f});
  let src=fs.readFileSync(__dirname+'/game.js','utf8').replace(/^import .*\n/gm,'').replace("const T=await import('./vendor/three.module.js');",'const T=window.T;').replace(/const \{createSceneArt\}=await import\('\.\/scene-art\.js\?v=[^']+'\);/,'');
  src+='\nwindow.testAPI={switchLevel,run,refresh,select,assignDevice,chooseOutput,chooseInput,chooseModule,placeModule,getState:()=>state,setState:s=>state=s,getWorld:()=>world,getFault:()=>fault};';
  await vm.runInContext('(async()=>{'+src+'})()',c);
- assert.ok(c.testAPI.getWorld(),'3D boot failed');return {c,document,window,api:c.testAPI,scenes,time:()=>now};
+ assert.ok(c.testAPI.getWorld(),'3D boot failed');return {c,document,window,api:c.testAPI,scenes,time:()=>now,view:()=>view};
 }
+test('moving trays preserve feature columns and sequence rows through projection',async()=>{
+ let app;const checked=new Set();
+ app=await boot({reduced:false,frameMs:100,onFrame:()=>{
+  if(!app)return;
+  for(const mesh of app.scenes.at(-1).children){
+   if(!mesh.visible||(!mesh.userData.packet&&!mesh.userData.processing&&!mesh.userData.processingOutput))continue;
+   const bars=mesh.children.filter(o=>o.userData.feature!=null);if(!bars.length)continue;
+   const rows=mesh.userData.row==='sequence'?3:1,cols=bars.length/rows;
+   assert.ok(mesh.children.some(o=>o.userData.packetTray),'each vector has one shared tray');
+   for(let row=0;row<rows;row++){
+    const features=bars.slice(row*cols,(row+1)*cols);assert.ok(features.every(o=>o.position.z===features[0].position.z));
+    assert.ok(features.every((o,i)=>!i||o.position.x>features[i-1].position.x),'features stay in left-to-right order');
+    if(row){assert.ok(features[0].position.z>bars[(row-1)*cols].position.z);assert.equal(features[0].position.x,bars[0].position.x);}
+   }
+   if(rows===1)assert.equal(bars[0].position.z,0);
+   checked.add(rows+'x'+cols);
+  }
+ }});
+ for(const id of ['projection','scores']){app.api.switchLevel(id);app.api.setState(app.c.NeuralPrologue.solutions(id));app.api.getWorld().rebuild();await app.api.run();assert.equal(app.document.querySelectorAll('#test-results .pass').length,3);}
+ for(const shape of ['1x2','1x4','3x2','3x3'])assert.ok(checked.has(shape),shape+' should retain its orientation');
+});
+test('camera drag and zoom remain live during a run without editing the circuit',async()=>{
+ let app,checked=false;
+ const event=(target,type,properties)=>{const e=new app.window.Event(type,{bubbles:true,cancelable:true});Object.assign(e,properties);target.dispatchEvent(e);};
+ app=await boot({reduced:false,frameMs:100,onFrame:({document})=>{
+  if(!app||checked||!document.querySelector('.packet:not([hidden])'))return;checked=true;
+  const original=JSON.stringify(app.api.getState()),start=app.view();
+  event(document.querySelector('#scene'),'pointerdown',{clientX:600,clientY:300});event(document,'pointermove',{clientX:680,clientY:350});event(document,'pointerup',{});
+  assert.notDeepEqual(app.view().position,start.position,'dragging the workbench moves the camera');
+  const second=app.view(),label=document.querySelector('[data-node="project"]');
+  event(label,'pointerdown',{clientX:680,clientY:350});event(document,'pointermove',{clientX:730,clientY:390});event(document,'pointerup',{});
+  assert.notDeepEqual(app.view().position,second.position,'dragging a module label during a run also orbits');
+  const beforeZoom=app.view().width;event(label,'wheel',{deltaY:-100});assert.ok(app.view().width<beforeZoom);
+  app.api.chooseOutput('R');app.api.chooseInput('sink',0);assert.equal(JSON.stringify(app.api.getState()),original,'camera gestures and port clicks must not rewire or move modules');
+ }});
+ app.document.querySelector('#welcome').close();app.api.switchLevel('projection');app.api.setState(app.c.NeuralPrologue.solutions('projection'));app.api.getWorld().rebuild();await app.api.run();
+ assert.ok(checked);assert.equal(app.document.querySelectorAll('#test-results .pass').length,3);assert.equal(app.document.querySelectorAll('.packet').length,0);assert.equal(app.document.body.classList.contains('network-running'),false);
+});
 test('construct every 3D level, run its data through scene updates, open and close every module card',async()=>{
  const app=await boot(),M=app.c.NeuralPrologue;
  for(const id of Object.keys(M.levels)){

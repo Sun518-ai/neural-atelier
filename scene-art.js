@@ -172,10 +172,13 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   tokens.forEach((t,i)=>{const active=t.g.userData.active;t.panel.material.color.set(active?0xe6eacb:0xbfd8d3);if(active)t.panel.material.color.lerp(new T.Color(rowColor(i)),pulse*.28);t.stripe.material.emissiveIntensity=active?.65+pulse: .1;});
  }
  function packet(values,color,{sequence=false}={}){
-  const g=new T.Group(),cols=sequence?values.length/3:values.length;g.userData.packet=true;
+  const g=new T.Group(),cols=sequence?values.length/3:values.length,count=sequence?3:1;g.userData.packet=true;
+  // Features run left to right, just like the input/output racks. A sequence
+  // adds token rows in depth; moving the packet never transposes its tensor.
+  const tray=box(g,cols*.24+.1,.045,count*.3+.06,0,0,0,0xc7d9ce);tray.userData.packetTray=true;
   values.forEach((v,i)=>{const finite=Number.isFinite(v),zero=finite&&Math.abs(v)<1e-9,c=!finite||v<0?0xd6a578:zero?0xc8d4d0:color,h=zero?.035:.08+Math.min(finite?Math.abs(v):2,2)*.24;
-   const x=sequence?(Math.floor(i/cols)-1)*.25:0,z=(i%cols-(cols-1)/2)*.24;
-   box(g,.2,.025,.2,x,.02,z,0xdce3d9);const bar=box(g,.17,h,.17,x,.045+h/2,z,c,{emissive:c,emissiveIntensity:zero?.02:.4});bar.userData={feature:i,value:v};
+   const x=(i%cols-(cols-1)/2)*.24,z=(Math.floor(i/cols)-(count-1)/2)*.3;
+   box(g,.2,.025,.23,x,.035,z,0xe6ece2);const bar=box(g,.17,h,.17,x,.06+h/2,z,c,{emissive:c,emissiveIntensity:zero?.02:.4});bar.userData={feature:i,value:v};
   });return g;
  }
  function resetUnits(){units.clear();}
