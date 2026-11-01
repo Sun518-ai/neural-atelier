@@ -26,7 +26,7 @@ const levels={
   hints:[I18n.t("可以先试跑现有线路，比较出口的实际值与预期值。"),I18n.t("SiLU 对每个数单独计算，不改变向量长度；双击卡片可查看函数。")]},
  gating:{id:'gating',chapter:I18n.t("序章 / 04"),title:I18n.t("让两路相遇"),nodes:['gate','up','silu','multiply'],sources:['R'],sinkDim:4,sampleCount:5,sourceX:-8,sinkX:8,zoom:1,boardWidth:21,boardDepth:10,
   positions:{gate:[-4,-2],up:[-4,2],silu:[0,-2],multiply:[3.5,1.2]},initialLinks:{gate:['R'],up:['R']},
-  mission:I18n.t("让门值调节内容"),description:I18n.t("两套权重产生门与内容。让门经过激活后，逐项调节内容的贡献。出口应保留 4 个特征，还会用两组新向量检验。"),summary:I18n.t("新增两路分支和逐元素相乘。自己决定哪条支路经过激活。"),concept:I18n.t("两路门控"),sourceTitle:I18n.t("输入 X"),sourceNote:'',outputTitle:I18n.t("门控特征 H"),boardText:'GATING / 04',shape:'2 → 4 + 4 → 4',next:'residual',
+  mission:I18n.t("把两组数一一相乘"),description:I18n.t("两块投影接收同一份输入，分别算出 4 个数。用 SiLU 处理其中一组，再让两组数一一相乘。接好模块，让 5 组输入都得到目标结果。"),summary:I18n.t("新增两路分支和逐元素相乘。自己决定哪条支路经过激活。"),concept:I18n.t("两路门控"),sourceTitle:I18n.t("输入 X"),sourceNote:'',outputTitle:I18n.t("门控特征 H"),boardText:'GATING / 04',shape:'2 → 4 + 4 → 4',next:'residual',
   hints:[I18n.t("端口维度相同只说明能接上，不代表计算结果正确。"),I18n.t("逐元素相乘把两条支路对应的数相乘；激活放在哪一条支路会改变结果。")]},
  residual:{id:'residual',chapter:I18n.t("序章 / 05"),title:I18n.t("留一条回来的路"),nodes:['project','down','add'],sources:['R'],sinkDim:2,sampleCount:5,sourceX:-7.5,sinkX:7.5,zoom:.96,boardWidth:20,boardDepth:9,
   positions:{project:[-3.8,1.3],down:[0,1.3],add:[3.8,-.3]},initialLinks:{project:['R'],down:['project']},initialSink:'down',
