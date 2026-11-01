@@ -78,7 +78,7 @@ function completedCircuit(M,id){
 }
 
 test('completion waits for every input, replay preserves the circuit and undo, and next loads the saved destination',async()=>{
- const app=boot(),dialog=app.document.querySelector('#level-complete');
+ const app=boot(),dialog=app.document.querySelector('#level-complete');app.document.querySelector('#run').focus=()=>{};
  app.eval("switchLevel('ffn');state=M.solutions(stageId);state.nodes[0].x+=.2;save();window.destination=JSON.stringify(state);switchLevel('workshop');state=M.solutions(stageId);checkpoint();state.nodes[0].z+=.25;save();setPlaybackSpeed(.5)");
  const before=app.eval('JSON.stringify(state)'),undo=app.eval('JSON.stringify(history)');
  let runs=0;
@@ -88,9 +88,10 @@ test('completion waits for every input, replay preserves the circuit and undo, a
  assert.equal(dialog.open,true);assert.equal(runs,app.eval('stage().sampleCount'));
  assert.equal(app.document.querySelector('#complete-title').textContent,'本关完成');
  app.c.I18n.setPreference('en');assert.equal(app.document.querySelector('#complete-title').textContent,'Level complete');assert.doesNotMatch(dialog.textContent,/[\u3400-\u9fff]/);
- await app.document.querySelector('#complete-replay').onclick();
- assert.equal(dialog.open,true);assert.equal(runs,2*app.eval('stage().sampleCount'));
+ app.document.querySelector('#complete-replay').onclick();
+ assert.equal(dialog.open,false);assert.equal(app.eval('busy'),false);assert.equal(runs,app.eval('stage().sampleCount'));assert.equal(app.eval('results.length'),0);assert.equal(app.document.querySelector('#run-report').hidden,true);
  assert.equal(app.eval('JSON.stringify(state)'),before);assert.equal(app.eval('JSON.stringify(history)'),undo);assert.equal(app.eval('playbackSpeed'),.5);
+ await app.eval('run()');assert.equal(dialog.open,true);assert.equal(runs,2*app.eval('stage().sampleCount'));
  app.document.querySelector('#complete-next').onclick();assert.equal(dialog.open,false);assert.equal(app.location.hash,'#ffn');assert.equal(app.eval('JSON.stringify(state)'),app.c.destination);
  app.eval("switchLevel('workshop')");assert.equal(app.eval('JSON.stringify(state)'),before);
 });

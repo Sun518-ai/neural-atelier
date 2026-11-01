@@ -1,5 +1,5 @@
-import {cardFor,exampleFor} from './module-cards.js?v=uniform-detail-1';
-import {createProgress} from './level-progress.js?v=uniform-detail-1';
+import {cardFor,exampleFor} from './module-cards.js?v=output-registers-1';
+import {createProgress} from './level-progress.js?v=output-registers-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -61,7 +61,7 @@ function renderCompletion(){
 }
 function showCompletion(){if(busy||!levelPassed())return;renderCompletion();if(!$('#level-complete').open)$('#level-complete').showModal();}
 $('#complete-close').onclick=closeCompletion;
-$('#complete-replay').onclick=()=>{closeCompletion();return run();};
+$('#complete-replay').onclick=()=>{changed();say('');$('#run').focus({preventScroll:true});};
 $('#complete-next').onclick=()=>{closeCompletion();if(stage().next)switchLevel(stage().next);else levelMenu();};
 function engineControls(){
  const c=stage(),area=$('#engine-controls');if(!c.engine){area.innerHTML='';return;}
@@ -195,7 +195,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=uniform-detail-1');
+ const {createSceneArt}=await import('./scene-art.js?v=output-registers-1');
  const art=createSceneArt(T,scene,colors,{anisotropy:renderer.capabilities.getMaxAnisotropy()});art.surroundings(samples(),stage());
  const assembly=new T.Group(),wires=new T.Group();scene.add(assembly,wires);const neuronGeo=new T.SphereGeometry(.115,16,12);let elements=[],curves=[],packets=[],drag=null,preview=null,yaw=.05,pitch=.8,zoom=stage().zoom,lastDepth=-1;
  const cameraTarget=new T.Vector3();let focusId=null,shelfFocus=null,shelfModel=null,overview=null,cameraFrame=0,transitioning=false,lastTap=null;
@@ -289,6 +289,7 @@ try{
  }
  function fadePort(el,x,y,footprints,width,height){
   let fade=0;const halfWidth=(width||27)/2,halfHeight=(height||27)/2;
+  for(const p of packets)if(p.detailed&&p.node.id===el.dataset.output)fade=Math.max(fade,p.portFade||0);
   for(const p of footprints){
    const gap=Math.hypot(Math.max(0,Math.abs(x-p.x)-halfWidth),Math.max(0,Math.abs(y-p.y)-halfHeight))-p.r;
    const t=Math.max(0,Math.min(1,gap/24)),ease=t*t*(3-2*t);
@@ -315,7 +316,18 @@ try{
   });
   packets.forEach(p=>{
    const [x,y]=project(p.p.clone().add(new T.Vector3(0,.7,0)));p.el.style.left=x+'px';p.el.style.top=y+'px';
-   if(p.calculation){const [cx,cy]=project(new T.Vector3(p.node.x,1.05,p.node.z+1.28));p.calculation.style.left=cx+'px';p.calculation.style.top=cy+'px';}
+   if(p.calculation){
+    const scale=Math.min(2.2,w/width/60);
+    p.equationVisible=art.detailsVisible();
+    p.calculation.dataset.detail=p.equationVisible?'full':'abstract';p.calculation.style.setProperty('--calculation-scale',String(scale));
+    const [cx,cy]=project(art.projectionOutlet(p.node.id,p.column)),cw=(p.equationVisible?(p.calculation.offsetWidth||p.equation.textContent.length*7+14):24)*scale,offset=28*scale;
+    p.calculation.style.left=Math.max(12,cx+offset+cw<w-12?cx+offset:cx-offset-cw)+'px';p.calculation.style.top=Math.max(20,Math.min(h-20,cy))+'px';
+    for(const {el,bar}of p.outputLabels){
+     const [rx,ry]=project(bar.getWorldPosition(new T.Vector3())),[sx,sy]=project(art.projectionOutlet(p.node.id,bar.userData.feature)),g=p.outputMesh.userData.gather;
+     el.style.left=((sx+28*scale)*(1-g)+(rx-7*scale)*g)+'px';el.style.top=(sy*(1-g)+(ry-12*scale)*g)+'px';
+     el.style.setProperty('--calculation-scale',String(scale));el.style.visibility=p.equationVisible?'':'hidden';
+    }
+   }
   });
  }
 
@@ -367,7 +379,7 @@ try{
  }
  function nodeTap(id,e){const now=performance.now();if(lastTap?.id===id&&now-lastTap.time<380&&Math.hypot(e.clientX-lastTap.x,e.clientY-lastTap.y)<10){lastTap=null;focus(id);}else{lastTap={id,time:now,x:e.clientX,y:e.clientY};select(id);}}
  function worldPoint(x,y){const r=host.getBoundingClientRect();cursor.set((x-r.left)/r.width*2-1,-((y-r.top)/r.height*2-1));ray.setFromCamera(cursor,camera);const p=new T.Vector3();return ray.ray.intersectPlane(plane,p)?p:null;}
- function clearPackets(){packets.forEach(p=>{p.el.remove();p.calculation?.remove();for(const mesh of [p.mesh,p.outputMesh].filter(Boolean)){scene.remove(mesh);mesh.traverse(o=>{o.geometry?.dispose();o.material?.map?.dispose();o.material?.dispose();});}});packets=[];art.clearProcessing();render();}
+ function clearPackets(){packets.forEach(p=>{p.el.remove();p.calculation?.remove();p.outputLabels?.forEach(({el})=>el.remove());for(const mesh of [p.mesh,p.outputMesh].filter(Boolean)){scene.remove(mesh);mesh.traverse(o=>{o.geometry?.dispose();o.material?.map?.dispose();o.material?.dispose();});}});packets=[];art.clearProcessing();render();}
  function animate(ev,ms,id){
   clearPackets();lastDepth=-1;const reduced=matchMedia('(prefers-reduced-motion:reduce)').matches;if(reduced)ms=70;
   let previous=animationTime(),elapsed=0;
@@ -411,11 +423,18 @@ try{
    const beforeWidth=p.cells.offsetWidth||p.cells.textContent.length*6.6,afterWidth=after.offsetWidth||after.textContent.length*6.6;
    p.el.hidden=true;p.el.style.visibility='';morph.style.width=beforeWidth+'px';
    if(detailed){
+    art.prepareProjectionOutput(outputMesh);
+    p.outputLabels=output.map((value,j)=>{
+     const el=document.createElement('span');el.className='projection-result';el.hidden=true;el.textContent=fmt(value);el.dataset.node=n.id;el.dataset.column=String(j);el.dataset.row=p.el.dataset.row;overlay.appendChild(el);
+     return {el,bar:outputMesh.children.find(o=>o.userData.feature===j)};
+    });
     const calculation=document.createElement('span');calculation.className='projection-calculation';calculation.hidden=true;calculation.dataset.node=n.id;
+    const equation=document.createElement('span');equation.className='projection-equation';calculation.appendChild(equation);
+    const abstract=document.createElement('span');abstract.className='projection-sum-symbol';abstract.textContent='∑';abstract.setAttribute('aria-hidden','true');calculation.appendChild(abstract);
     const factor=v=>v<0?'('+fmt(v)+')':fmt(v),terms=[];
-    input.forEach((value,i)=>{if(i)calculation.appendChild(document.createTextNode(' + '));const term=document.createElement('span');term.style.color=colorHex(art.featureColor(i));term.textContent=factor(value)+' × '+factor(weightsFor(n.id)[i][0]);calculation.appendChild(term);terms.push(term);});
+    input.forEach((value,i)=>{if(i)equation.appendChild(document.createTextNode(' + '));const term=document.createElement('span');term.style.color=colorHex(art.featureColor(i));term.textContent=factor(value)+' × '+factor(weightsFor(n.id)[i][0]);equation.appendChild(term);terms.push(term);});
     const sum=document.createElement('b'),rounded=[...input,...weightsFor(n.id).map(w=>w[0]),output[0]].some(v=>Math.abs(v-Number(v.toFixed(2)))>1e-9);
-    sum.textContent=(rounded?' ≈ ':' = ')+fmt(output[0]);sum.style.opacity='0';calculation.appendChild(sum);overlay.appendChild(calculation);Object.assign(p,{calculation,sum,terms,factor,column:0});
+    sum.textContent=(rounded?' ≈ ':' = ')+fmt(output[0]);sum.style.opacity='0';equation.appendChild(sum);overlay.appendChild(calculation);Object.assign(p,{calculation,equation,sum,terms,factor,column:0});
    }
    Object.assign(p,{node:n,input,output,outputMesh,outputMaterials:fadeMaterials(outputMesh),morph,after,beforeWidth,afterWidth,start:starts[ev.depths[n.id]],end:ends[ev.depths[n.id]],path:processPaths.get(n.id)});
    p.p=p.path.getPoint(0);p.mesh.position.copy(p.p);p.outputMesh.position.copy(p.p);packets.push(p);
@@ -444,7 +463,15 @@ try{
      p.materials.forEach(m=>m.opacity=inputAlpha);p.outputMaterials.forEach(m=>m.opacity=outputAlpha);p.outputMesh.position.copy(p.p);
      if(p.detailed){
       art.routeProjectionPacket(p.node.id,p.mesh,progress,p.p,p.path.getPoint(.12));
-      p.calculation.hidden=!visible||progress<.38||progress>=.85;p.calculation.style.opacity=String(ramp(progress,.38,.43)*(1-ramp(progress,.8,.85)));p.sum.style.opacity=String(ramp(tt,.61+timing.offset,.67+timing.offset));
+      art.routeProjectionOutput(p.node.id,p.outputMesh,tt,p.p);
+      p.outputMesh.visible=visible&&tt>=.67;
+      p.portFade=visible?ramp(progress,.2,.38):0;
+      const local=tt-timing.offset;
+      p.calculation.hidden=!visible||local<.36||local>=.76;p.calculation.style.opacity=String(ramp(local,.36,.4)*(1-ramp(local,.71,.76)));p.sum.style.opacity=String(ramp(local,.61,.67));
+      p.outputLabels.forEach(({el},j)=>{
+       const alpha=ramp(tt,.76+j*timing.step,.8+j*timing.step)*(1-ramp(progress,.89,.97));
+       el.hidden=!visible||alpha<=0;el.style.opacity=String(alpha);
+      });
       p.calculation.dataset.column=String(timing.column);
       if(p.column!==timing.column){
        p.column=timing.column;p.terms.forEach((term,i)=>term.textContent=p.factor(p.input[i])+' × '+p.factor(weightsFor(p.node.id)[i][p.column]));

@@ -39,22 +39,26 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
  const detailModes={board:true,card:true};let detailScope='board';
  function updateDetail(camera,width,height){
   scene.updateMatrixWorld(true);camera.updateMatrixWorld();
-  const labels=[];let smallest=Infinity;
+  const labels=[],modules=new Set();let smallest=Infinity;
   scene.traverse(mesh=>{
    const detail=mesh.userData.detailText;if(!detail)return;
    // Hidden modules must not affect a card's close-up. The label's own
    // visibility is controlled below, so still measure it when abstracted.
    for(let parent=mesh.parent;parent;parent=parent.parent)if(!parent.visible)return;
-   labels.push(mesh);
-   detailBottom.set(0,-detail.height/2,0).applyMatrix4(mesh.matrixWorld).project(camera);
-   detailTop.set(0,detail.height/2,0).applyMatrix4(mesh.matrixWorld).project(camera);
-   const pixels=Math.hypot((detailTop.x-detailBottom.x)*width/2,(detailTop.y-detailBottom.y)*height/2)*detail.fontFraction;
-   smallest=Math.min(smallest,pixels);
+   labels.push(mesh);modules.add(mesh.parent);
   });
   if(!labels.length)return;
-  // One shared switch: if any detail becomes unreadable, use colored blocks
-  // throughout this view. All labels return together, with zoom hysteresis.
-  const visible=smallest>=(detailModes[detailScope]?9:11);
+  for(const module of modules){
+   const span=(x,z)=>{
+    detailBottom.set(-x,.45,-z).applyMatrix4(module.matrixWorld).project(camera);
+    detailTop.set(x,.45,z).applyMatrix4(module.matrixWorld).project(camera);
+    return Math.hypot((detailTop.x-detailBottom.x)*width/2,(detailTop.y-detailBottom.y)*height/2);
+   };
+   smallest=Math.min(smallest,Math.max(span(1,0),span(0,1.2)));
+  }
+  // Judge the whole module, not the fitted font of its longest decimal.
+  // Normal-size modules keep all numbers; truly small plates switch together.
+  const visible=smallest>=(detailModes[detailScope]?95:105);
   detailModes[detailScope]=visible;labels.forEach(mesh=>mesh.visible=visible);
  }
  function surroundings(samples,layout={}){
@@ -242,6 +246,23 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
    Object.assign(bar.userData,{mappedInput:i,mappingProgress:fan});
   }
  }
+ function projectionOutlet(id,column){return units.get(id).outputs[column].getWorldPosition(new T.Vector3());}
+ function prepareProjectionOutput(mesh){
+  mesh.userData.outputHomes=mesh.children.map(o=>o.position.clone());mesh.userData.gather=0;mesh.userData.routing=true;
+ }
+ function routeProjectionOutput(id,mesh,time,origin){
+  const columns=units.get(id).outputs.length,timing=projectionFrame(time,columns),gather=ramp(timing.phase,.8,.96);
+  mesh.userData.gather=gather;mesh.userData.routing=gather<1;
+  mesh.children.forEach((o,i)=>{
+   if(o.userData.packetTray){o.material.opacity=ramp(timing.phase,.8,.94);return;}
+   const j=o.userData.feature??o.userData.featurePad,home=mesh.userData.outputHomes[i],alpha=ramp(time,.67+j*timing.step,.73+j*timing.step);
+   o.visible=alpha>0;o.material.opacity=alpha;
+   // Each result waits at its own output neuron. Once all have arrived,
+   // assemble the same components in feature order on the outgoing tray.
+   const start=projectionOutlet(id,j).add(new T.Vector3(.28,home.y,0)),target=origin.clone().add(home);
+   if(gather===1)o.position.copy(home);else o.position.copy(start.lerp(target,gather).sub(origin));
+  });
+ }
  function resetUnits(){units.clear();}
- return {surroundings,module,sync,updateDetail,pulseSource,projectionFrame,processing,clearProcessing,packet,prepareProjectionPacket,routeProjectionPacket,featureColor,rowColor,rowZ,resetUnits,focus(active){context.visible=!active;floor.visible=!active;detailScope=active?'card':'board';if(active)detailModes.card=true;}};
+ return {surroundings,module,sync,updateDetail,detailsVisible:()=>detailModes[detailScope],pulseSource,projectionFrame,processing,clearProcessing,packet,prepareProjectionPacket,routeProjectionPacket,projectionOutlet,prepareProjectionOutput,routeProjectionOutput,featureColor,rowColor,rowZ,resetUnits,focus(active){context.visible=!active;floor.visible=!active;detailScope=active?'card':'board';if(active)detailModes.card=true;}};
 }

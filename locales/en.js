@@ -2,7 +2,7 @@
 globalThis.AtelierEnglish = {
   "本关完成": "Level complete",
   "全部输入验证通过。": "All inputs passed validation.",
-  "组件和接线已保留，重玩会再次运行当前网络。": "Your modules and wires are saved. Replay runs this circuit again.",
+  "组件和接线已保留，可以继续调整，再手动试跑。": "Your modules and wires are kept. Adjust the circuit, then run it when you’re ready.",
   "重玩本关": "Replay level",
   "收起组件架": "Hide shelf",
   "展开组件架": "Show shelf",

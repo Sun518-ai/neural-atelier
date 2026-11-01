@@ -120,9 +120,10 @@ test('all matrix labels switch abstraction together and a close-up preserves the
  assert.ok(new Set(faces.map(o=>o.userData.detailText.fontFraction)).size>1,'short numbers and decimals have different fitted sizes');
  const wheel=deltaY=>{const e=new app.window.Event('wheel',{bubbles:true,cancelable:true});e.deltaY=deltaY;app.document.querySelector('#scene').dispatchEvent(e);};
  const uniform=()=>{assert.equal(new Set(faces.map(o=>o.visible)).size,1,'no partly abstracted matrix or neighboring module');return faces[0].visible;};
+ assert.equal(uniform(),true,'normal-size modules keep every number, including decimals');
  wheel(-2000);assert.equal(uniform(),true);
  let steps=0;while(uniform()&&steps++<50)wheel(25);
- assert.equal(uniform(),false,'the first unreadable number abstracts every matrix');
+ assert.equal(uniform(),false,'a small module footprint abstracts every matrix');
  // Return slightly across the entry threshold: hysteresis keeps the board
  // abstract, and opening a detailed card must not reset that decision.
  wheel(-25);assert.equal(uniform(),false);
@@ -329,7 +330,7 @@ test('down projection routes four feature blocks to matching weight rows and exp
   }
   if(row!=='0')return;
   const calc=document.querySelector('.projection-calculation[data-node="down"]');
-  if(calc&&!calc.hidden){const column=Number(calc.dataset.column);assert.equal(calc.textContent,['1 × 0.4 + 0 × 0 + 1 × 0.2 + 0.5 × (-0.1) = 0.55','1 × 0 + 0 × 0.3 + 1 × 0.2 + 0.5 × 0.3 = 0.35'][column]);formulas.add(column);}
+  if(calc&&!calc.hidden){const column=Number(calc.dataset.column);assert.equal(calc.querySelector('.projection-equation').textContent,['1 × 0.4 + 0 × 0 + 1 × 0.2 + 0.5 × (-0.1) = 0.55','1 × 0 + 0 × 0.3 + 1 × 0.2 + 0.5 × 0.3 = 0.35'][column]);formulas.add(column);}
   unit.traverse(o=>{if(!o.userData.contribution||!o.visible)return;const d=o.userData;
    assert.equal(d.value,[1,0,1,.5][d.input]*app.c.NeuralPrologue.weights.down[d.input][d.output]);
    assert.notEqual(d.value,0,'zero values still align but do not send a nonzero contribution');
@@ -343,6 +344,45 @@ test('down projection routes four feature blocks to matching weight rows and exp
  const duration=i=>Math.max(...intervals.get(i))-Math.min(...intervals.get(i));assert.ok(Math.abs(duration(0)-duration(1))<=40,'both outputs use the same travel time');
  assert.equal(app.document.querySelectorAll('.projection-calculation,.packet').length,0);
  assert.equal(app.document.querySelectorAll('#test-results .pass').length,5);
+});
+
+test('projection keeps computed values by their own output spheres before gathering, with zoomable formulas',async()=>{
+ let app,zoomChecked=false,zoomPhase=0;const columns=new Map(),counts=new Set(),trails=new Map();let gathered=0;
+ const wheel=deltaY=>{const e=new app.window.Event('wheel',{bubbles:true,cancelable:true});e.deltaY=deltaY;app.document.querySelector('#scene').dispatchEvent(e);};
+ app=await boot({reduced:false,frameMs:40,onFrame:({document})=>{
+  if(!app)return;
+  const calc=document.querySelector('.projection-calculation[data-node="project"]'),out=app.scenes.at(-1).children.find(o=>o.userData.processingOutput==='project');
+  if(!calc||!out)return;
+  const unit=app.api.getState().nodes.find(n=>n.id==='project'),labels=[...document.querySelectorAll('.projection-result[data-node="project"]')];
+  if(!calc.hidden&&out.userData.row==='0'){
+   const column=Number(calc.dataset.column);columns.set(column,parseFloat(calc.style.top));
+   assert.equal(labels.filter(el=>!el.hidden).length,column,'previous results persist; future results are not revealed');
+   assert.ok(Number(document.querySelector('[data-output="project"]').style.opacity)<.12,'the output dimension badge stays transparent while computing');
+   if(column===2&&!zoomChecked){
+    zoomChecked=true;zoomPhase=1;app.api.togglePause();const scale=Number(calc.style.getPropertyValue('--calculation-scale'));
+    wheel(2000);assert.equal(calc.dataset.detail,'abstract');assert.ok(Number(calc.style.getPropertyValue('--calculation-scale'))<scale);
+    assert.ok(labels.every(el=>el.style.visibility==='hidden'),'abstract view retains the 3D result blocks instead of tiny digits');
+   }else if(zoomPhase===1){
+    zoomPhase=2;wheel(-2000);assert.equal(calc.dataset.detail,'full');assert.ok(Number(calc.style.getPropertyValue('--calculation-scale'))>1);app.api.togglePause();
+   }
+  }
+  if(!out.visible)return;
+  const bars=out.children.filter(o=>o.userData.feature!=null),visible=bars.filter(o=>o.visible),gather=out.userData.gather;
+  counts.add(visible.length);
+  if(gather>0){gathered++;assert.equal(visible.length,4,'gather starts only after all four results exist');}
+  for(const bar of visible){
+   const j=bar.userData.feature,pos=bar.getWorldPosition(new app.c.T.Vector3()),key=out.userData.row+':'+j;
+   if(!trails.has(key))trails.set(key,[]);trails.get(key).push(pos);
+   if(gather===0){assert.ok(Math.abs(pos.x-(unit.x+.98))<1e-9);assert.ok(Math.abs(pos.z-(unit.z+(j-1.5)*.4))<1e-9,'computed value stays at its corresponding sphere');}
+   if(out.userData.row==='0')assert.equal(labels[j].textContent,String([1,0,1,.5][j]));
+  }
+ }});
+ app.api.switchLevel('projection');app.api.setState(app.c.NeuralPrologue.solutions('projection'));app.api.getWorld().rebuild();await app.api.run();
+ assert.equal(columns.size,4);assert.equal(new Set(columns.values()).size,4,'the equation follows each sphere, not a fixed panel below');
+ assert.deepEqual([...counts].sort(),[1,2,3,4]);assert.ok(gathered>0);assert.equal(zoomPhase,2);
+ for(const trail of trails.values())assert.ok(trail.every((v,i)=>!i||v.distanceTo(trail[i-1])<.3),'registered results move continuously into the outgoing vector');
+ assert.equal(app.document.querySelectorAll('.projection-result,.projection-calculation,.packet').length,0);
+ assert.equal(Number(app.document.querySelector('[data-output="project"]').style.opacity||1),1);
 });
 
 test('pause freezes processing while camera and speed controls stay live; resume never catches up wall time',async()=>{
@@ -380,7 +420,7 @@ test('stopping a paused run clears its effects and the next run starts unpaused'
  app=await boot({reduced:false,frameMs:80,onFrame:({document})=>{
   const calc=document.querySelector('.projection-calculation:not([hidden])');if(!app||stopped||!calc)return;
   stopped=true;app.api.togglePause();app.api.run();
-  assert.equal(document.querySelector('#pause').disabled,true);assert.equal(document.querySelectorAll('.packet,.projection-calculation').length,0);
+  assert.equal(document.querySelector('#pause').disabled,true);assert.equal(document.querySelectorAll('.packet,.projection-calculation,.projection-result').length,0);
   restart=app.api.run();assert.equal(document.querySelector('#pause').getAttribute('aria-pressed'),'false');
  }});
  app.api.switchLevel('projection');app.api.setState(app.c.NeuralPrologue.solutions('projection'));app.api.getWorld().rebuild();await app.api.run();await restart;

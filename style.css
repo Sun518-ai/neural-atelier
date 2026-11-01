@@ -152,6 +152,9 @@ html[lang=en] .stock-name{font-size:10px;line-height:12px}
 /* A fixed-width pause control keeps the run toolbar stable. */
 #pause{flex:0 0 98px;white-space:nowrap;font-size:12px}
 #pause[aria-pressed="true"]{background:#e0ece2;border-color:#7b9e8c;color:#365e4f}
-.projection-calculation{position:absolute;transform:translate(-50%,0);pointer-events:none;white-space:nowrap;padding:5px 9px;border:1px solid #bacbbba8;border-radius:7px;background:#fffdf0e6;box-shadow:0 2px 8px #344c3b12;font:600 11px/1.5 ui-monospace,monospace;font-variant-numeric:tabular-nums;color:#68776b;z-index:4}
+.projection-calculation{position:absolute;transform:translate(0,-50%) scale(var(--calculation-scale,1));transform-origin:left center;pointer-events:none;white-space:nowrap;padding:4px 7px;border:1px solid #bacbbba8;border-radius:7px;background:#fffdf0e6;box-shadow:0 2px 8px #344c3b12;font:600 11px/1.5 ui-monospace,monospace;font-variant-numeric:tabular-nums;color:#68776b;z-index:4}
+.projection-sum-symbol{display:none}.projection-calculation[data-detail="abstract"]{padding:1px 4px;border-radius:50%;color:#438f7e}.projection-calculation[data-detail="abstract"] .projection-equation{display:none}.projection-calculation[data-detail="abstract"] .projection-sum-symbol{display:block;font:600 15px/1.1 Georgia,serif}
+.projection-result{position:absolute;transform:translate(0,-50%) scale(var(--calculation-scale,1));transform-origin:left center;pointer-events:none;padding:1px 5px;border:1px solid #8ead9b80;border-radius:4px;background:#fffdf0df;color:#294b3e;font:600 11px/1.4 ui-monospace,monospace;z-index:4}
+.projection-result[hidden]{display:none}
 .projection-calculation[hidden]{display:none}
 .projection-calculation b{color:#294b3e;font-weight:700}
