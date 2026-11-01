@@ -36,17 +36,26 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   return {mesh,ctx,texture,write(value,tone=color){if(value===previousText&&tone===previousTone)return;previousText=value;previousTone=tone;draw(value,tone);if(mesh.userData.detailText)mesh.userData.detailText.fontFraction=fontFraction;texture.needsUpdate=true;}};
  }
  const detailBottom=new T.Vector3(),detailTop=new T.Vector3();
+ const detailModes={board:true,card:true};let detailScope='board';
  function updateDetail(camera,width,height){
   scene.updateMatrixWorld(true);camera.updateMatrixWorld();
+  const labels=[];let smallest=Infinity;
   scene.traverse(mesh=>{
    const detail=mesh.userData.detailText;if(!detail)return;
+   // Hidden modules must not affect a card's close-up. The label's own
+   // visibility is controlled below, so still measure it when abstracted.
+   for(let parent=mesh.parent;parent;parent=parent.parent)if(!parent.visible)return;
+   labels.push(mesh);
    detailBottom.set(0,-detail.height/2,0).applyMatrix4(mesh.matrixWorld).project(camera);
    detailTop.set(0,detail.height/2,0).applyMatrix4(mesh.matrixWorld).project(camera);
    const pixels=Math.hypot((detailTop.x-detailBottom.x)*width/2,(detailTop.y-detailBottom.y)*height/2)*detail.fontFraction;
-   // Small labels give way to the colored blocks below. Separate thresholds
-   // prevent flickering while orbiting near the readable size.
-   mesh.visible=pixels>=(mesh.visible?9:11);
+   smallest=Math.min(smallest,pixels);
   });
+  if(!labels.length)return;
+  // One shared switch: if any detail becomes unreadable, use colored blocks
+  // throughout this view. All labels return together, with zoom hysteresis.
+  const visible=smallest>=(detailModes[detailScope]?9:11);
+  detailModes[detailScope]=visible;labels.forEach(mesh=>mesh.visible=visible);
  }
  function surroundings(samples,layout={}){
   for(const parent of [floor,context])for(const o of [...parent.children]){parent.remove(o);o.traverse(c=>{if(c.geometry&&!c.geometry.userData?.shared)c.geometry.dispose();c.material?.map?.dispose();c.material?.dispose?.();});}
@@ -234,5 +243,5 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   }
  }
  function resetUnits(){units.clear();}
- return {surroundings,module,sync,updateDetail,pulseSource,projectionFrame,processing,clearProcessing,packet,prepareProjectionPacket,routeProjectionPacket,featureColor,rowColor,rowZ,resetUnits,focus(active){context.visible=!active;floor.visible=!active;}};
+ return {surroundings,module,sync,updateDetail,pulseSource,projectionFrame,processing,clearProcessing,packet,prepareProjectionPacket,routeProjectionPacket,featureColor,rowColor,rowZ,resetUnits,focus(active){context.visible=!active;floor.visible=!active;detailScope=active?'card':'board';if(active)detailModes.card=true;}};
 }

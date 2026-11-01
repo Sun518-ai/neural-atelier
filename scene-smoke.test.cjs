@@ -114,6 +114,24 @@ test('small matrices keep their blocks while numbers return when zoomed in',asyn
  app.document.querySelector('#card-close').onclick();assert.ok(faces.every(o=>!o.visible),'returning to the distant view restores abstraction immediately');
  assert.equal(JSON.stringify(app.api.getState()),state);
 });
+test('all matrix labels switch abstraction together and a close-up preserves the board mode',async()=>{
+ const app=await boot();app.api.switchLevel('residual');app.api.setState(app.c.NeuralPrologue.solutions('residual'));app.api.getWorld().rebuild();
+ const faces=[];app.scenes.at(-1).traverse(o=>{if(o.userData.detailText)faces.push(o);});
+ assert.ok(new Set(faces.map(o=>o.userData.detailText.fontFraction)).size>1,'short numbers and decimals have different fitted sizes');
+ const wheel=deltaY=>{const e=new app.window.Event('wheel',{bubbles:true,cancelable:true});e.deltaY=deltaY;app.document.querySelector('#scene').dispatchEvent(e);};
+ const uniform=()=>{assert.equal(new Set(faces.map(o=>o.visible)).size,1,'no partly abstracted matrix or neighboring module');return faces[0].visible;};
+ wheel(-2000);assert.equal(uniform(),true);
+ let steps=0;while(uniform()&&steps++<50)wheel(25);
+ assert.equal(uniform(),false,'the first unreadable number abstracts every matrix');
+ // Return slightly across the entry threshold: hysteresis keeps the board
+ // abstract, and opening a detailed card must not reset that decision.
+ wheel(-25);assert.equal(uniform(),false);
+ app.api.getWorld().focus('project');await new Promise(setImmediate);
+ assert.ok(faces.filter(o=>o.parent.userData.node==='project').every(o=>o.visible));
+ app.document.querySelector('#card-close').onclick();assert.equal(uniform(),false);
+ while(!uniform()&&steps-- >0)wheel(-25);
+ assert.equal(uniform(),true,'all numbers return together when readable');
+});
 test('3D fault bubble and pin dismiss without losing recorded failure',async()=>{
  const app=await boot();app.api.switchLevel('vocabulary');await app.api.run();assert.ok(app.api.getFault());const b=app.document.querySelector('[data-dismiss-result]');assert.ok(b);b.dispatchEvent(new app.window.Event('click',{bubbles:true}));assert.equal(app.api.getFault(),null);assert.equal(app.document.querySelectorAll('.local-fault,.fault-pin').length,0);assert.ok(app.document.querySelector('#test-results .fail'));await app.api.run();assert.ok(app.document.querySelector('[data-dismiss-result]'));
 });
