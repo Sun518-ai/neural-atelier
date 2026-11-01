@@ -11,7 +11,7 @@ async function boot({reduced=true,frameMs=1000,onFrame=()=>{},languages=['zh-CN'
  for(const f of ['locales/en.js','i18n.js','music.js','shell.js','model.js','campaign.js','engine-model.js'])vm.runInContext(fs.readFileSync(__dirname+'/'+f,'utf8'),c,{filename:f});
  for(const f of ['module-cards.js','level-progress.js','scene-art.js'])vm.runInContext(fs.readFileSync(__dirname+'/'+f,'utf8').replaceAll('export ',''),c,{filename:f});
  let src=fs.readFileSync(__dirname+'/game.js','utf8').replace(/^import .*\n/gm,'').replace("const T=await import('./vendor/three.module.js');",'const T=window.T;').replace(/const \{createSceneArt\}=await import\('\.\/scene-art\.js\?v=[^']+'\);/,'');
- src+='\nwindow.testAPI={switchLevel,run,refresh,select,assignDevice,chooseOutput,chooseInput,chooseModule,placeModule,getState:()=>state,setState:s=>state=s,getWorld:()=>world,getFault:()=>fault};';
+ src+='\nwindow.testAPI={switchLevel,run,togglePause,refresh,select,assignDevice,chooseOutput,chooseInput,chooseModule,placeModule,getState:()=>state,setState:s=>state=s,getWorld:()=>world,getFault:()=>fault};';
  await vm.runInContext('(async()=>{'+src+'})()',c);
  assert.ok(c.testAPI.getWorld(),'3D boot failed');return {c,document,window,api:c.testAPI,scenes,time:()=>now,view:()=>view};
 }
@@ -20,7 +20,7 @@ test('moving trays preserve feature columns and sequence rows through projection
  app=await boot({reduced:false,frameMs:100,onFrame:()=>{
   if(!app)return;
   for(const mesh of app.scenes.at(-1).children){
-   if(!mesh.visible||(!mesh.userData.packet&&!mesh.userData.processing&&!mesh.userData.processingOutput))continue;
+   if(mesh.userData.routing||!mesh.visible||(!mesh.userData.packet&&!mesh.userData.processing&&!mesh.userData.processingOutput))continue;
    const bars=mesh.children.filter(o=>o.userData.feature!=null);if(!bars.length)continue;
    const rows=mesh.userData.row==='sequence'?3:1,cols=bars.length/rows;
    assert.ok(mesh.children.some(o=>o.userData.packetTray),'each vector has one shared tray');
@@ -238,4 +238,81 @@ test('English scene labels and module cards work, and live language switching ke
   assert.doesNotMatch(app.document.querySelector('#labels').textContent,/[\u3400-\u9fff]/);
  }
  assert.ok(changed);assert.deepEqual([...app.c.I18n.missing],[]);assert.equal(app.document.querySelectorAll('.packet').length,0);
+});
+
+test('down projection routes four feature blocks to matching weight rows and explains one output',async()=>{
+ let app;const rows=new Set(),intervals=new Map(),trails=new Map();let formula=false;
+ app=await boot({reduced:false,frameMs:40,onFrame:({document,now})=>{
+  if(!app)return;const label=document.querySelector('.processing-packet[data-node="down"]');if(!label||label.hidden)return;
+  const scene=app.scenes.at(-1),mesh=scene.children.find(o=>o.userData.processing==='down'),unit=scene.children.flatMap(o=>o.children).find(o=>o.userData.node==='down');
+  const bars=mesh.children.filter(o=>o.userData.feature!=null);
+  const row=label.dataset.row;
+  for(const bar of bars){
+   const id=document.querySelector('#pass-count').textContent+':'+bar.userData.feature,pos=bar.getWorldPosition(new app.c.T.Vector3());
+   if(!trails.has(id))trails.set(id,[]);trails.get(id).push(pos);
+   if(bar.userData.mappingProgress!==1||!mesh.visible)continue;
+   rows.add(row);const i=bar.userData.feature,expectedZ=unit.position.z+(i-1.5)*1.5/4;
+   assert.ok(Math.abs(pos.z-expectedZ)<1e-9,'each coefficient aligns with the matching weight row');
+   assert.ok(Math.abs(pos.x-(unit.position.x-1.12))<1e-9,'all four coefficients face their own row');
+   assert.equal(bar.userData.mappedInput,i);
+   if(row==='0')assert.equal(bar.userData.value,[1,0,1,.5][i]);
+  }
+  if(row!=='0')return;
+  const calc=document.querySelector('.projection-calculation[data-node="down"]');
+  if(calc&&!calc.hidden){assert.equal(calc.textContent,'1 × 0.4 + 0 × 0 + 1 × 0.2 + 0.5 × (-0.1) = 0.55');formula=true;}
+  unit.traverse(o=>{if(!o.userData.contribution||!o.visible)return;const d=o.userData;
+   assert.equal(d.value,[1,0,1,.5][d.input]*app.c.NeuralPrologue.weights.down[d.input][d.output]);
+   assert.notEqual(d.value,0,'zero values still align but do not send a nonzero contribution');
+   if(!intervals.has(d.output))intervals.set(d.output,[]);intervals.get(d.output).push(now);
+  });
+ }});
+ app.api.switchLevel('residual');app.api.setState(app.c.NeuralPrologue.solutions('residual'));app.api.getWorld().rebuild();await app.api.run();
+ assert.ok(formula);assert.equal(rows.size,4,'includes three named samples and the extra validation samples');
+ for(const points of trails.values())assert.ok(points.every((p,i)=>!i||p.distanceTo(points[i-1])<.35),'components fan out without teleporting');
+ assert.ok(Math.max(...intervals.get(0))<Math.min(...intervals.get(1)),'first output is explained before the others');
+ assert.ok(intervals.get(0).length>intervals.get(1).length,'other outputs use a quicker pass');
+ assert.equal(app.document.querySelectorAll('.projection-calculation,.packet').length,0);
+ assert.equal(app.document.querySelectorAll('#test-results .pass').length,5);
+});
+
+test('pause freezes processing while camera and speed controls stay live; resume never catches up wall time',async()=>{
+ let app,phase='waiting',snapshot,frames=0,resumedPosition;
+ const event=(target,type,properties={})=>{const e=new app.window.Event(type,{bubbles:true,cancelable:true});Object.assign(e,properties);target.dispatchEvent(e);};
+ const visual=()=>{const data=[];app.scenes.at(-1).traverse(o=>{if(o.userData.feature!=null||o.userData.contribution)data.push([o.visible,o.position.toArray(),o.scale.toArray(),o.material.opacity]);});return JSON.stringify(data);};
+ app=await boot({reduced:false,frameMs:40,onFrame:({document})=>{
+  if(!app)return;const label=document.querySelector('.processing-packet');if(!label||label.hidden)return;
+  const mesh=app.scenes.at(-1).children.find(o=>o.userData.processing==='project');
+  if(phase==='waiting'&&mesh.userData.featureRoutes?.[0].bar.userData.mappingProgress===1){
+   phase='paused';document.querySelector('#pause').onclick();assert.equal(document.querySelector('#pause').textContent,'▶ 继续');snapshot=visual();return;
+  }
+  if(phase==='paused'){
+   assert.equal(visual(),snapshot,'animation positions, scale and opacity remain frozen');frames++;
+   if(frames===3){
+    const before=app.view(),circuit=JSON.stringify(app.api.getState());
+    event(document.querySelector('#scene'),'pointerdown',{clientX:500,clientY:300});event(document,'pointermove',{clientX:600,clientY:340});event(document,'pointerup');event(label,'wheel',{deltaY:-100});
+    assert.notDeepEqual(app.view().position,before.position);assert.ok(app.view().width<before.width);
+    app.api.chooseOutput('R');app.api.chooseInput('sink',0);assert.equal(JSON.stringify(app.api.getState()),circuit);
+    const slider=document.querySelector('#playback-speed');slider.value='.5';event(slider,'input');
+    assert.equal(visual(),snapshot,'camera and settings cannot advance processing');
+   }
+   if(frames===6){app.c.I18n.setPreference('en');assert.equal(document.querySelector('#pause').textContent,'▶ Resume');assert.equal(visual(),snapshot,'changing language preserves paused effects');}
+   if(frames===15){resumedPosition=mesh.position.clone();document.querySelector('#pause').onclick();phase='resuming';}
+  }else if(phase==='resuming'){
+   assert.ok(mesh.position.distanceTo(resumedPosition)<.1,'resume does not include the paused wall-clock interval');phase='done';
+  }
+ }});
+ app.document.querySelector('#welcome').close();app.api.switchLevel('projection');app.api.setState(app.c.NeuralPrologue.solutions('projection'));app.api.getWorld().rebuild();await app.api.run();
+ assert.equal(phase,'done');assert.equal(app.document.querySelector('#pause').disabled,true);assert.equal(app.document.querySelector('#pause').getAttribute('aria-pressed'),'false');assert.equal(app.document.querySelectorAll('#test-results .pass').length,3);
+});
+
+test('stopping a paused run clears its effects and the next run starts unpaused',async()=>{
+ let app,restart,stopped=false;
+ app=await boot({reduced:false,frameMs:80,onFrame:({document})=>{
+  const calc=document.querySelector('.projection-calculation:not([hidden])');if(!app||stopped||!calc)return;
+  stopped=true;app.api.togglePause();app.api.run();
+  assert.equal(document.querySelector('#pause').disabled,true);assert.equal(document.querySelectorAll('.packet,.projection-calculation').length,0);
+  restart=app.api.run();assert.equal(document.querySelector('#pause').getAttribute('aria-pressed'),'false');
+ }});
+ app.api.switchLevel('projection');app.api.setState(app.c.NeuralPrologue.solutions('projection'));app.api.getWorld().rebuild();await app.api.run();await restart;
+ assert.ok(stopped);assert.equal(app.document.querySelectorAll('#test-results .pass').length,3);
 });

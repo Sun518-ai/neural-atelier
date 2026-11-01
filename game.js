@@ -1,5 +1,5 @@
-import {cardFor,exampleFor} from './module-cards.js?v=vector-tray-1';
-import {createProgress} from './level-progress.js?v=vector-tray-1';
+import {cardFor,exampleFor} from './module-cards.js?v=projection-pause-1';
+import {createProgress} from './level-progress.js?v=projection-pause-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -12,7 +12,7 @@ function writeLevelHash(id,replace=false){
  const loc=window.location,nav=window.history;if(!loc||!nav||loc.hash==='#'+id)return;
  nav[replace?'replaceState':'pushState'](null,'',loc.pathname+loc.search+'#'+id);
 }
-let stageId=levelFromHash()||progress.current(),state=progress.load(stageId),history=[],selected=null,pending=null,current=null,results=[],sample=0,busy=false,runId=0,level=99,hints=0,world=null,fault=null;
+let stageId=levelFromHash()||progress.current(),state=progress.load(stageId),history=[],selected=null,pending=null,current=null,results=[],sample=0,busy=false,paused=false,pauseStarted=0,pausedDuration=0,runId=0,level=99,hints=0,world=null,fault=null;
 let selectedWire=null,placing=null,menuTrack=M.levels[stageId].track;
 const stage=()=>M.levels[stageId],samples=()=>M.samplesFor?.(stageId)||M.samples,save=()=>progress.save(state);
 const shape=dim=>stage().sequence?({3:I18n.t("3 个 ID"),6:'3 × 2',9:'3 × 3',18:'3 × 6'}[dim]||dim):dim;
@@ -26,6 +26,17 @@ function setPlaybackSpeed(value,persist=true){
 }
 try{setPlaybackSpeed(localStorage.getItem(playbackSpeedKey),false);}catch{setPlaybackSpeed(defaultPlaybackSpeed,false);}
 $('#playback-speed').addEventListener('input',e=>setPlaybackSpeed(e.target.value));
+function animationTime(now=performance.now()){return now-pausedDuration-(paused?now-pauseStarted:0);}
+function refreshPauseControl(){
+ const button=$('#pause');button.disabled=!busy;button.setAttribute('aria-pressed',String(paused));
+ button.innerHTML=paused?I18n.t('<span>▶</span> 继续'):I18n.t('<span>Ⅱ</span> 暂停');
+}
+function togglePause(){
+ if(!busy)return;
+ if(paused){pausedDuration+=performance.now()-pauseStarted;paused=false;}else{pauseStarted=performance.now();paused=true;}
+ refreshPauseControl();
+}
+$('#pause').onclick=togglePause;
 let engineReport=null;
 function engineControls(){
  const c=stage(),area=$('#engine-controls');if(!c.engine){area.innerHTML='';return;}
@@ -84,7 +95,7 @@ I18n.onChange(()=>{
 });
 window.addEventListener?.('hashchange',()=>{
  const target=levelFromHash();if(!target){writeLevelHash(stageId,true);return;}
- if(target!==stageId&&busy){busy=false;runId++;world?.clearPackets();}
+ if(target!==stageId&&busy){busy=paused=false;runId++;world?.clearPackets();}
  switchLevel(target,true);writeLevelHash(stageId,true);
 });
 $('#levels-open').onclick=levelMenu;$('#levels-close').onclick=()=>$('#level-menu').close();
@@ -116,10 +127,10 @@ function inspect(){renderShelf();const d=state.nodes.some(n=>n.id===selected)?M.
  const n=state.nodes.find(n=>n.id===selected),values=current?.values||{R:samples()[sample].v,Z:M.norm(samples()[sample].v)};
  $('#inspect-values').innerHTML=n.links.map((id,i)=>`${I18n.t("<div class=\"value-line\">输入 ")}${i+1} · ${id?outputName(id):I18n.t("未连接")}<b>${vector(values[id])}</b></div>`).join('')+`${I18n.t("<div class=\"value-line\">输出<b>")}${vector(values[selected])}</b></div>`;
 }
-function refresh(){document.body.classList.toggle('network-running',busy);renderShelf();const t=samples()[sample];const won=results.length===stage().sampleCount&&results.every(r=>r.pass)&&(!stage().engine||engineReport?.pass);$('.route strong').textContent=stage().concept+(won?I18n.t(" · 已通过"):'');$('#next-level').hidden=!(won||progress.completed(stageId))||!stage().next;$('#levels-open').disabled=busy;$('#engine-controls').querySelectorAll('input,select,button').forEach(e=>e.disabled=busy);$('#device-docks').querySelectorAll('button').forEach(e=>e.disabled=busy);$('#sample-name').textContent=t.word;$('#sample-value').textContent=stage().sequence?(stage().sourceDim===3?'Token ID '+vector(t.v):I18n.t("3 个位置 × 2 个特征")):vector(t.v);$('#pass-count').textContent=results.filter(r=>r.pass).length+' / '+stage().sampleCount;$('#test-results').innerHTML=results.map((r,i)=>`<div class="test-row ${r.pass?'pass':'fail'}"><span>${r.pass?'✓':'×'} ${samples()[i].word}</span><span>${stage().tokenOutput&&r.actual?M.readTokens(r.actual):stage().sequence?(r.actual?I18n.t("矩阵 ")+shape(r.actual.length):I18n.t("等待输入")):vector(r.actual)}</span></div>`).join('');$('#run').disabled=!world;$('#run').innerHTML=busy?I18n.t("<span>■</span> 停下检查"):I18n.t("<span>▶</span> 试跑我的网络");$('#undo').disabled=busy||!history.length;$('#reset').disabled=busy;$('#hint').disabled=busy;inspect();}
+function refresh(){refreshPauseControl();document.body.classList.toggle('network-running',busy);renderShelf();const t=samples()[sample];const won=results.length===stage().sampleCount&&results.every(r=>r.pass)&&(!stage().engine||engineReport?.pass);$('.route strong').textContent=stage().concept+(won?I18n.t(" · 已通过"):'');$('#next-level').hidden=!(won||progress.completed(stageId))||!stage().next;$('#levels-open').disabled=busy;$('#engine-controls').querySelectorAll('input,select,button').forEach(e=>e.disabled=busy);$('#device-docks').querySelectorAll('button').forEach(e=>e.disabled=busy);$('#sample-name').textContent=t.word;$('#sample-value').textContent=stage().sequence?(stage().sourceDim===3?'Token ID '+vector(t.v):I18n.t("3 个位置 × 2 个特征")):vector(t.v);$('#pass-count').textContent=results.filter(r=>r.pass).length+' / '+stage().sampleCount;$('#test-results').innerHTML=results.map((r,i)=>`<div class="test-row ${r.pass?'pass':'fail'}"><span>${r.pass?'✓':'×'} ${samples()[i].word}</span><span>${stage().tokenOutput&&r.actual?M.readTokens(r.actual):stage().sequence?(r.actual?I18n.t("矩阵 ")+shape(r.actual.length):I18n.t("等待输入")):vector(r.actual)}</span></div>`).join('');$('#run').disabled=!world;$('#run').innerHTML=busy?I18n.t("<span>■</span> 停下检查"):I18n.t("<span>▶</span> 试跑我的网络");$('#undo').disabled=busy||!history.length;$('#reset').disabled=busy;$('#hint').disabled=busy;inspect();}
 async function run(){
- if(busy){busy=false;runId++;say(I18n.t("已停止。"));world.clearPackets();world.labels();refresh();return;}
- busy=true;pending=selectedWire=placing=null;world.clearPreview?.();world.clearPlacement?.();fault=null;engineReport=null;results=[];resetReport();const id=++runId;
+ if(busy){busy=paused=false;runId++;say(I18n.t("已停止。"));world.clearPackets();world.labels();refresh();return;}
+ busy=true;paused=false;pausedDuration=0;pending=selectedWire=placing=null;world.clearPreview?.();world.clearPlacement?.();fault=null;engineReport=null;results=[];resetReport();const id=++runId;
  for(let i=0;i<stage().sampleCount;i++){
   sample=i;current=M.evaluate(state,samples()[i].v);level=0;
   const expected=M.reference(samples()[i].v,stageId),actual=current.output;
@@ -127,10 +138,10 @@ async function run(){
   await world.animate(current,650,id);
   if(id!==runId||!busy)return;
   const pass=!current.error&&!!actual&&actual.length===expected.length&&actual.every((x,j)=>Number.isFinite(x)&&Math.abs(x-expected[j])<(stage().engine?(stage().limits?.error||.06):1e-9));results.push({pass,actual,expected});
-  if(!pass){fault={id:'sink',actual,expected};level=99;busy=false;if(stage().engine)engineReport=M.engineReport(state);world.labels();refresh();renderReport();say(`「${samples()[i].word}${I18n.t("」未通过。")}`,'error');return;}
+  if(!pass){fault={id:'sink',actual,expected};level=99;busy=paused=false;if(stage().engine)engineReport=M.engineReport(state);world.labels();refresh();renderReport();say(`「${samples()[i].word}${I18n.t("」未通过。")}`,'error');return;}
   level=99;world.labels();refresh();
  }
- busy=false;if(stage().engine)engineReport=M.engineReport(state);if(!stage().engine||engineReport.pass)progress.complete(stageId);world.labels();refresh();renderReport();say(stage().engine?(engineReport.pass?I18n.t("数值与性能约束全部通过。"):I18n.t("数值通过；性能验收未通过，查看运行报告。")):`${I18n.t("通过：")}${stage().sampleCount} / ${stage().sampleCount}。`,stage().engine&&!engineReport.pass?'error':'success');
+ busy=paused=false;if(stage().engine)engineReport=M.engineReport(state);if(!stage().engine||engineReport.pass)progress.complete(stageId);world.labels();refresh();renderReport();say(stage().engine?(engineReport.pass?I18n.t("数值与性能约束全部通过。"):I18n.t("数值通过；性能验收未通过，查看运行报告。")):`${I18n.t("通过：")}${stage().sampleCount} / ${stage().sampleCount}。`,stage().engine&&!engineReport.pass?'error':'success');
 }
 $('#inspect-focus').onclick=()=>world?.focus(selected);
 $('#run').onclick=run;$('#undo').onclick=()=>{state=history.pop();pending=null;changed();say(I18n.t("已撤销。"));};$('#reset').onclick=()=>{checkpoint();state=M.initial(stageId);selected=pending=placing=null;world?.clearPlacement?.();changed();say(I18n.t("已恢复本关起点。"));};
@@ -144,7 +155,7 @@ try{
  const colors={...M.extraColors,project:0x5eaa9c,gate:0xa894bf,up:0x5eaa9c,silu:0xc6a574,multiply:0x669b91,down:0x90a79a,add:0xc3a26f,R:0x6e9fb5,Z:0x90b2bb,sink:0x438f7e};
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=vector-tray-1');
+ const {createSceneArt}=await import('./scene-art.js?v=projection-pause-1');
  const art=createSceneArt(T,scene,colors,{anisotropy:renderer.capabilities.getMaxAnisotropy()});art.surroundings(samples(),stage());
  const assembly=new T.Group(),wires=new T.Group();scene.add(assembly,wires);const neuronGeo=new T.SphereGeometry(.115,16,12);let elements=[],curves=[],packets=[],drag=null,preview=null,yaw=.05,pitch=.8,zoom=stage().zoom,lastDepth=-1;
  const cameraTarget=new T.Vector3();let focusId=null,overview=null,cameraFrame=0,transitioning=false,lastTap=null;
@@ -205,7 +216,7 @@ try{
   guide.removeAttribute('hidden');guide.setAttribute('viewBox',`0 0 ${w} ${h}`);
   guidePath.setAttribute('d',curve(point('R'),point('sink','in')).getPoints(32).map((p,i)=>{const [x,y]=project(p);return `${i?'L':'M'}${x.toFixed(1)} ${y.toFixed(1)}`;}).join(' '));
  }
- function render(){const w=host.clientWidth,h=host.clientHeight;if(!w||!h)return;renderer.setSize(w,h,false);const width=23*zoom,height=width*h/w;Object.assign(camera,{left:-width/2,right:width/2,top:height/2,bottom:-height/2});camera.position.set(cameraTarget.x+Math.sin(yaw)*24,cameraTarget.y+Math.sin(pitch)*24,cameraTarget.z+Math.cos(yaw)*Math.cos(pitch)*24);camera.lookAt(cameraTarget);camera.updateProjectionMatrix();renderer.render(scene,camera);syncConnectionGuide(w,h);syncWireTargets(w,h);elements.forEach(({el,pos})=>{el.hidden=!!focusId&&(el.dataset.owner!==focusId||el.classList.contains('node-label')||el.classList.contains('local-fault')||el.classList.contains('fault-pin'));if(el.classList.contains('port'))el.disabled=!!focusId;const [x,y]=project(pos());if(el.classList.contains('local-fault')||el.classList.contains('wire-actions')){el.style.left=Math.max(12,Math.min(w-el.offsetWidth-12,x+18))+'px';el.style.top=Math.max(12,Math.min(h-el.offsetHeight-46,y+15))+'px';}else{el.style.left=x+'px';el.style.top=y+'px';}});packets.forEach(p=>{const [x,y]=project(p.p.clone().add(new T.Vector3(0,.7,0)));p.el.style.left=x+'px';p.el.style.top=y+'px';});}
+ function render(){const w=host.clientWidth,h=host.clientHeight;if(!w||!h)return;renderer.setSize(w,h,false);const width=23*zoom,height=width*h/w;Object.assign(camera,{left:-width/2,right:width/2,top:height/2,bottom:-height/2});camera.position.set(cameraTarget.x+Math.sin(yaw)*24,cameraTarget.y+Math.sin(pitch)*24,cameraTarget.z+Math.cos(yaw)*Math.cos(pitch)*24);camera.lookAt(cameraTarget);camera.updateProjectionMatrix();renderer.render(scene,camera);syncConnectionGuide(w,h);syncWireTargets(w,h);elements.forEach(({el,pos})=>{el.hidden=!!focusId&&(el.dataset.owner!==focusId||el.classList.contains('node-label')||el.classList.contains('local-fault')||el.classList.contains('fault-pin'));if(el.classList.contains('port'))el.disabled=!!focusId;const [x,y]=project(pos());if(el.classList.contains('local-fault')||el.classList.contains('wire-actions')){el.style.left=Math.max(12,Math.min(w-el.offsetWidth-12,x+18))+'px';el.style.top=Math.max(12,Math.min(h-el.offsetHeight-46,y+15))+'px';}else{el.style.left=x+'px';el.style.top=y+'px';}});packets.forEach(p=>{const [x,y]=project(p.p.clone().add(new T.Vector3(0,.7,0)));p.el.style.left=x+'px';p.el.style.top=y+'px';if(p.calculation){const [cx,cy]=project(new T.Vector3(p.node.x,1.05,p.node.z+1.28));p.calculation.style.left=cx+'px';p.calculation.style.top=cy+'px';}});}
 
  function transition(target,targetZoom,targetYaw=yaw,targetPitch=pitch){
   cancelAnimationFrame(cameraFrame);const start=performance.now(),from=cameraTarget.clone(),z0=zoom,y0=yaw,p0=pitch,reduced=matchMedia('(prefers-reduced-motion:reduce)').matches;transitioning=true;host.setAttribute('aria-busy','true');
@@ -244,10 +255,10 @@ try{
  }
  function nodeTap(id,e){const now=performance.now();if(lastTap?.id===id&&now-lastTap.time<380&&Math.hypot(e.clientX-lastTap.x,e.clientY-lastTap.y)<10){lastTap=null;focus(id);}else lastTap={id,time:now,x:e.clientX,y:e.clientY};}
  function worldPoint(x,y){const r=host.getBoundingClientRect();cursor.set((x-r.left)/r.width*2-1,-((y-r.top)/r.height*2-1));ray.setFromCamera(cursor,camera);const p=new T.Vector3();return ray.ray.intersectPlane(plane,p)?p:null;}
- function clearPackets(){packets.forEach(p=>{p.el.remove();for(const mesh of [p.mesh,p.outputMesh].filter(Boolean)){scene.remove(mesh);mesh.traverse(o=>{o.geometry?.dispose();o.material?.dispose();});}});packets=[];art.clearProcessing();render();}
+ function clearPackets(){packets.forEach(p=>{p.el.remove();p.calculation?.remove();for(const mesh of [p.mesh,p.outputMesh].filter(Boolean)){scene.remove(mesh);mesh.traverse(o=>{o.geometry?.dispose();o.material?.map?.dispose();o.material?.dispose();});}});packets=[];art.clearProcessing();render();}
  function animate(ev,ms,id){
   clearPackets();lastDepth=-1;const max=2*Math.max(0,...Object.values(ev.depths))+1,reduced=matchMedia('(prefers-reduced-motion:reduce)').matches;if(reduced)ms=70;
-  let previous=performance.now(),elapsed=0;
+  let previous=animationTime(),elapsed=0;
   const seq=!!stage().sequence,readyNodes=state.nodes.filter(n=>ev.values[n.id]);
   const clamp=x=>Math.max(0,Math.min(1,x)),ramp=(x,a,b)=>{const v=clamp((x-a)/(b-a));return v*v*(3-2*v);};
   function fadeMaterials(mesh){const materials=[];mesh.traverse(o=>{if(o.material){o.material.transparent=true;o.material.depthWrite=false;o.castShadow=false;materials.push(o.material);}});return materials;}
@@ -274,12 +285,20 @@ try{
   readyNodes.forEach(n=>{
    const input=ev.values[n.links[0]],output=ev.values[n.id],p=movingPacket(input,n.id,n.id,'process');
    p.el.classList.add('processing-packet');p.el.dataset.node=n.id;p.mesh.userData.processing=n.id;
+   const detailed=!seq&&M.definitions[n.id].type==='linear';p.detailed=detailed;if(detailed)art.prepareProjectionPacket(p.mesh);
    const outputMesh=art.packet(output,p.color,{sequence:seq});outputMesh.userData={processingOutput:n.id,row:p.el.dataset.row};outputMesh.visible=false;scene.add(outputMesh);
    const morph=document.createElement('span');morph.className='packet-morph';p.cells.replaceWith(morph);morph.appendChild(p.cells);
    const after=document.createElement('span');after.className='packet-values';after.textContent=seq?shape(output.length):vector(output);after.style.opacity='0';morph.appendChild(after);
    p.el.style.visibility='hidden';p.el.hidden=false;
    const beforeWidth=p.cells.offsetWidth||p.cells.textContent.length*6.6,afterWidth=after.offsetWidth||after.textContent.length*6.6;
    p.el.hidden=true;p.el.style.visibility='';morph.style.width=beforeWidth+'px';
+   if(detailed){
+    const calculation=document.createElement('span');calculation.className='projection-calculation';calculation.hidden=true;calculation.dataset.node=n.id;
+    const factor=v=>v<0?'('+fmt(v)+')':fmt(v);
+    input.forEach((value,i)=>{if(i)calculation.appendChild(document.createTextNode(' + '));const term=document.createElement('span');term.style.color=colorHex(art.featureColor(i));term.textContent=factor(value)+' × '+factor(M.weights[n.id][i][0]);calculation.appendChild(term);});
+    const sum=document.createElement('b'),rounded=[...input,...M.weights[n.id].map(w=>w[0]),output[0]].some(v=>Math.abs(v-Number(v.toFixed(2)))>1e-9);
+    sum.textContent=(rounded?' ≈ ':' = ')+fmt(output[0]);sum.style.opacity='0';calculation.appendChild(sum);overlay.appendChild(calculation);Object.assign(p,{calculation,sum});
+   }
    Object.assign(p,{node:n,input,output,outputMesh,outputMaterials:fadeMaterials(outputMesh),morph,after,beforeWidth,afterWidth,start:2*ev.depths[n.id]-1,path:processPaths.get(n.id)});
    p.p=p.path.getPoint(0);p.mesh.position.copy(p.p);p.outputMesh.position.copy(p.p);packets.push(p);
   });
@@ -288,7 +307,9 @@ try{
    if(id!==runId){resolve();return;}
    if(!busy){clearPackets();resolve();return;}
    // Accumulate time so changing speed mid-flight never jumps or rewinds a packet.
-   elapsed+=Math.max(0,now-previous)*playbackSpeed;previous=now;
+   const clock=animationTime(now);
+   if(paused){previous=clock;requestAnimationFrame(tick);return;}
+   elapsed+=Math.max(0,clock-previous)*playbackSpeed;previous=clock;
    const t=Math.min(max,elapsed/ms);level=Math.floor(t/2);
    if(t>=max){clearPackets();labels();inspect();resolve();return;}
    if(level!==lastDepth){lastDepth=level;labels();inspect();}
@@ -296,13 +317,18 @@ try{
    packets.forEach(p=>{
     const tt=t-p.start,progress=clamp(tt);
     if(p.motion==='process'){
-     const visible=tt>=0&&tt<1&&(!focusId||focusId===p.node.id),blend=ramp(progress,.55,.83);
+     p.progress=tt;
+     const visible=tt>=0&&tt<1&&(!focusId||focusId===p.node.id),blend=ramp(progress,p.detailed?.76:.55,p.detailed?.9:.83);
      p.el.hidden=!visible;p.el.dataset.phase=progress<.23?'enter':progress<.65?'compute':'gather';p.p=p.path.getPoint(progress);
      p.cells.style.opacity=String(1-blend);p.after.style.opacity=String(blend);p.morph.style.width=(p.beforeWidth+(p.afterWidth-p.beforeWidth)*blend)+'px';
-     const inputAlpha=1-ramp(progress,.2,.42),outputAlpha=ramp(progress,.65,.9);
+     const inputAlpha=1-ramp(progress,p.detailed?.72:.2,p.detailed?.86:.42),outputAlpha=ramp(progress,p.detailed?.8:.65,p.detailed?.96:.9);
      p.mesh.visible=visible&&inputAlpha>0;p.outputMesh.visible=visible&&outputAlpha>0;
      p.materials.forEach(m=>m.opacity=inputAlpha);p.outputMaterials.forEach(m=>m.opacity=outputAlpha);p.outputMesh.position.copy(p.p);
-     art.processing(p.node.id,tt,p.input,p.output,p.color,{sequence:seq});
+     if(p.detailed){
+      art.routeProjectionPacket(p.node.id,p.mesh,progress,p.p,p.path.getPoint(.12));
+      p.calculation.hidden=!visible||progress<.38||progress>=.85;p.calculation.style.opacity=String(ramp(progress,.38,.43)*(1-ramp(progress,.8,.85)));p.sum.style.opacity=String(ramp(progress,.61,.67));
+     }
+     art.processing(p.node.id,tt,p.input,p.output,p.color,{sequence:seq,detailed:p.detailed});
     }else{
      const inView=!focusId||p.edge.from===focusId||p.edge.to===focusId,visible=t>=p.start&&t<p.end&&inView;
      p.el.hidden=!visible;p.mesh.visible=visible;
@@ -343,6 +369,6 @@ try{
  $('#scene-expand').onclick=()=>{const expanded=document.body.classList.toggle('scene-expanded');$('#scene-expand').textContent=expanded?I18n.t("显示观察窗"):I18n.t("放大场景");$('#scene-expand').setAttribute('aria-pressed',String(expanded));render();};
  function beforeStage(){if(focusId)leaveFocus();cancelAnimationFrame(cameraFrame);transitioning=false;host.setAttribute('aria-busy','false');drag=lastTap=null;clearPreview();clearPlacement();clearPackets();elements=[];overlay.replaceChildren();}
  function setStage(){art.surroundings(samples(),stage());yaw=.05;pitch=.8;zoom=stage().zoom;cameraTarget.set(0,0,0);rebuild();}
- function relocalize(){art.surroundings(samples(),stage());rebuild();packets.forEach(p=>{p.el.querySelector('.packet-title').textContent=flowIdentity();});}
+ function relocalize(){art.surroundings(samples(),stage());rebuild();packets.forEach(p=>{p.el.querySelector('.packet-title').textContent=flowIdentity();if(p.motion==='process'&&p.progress!=null)art.processing(p.node.id,p.progress,p.input,p.output,p.color,{sequence:!!stage().sequence,detailed:p.detailed});});render();}
  new ResizeObserver(render).observe(host);world={relocalize,labels,rebuild,animate,clearPackets,clearPreview,clearPlacement,previewAt,previewPlacement,focus,focused:()=>focusId,beforeStage,setStage};$('#loading').hidden=true;rebuild();refresh();
 }catch(e){$('#loading').innerHTML=I18n.t("<strong>3D 台面没有加载成功，请刷新重试。</strong>");say(I18n.t("页面尚未开始运行。"),'error');console.error(e);}

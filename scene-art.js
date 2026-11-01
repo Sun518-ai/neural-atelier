@@ -3,6 +3,7 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
  const context=new T.Group(),floor=new T.Group();scene.add(floor,context);
  const units=new Map(),sharedSphere=new T.SphereGeometry(.115,18,14),rows=[],tokens=[];
  const rowColor=i=>[0x397aa2,0x8862aa,0x288778][i]??0x557e6b;
+ const featureColor=i=>[0x397aa2,0x8862aa,0xb68036,0x288778][i%4];
  const rowZ=i=>-1.05+i*.96;
  sharedSphere.userData.shared=true;
  const mat=(color,extra={})=>new T.MeshStandardMaterial({color,roughness:.5,metalness:.12,...extra});
@@ -75,11 +76,11 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   let outputs=[],inputs=[],connections=[],weightCells=[],activationChannels=[];
   if(d.type==='linear'){
    const w=weights[n.id],a=w.length,b=w[0].length,cw=1.5/b,ch=1.5/a;
-   for(let i=0;i<a;i++)for(let j=0;j<b;j++){const x=(j-(b-1)/2)*cw,z=(i-(a-1)/2)*ch,c=w[i][j]<0?0xc89d70:w[i][j]===0?0xd7dfd4:color;const tile=box(g,cw*.84,.055+Math.abs(w[i][j])*.065,ch*.82,x,.49,z,c);const face=textTile(g,String(w[i][j]),cw*.8,ch*.76,x,.53+Math.abs(w[i][j])*.065,z,{bg:w[i][j]<0?'#d7b68b':w[i][j]===0?'#dfe5d9':'#d2dfcc',color:'#456052',size:63});weightCells.push({tile,face:face.mesh,i,weight:w[i][j]});}
-   for(let i=0;i<a;i++)inputs.push(neuron(g,-.7,.98,(i-(a-1)/2)*.4,0x6c9eb1));
+   for(let i=0;i<a;i++)for(let j=0;j<b;j++){const x=(j-(b-1)/2)*cw,z=(i-(a-1)/2)*ch,c=w[i][j]<0?0xc89d70:w[i][j]===0?0xd7dfd4:color;const tile=box(g,cw*.84,.055+Math.abs(w[i][j])*.065,ch*.82,x,.49,z,c);const face=textTile(g,String(w[i][j]),cw*.8,ch*.76,x,.53+Math.abs(w[i][j])*.065,z,{bg:w[i][j]<0?'#d7b68b':w[i][j]===0?'#dfe5d9':'#d2dfcc',color:'#456052',size:63});weightCells.push({tile,face:face.mesh,i,j,weight:w[i][j]});}
+   for(let i=0;i<a;i++)inputs.push(neuron(g,-.7,.98,(i-(a-1)/2)*ch,0x6c9eb1));
    for(let j=0;j<b;j++)outputs.push(neuron(g,.7,1.28,(j-(b-1)/2)*.4,color));
    for(let i=0;i<a;i++)for(let j=0;j<b;j++){
-    const mesh=tube(g,[[-.7,.98,(i-(a-1)/2)*.4],[0,1.24,(i-(a-1)/2)*.13+(j-(b-1)/2)*.13],[.7,1.28,(j-(b-1)/2)*.4]],w[i][j]<0?0xc89968:color,w[i][j]===0?.007:.015,w[i][j]===0?.2:.8);
+    const mesh=tube(g,[[-.7,.98,(i-(a-1)/2)*ch],[0,1.24,(i-(a-1)/2)*.13+(j-(b-1)/2)*.13],[.7,1.28,(j-(b-1)/2)*.4]],w[i][j]<0?0xc89968:color,w[i][j]===0?.007:.015,w[i][j]===0?.2:.8);
     const spark=new T.Mesh(sharedSphere,mat(color,{emissive:color,emissiveIntensity:1.8,transparent:true,depthWrite:false}));spark.visible=false;spark.userData={contribution:true,input:i,output:j,weight:w[i][j]};g.add(spark);
     connections.push({mesh,spark,i,j,weight:w[i][j]});
    }
@@ -141,20 +142,22 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
 
  }
  const ramp=(x,a,b)=>{const t=Math.max(0,Math.min(1,(x-a)/(b-a)));return t*t*(3-2*t);};
- function processing(id,progress,input,output,color,{sequence=false}={}){
+ function processing(id,progress,input,output,color,{sequence=false,detailed=false}={}){
   const u=units.get(id);if(!u)return;
   const active=progress>=0&&progress<1,p=Math.max(0,Math.min(1,progress));u.g.userData.processing=active;
   const entering=ramp(p,0,.23),gathering=ramp(p,.6,.9),pulse=active?Math.sin(Math.PI*p):0;
   u.glow.material.emissiveIntensity=.12+1.5*pulse;
-  u.inputs.forEach((o,i)=>{const v=sequence?1:input[i],size=Math.abs(v)<1e-9?.55:1+Math.min(2,Math.abs(v))*.3;o.scale.setScalar(1+(size-1)*entering);o.material.emissiveIntensity=.08+(active&&Math.abs(v)>1e-9?entering*(1-ramp(p,.65,1)):0);});
-  for(const {mesh,spark,i,weight} of u.connections){
+  u.inputs.forEach((o,i)=>{const v=sequence?1:input[i],size=Math.abs(v)<1e-9?.55:1+Math.min(2,Math.abs(v))*.3;o.scale.setScalar(1+(size-1)*entering);if(u.connections.length){o.material.color.set(detailed&&active?featureColor(i):0x6c9eb1);o.material.emissive.set(detailed?featureColor(i):0x6c9eb1);}o.material.emissiveIntensity=.08+(active&&Math.abs(v)>1e-9?entering*(1-ramp(p,.65,1)):0);});
+  for(const {mesh,spark,i,j,weight} of u.connections){
    const contribution=sequence?weight:input[i]*weight,lit=Number.isFinite(contribution)&&Math.abs(contribution)>1e-9;
    mesh.material.opacity=active?(lit?.35+.6*pulse:.08):(weight===0?.2:.8);
    mesh.material.emissive.set(lit?color:0);mesh.material.emissiveIntensity=active&&lit?pulse*.7:0;
-   spark.visible=active&&lit&&p>=.2&&p<=.76;
-   if(spark.visible){const tone=contribution<0?0xd6a578:color;spark.material.color.set(tone);spark.material.emissive.set(tone);spark.material.opacity=ramp(p,.2,.26)*(1-ramp(p,.7,.76));spark.scale.setScalar(.48+Math.min(2,Math.abs(contribution))*.15);spark.position.copy(mesh.geometry.parameters.path.getPoint(ramp(p,.2,.76)));}
+   const start=detailed?(j===0?.4:.69):.2,end=detailed?(j===0?.67:.8):.76;
+   spark.visible=active&&lit&&p>=start&&p<=end;
+   spark.userData.value=contribution;
+   if(spark.visible){const tone=detailed?featureColor(i):contribution<0?0xd6a578:color;spark.material.color.set(tone);spark.material.emissive.set(tone);spark.material.opacity=ramp(p,start,start+.025)*(1-ramp(p,end-.025,end));spark.scale.setScalar(.48+Math.min(2,Math.abs(contribution))*.15);spark.position.copy(mesh.geometry.parameters.path.getPoint(ramp(p,start,end)));}
   }
-  for(const {tile,face,i,weight} of u.weightCells){const contribution=sequence?weight:input[i]*weight,lit=active&&Math.abs(contribution)>1e-9;tile.material.emissive.set(lit?color:0);tile.material.emissiveIntensity=lit?pulse*.8:0;face.material.color.set(0xffffff);if(lit)face.material.color.lerp(new T.Color(color),pulse*.22);}
+  for(const {tile,face,i,j,weight} of u.weightCells){const contribution=sequence?weight:input[i]*weight,lit=active&&(detailed||Math.abs(contribution)>1e-9),highlight=detailed?ramp(p,.16,.38)*(1-ramp(p,j===0?.65:.76,j===0?.7:.84)):pulse,tone=detailed?featureColor(i):color;tile.material.emissive.set(lit?tone:0);tile.material.emissiveIntensity=lit?highlight*(detailed&&j===0?1.4:.5):0;face.material.color.set(0xffffff);if(lit)face.material.color.lerp(new T.Color(tone),highlight*.32);}
   for(const {channel,gate,spark,i} of u.activationChannels){
    const from=input[i],to=output[i],sigmoid=1/(1+Math.exp(-from)),travel=ramp(p,.16,.84),transform=ramp(p,.35,.7),value=from+(to-from)*transform,tone=from<0?0xd6a578:color;
    gate.scale.setScalar(1-(1-(.22+.78*sigmoid))*pulse);gate.material.emissive.set(tone);gate.material.emissiveIntensity=active?pulse*.85:0;
@@ -163,9 +166,9 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
    Object.assign(spark.userData,{inputValue:from,outputValue:to,value,sigmoid,phase:transform});
    if(spark.visible){spark.position.copy(channel.geometry.parameters.path.getPoint(travel));spark.scale.setScalar(.3+Math.min(3,Math.abs(value))*.5);spark.material.color.set(tone);spark.material.emissive.set(tone);spark.material.opacity=ramp(p,.16,.23)*(1-ramp(p,.78,.86));}
   }
-  u.outputs.forEach((o,i)=>{const v=sequence?1:output[i],size=Number.isFinite(v)?Math.abs(v)<1e-9?.55:1+Math.min(2,Math.abs(v))*.18:1;o.scale.setScalar(1+(size-1)*gathering);o.material.color.set(v<0?0xc79868:u.color);o.material.emissiveIntensity=.08+(active?1.3*gathering*(1-ramp(p,.9,1)):progress>=1?.35:0);});
+  u.outputs.forEach((o,i)=>{const v=sequence?1:output[i],size=Number.isFinite(v)?Math.abs(v)<1e-9?.55:1+Math.min(2,Math.abs(v))*.18:1,gather=detailed?ramp(p,i===0?.59:.76,i===0?.68:.9):gathering;o.scale.setScalar(1+(size-1)*gather);o.material.color.set(v<0?0xc79868:u.color);o.material.emissiveIntensity=.08+(active?1.3*gather*(1-ramp(p,.9,1)):progress>=1?.35:0);});
  }
- function clearProcessing(){for(const u of units.values()){u.g.userData.processing=false;u.connections.forEach(c=>c.spark.visible=false);u.activationChannels.forEach(({spark,gate,channel})=>{spark.visible=false;gate.scale.setScalar(1);gate.material.emissiveIntensity=0;channel.material.emissiveIntensity=0;});u.weightCells.forEach(({tile,face})=>{tile.material.emissiveIntensity=0;face.material.color.set(0xffffff);});}}
+ function clearProcessing(){for(const u of units.values()){u.g.userData.processing=false;if(u.connections.length)u.inputs.forEach(o=>{o.material.color.set(0x6c9eb1);o.material.emissive.set(0x6c9eb1);o.material.emissiveIntensity=.08;});u.connections.forEach(c=>c.spark.visible=false);u.activationChannels.forEach(({spark,gate,channel})=>{spark.visible=false;gate.scale.setScalar(1);gate.material.emissiveIntensity=0;channel.material.emissiveIntensity=0;});u.weightCells.forEach(({tile,face})=>{tile.material.emissiveIntensity=0;face.material.color.set(0xffffff);});}}
  // A single colour pulse identifies the departing row without moving its tray.
  function pulseSource(progress=1){
   const pulse=Math.pow(1-Math.min(1,Math.max(0,progress)/.65),2);
@@ -178,9 +181,35 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   const tray=box(g,cols*.24+.1,.045,count*.3+.06,0,0,0,0xc7d9ce);tray.userData.packetTray=true;
   values.forEach((v,i)=>{const finite=Number.isFinite(v),zero=finite&&Math.abs(v)<1e-9,c=!finite||v<0?0xd6a578:zero?0xc8d4d0:color,h=zero?.035:.08+Math.min(finite?Math.abs(v):2,2)*.24;
    const x=(i%cols-(cols-1)/2)*.24,z=(Math.floor(i/cols)-(count-1)/2)*.3;
-   box(g,.2,.025,.23,x,.035,z,0xe6ece2);const bar=box(g,.17,h,.17,x,.06+h/2,z,c,{emissive:c,emissiveIntensity:zero?.02:.4});bar.userData={feature:i,value:v};
+   const pad=box(g,.2,.025,.23,x,.035,z,0xe6ece2);pad.userData.featurePad=i;const bar=box(g,.17,h,.17,x,.06+h/2,z,c,{emissive:c,emissiveIntensity:zero?.02:.4});bar.userData={feature:i,value:v};
   });return g;
  }
+ function prepareProjectionPacket(g){
+  // The same blocks leave the horizontal tray. Their new positions illustrate
+  // routing into the weight rows, not a transpose of the input tensor.
+  g.userData.featureRoutes=g.children.filter(o=>o.userData.feature!=null).map(bar=>{
+   const i=bar.userData.feature,pad=g.children.find(o=>o.userData.featurePad===i),v=bar.userData.value;
+   const label=textTile(g,String(Number(v.toFixed(2))),.31,.25,bar.position.x,bar.position.y+bar.geometry.parameters.height/2+.02,bar.position.z,{size:76,color:'#fffdf4',bg:'#'+featureColor(i).toString(16).padStart(6,'0')}).mesh;
+   label.visible=false;label.material.transparent=true;label.material.depthWrite=false;label.userData.featureValue=i;
+   return {bar,pad,label,home:bar.position.clone(),padHome:pad.position.clone(),labelHome:label.position.clone(),tone:bar.material.color.clone()};
+  });
+ }
+ function routeProjectionPacket(id,mesh,p,origin,anchor){
+  const u=units.get(id),routes=mesh.userData.featureRoutes;if(!u||!routes)return;
+  const fan=ramp(p,.12,.38),alpha=1-ramp(p,.72,.86);mesh.userData.routing=fan>0;
+  mesh.children.find(o=>o.userData.packetTray).material.opacity=(1-ramp(p,.12,.3))*alpha;
+  for(const {bar,pad,label,home,padHome,labelHome,tone} of routes){
+   const i=bar.userData.feature,target=new T.Vector3(u.g.position.x-1.12,.87,u.g.position.z+u.inputs[i].position.z);
+   for(const [object,start] of [[bar,home],[pad,padHome],[label,labelHome]]){
+    object.position.copy(start);
+    if(p>=.12)object.position.copy(anchor).add(start).lerp(target.clone().add(new T.Vector3(0,start.y,0)),fan).sub(origin);
+   }
+   bar.material.color.copy(tone).lerp(new T.Color(featureColor(i)),fan);bar.material.emissive.copy(bar.material.color);
+   bar.material.opacity=pad.material.opacity=alpha;
+   label.visible=p>=.12&&p<.86;label.material.opacity=ramp(p,.12,.3)*alpha;
+   Object.assign(bar.userData,{mappedInput:i,mappingProgress:fan});
+  }
+ }
  function resetUnits(){units.clear();}
- return {surroundings,module,sync,pulseSource,processing,clearProcessing,packet,rowColor,rowZ,resetUnits,focus(active){context.visible=!active;floor.visible=!active;}};
+ return {surroundings,module,sync,pulseSource,processing,clearProcessing,packet,prepareProjectionPacket,routeProjectionPacket,featureColor,rowColor,rowZ,resetUnits,focus(active){context.visible=!active;floor.visible=!active;}};
 }

@@ -1,5 +1,8 @@
 // English copy. Chinese source phrases are stable lookup keys.
 globalThis.AtelierEnglish = {
+  "暂停": "Pause",
+  "<span>Ⅱ</span> 暂停": "<span>Ⅱ</span> Pause",
+  "<span>▶</span> 继续": "<span>▶</span> Resume",
   "番外": "Bonus",
   "返回首页": "Back to home",
   "线性投影": "Linear projection",
