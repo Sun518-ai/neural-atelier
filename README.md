@@ -1,28 +1,60 @@
-# 神经工坊 · Neural Atelier
+# Neural Atelier
 
-一个在 3D 桌面上搭建神经网络的网页解谜游戏。拖动组件、连接端口，再试跑自己的网络：向量会沿线路移动，经过矩阵映射和其他计算，最后与目标结果比较。
+**English** · [简体中文](README.zh-CN.md)
 
-[在线试玩](https://hacking.pub/games/neural-atelier/#wire)
+[![Neural Atelier — a 3D neural-network wiring puzzle](docs/images/social-preview.png)](https://hacking.pub/games/neural-atelier/)
 
-目前有 25 个关卡，从连接第一个向量开始，逐步加入矩阵投影、FFN、Q/K/V、RoPE、Attention、自回归，以及 CPU / GPU / ANE 调度、量化、KV 缓存等端侧推理概念。
+**Build a neural network with your own hands.** Connect modules on a 3D workbench, run your circuit, and watch vectors travel through the computations. If the output misses the target, inspect the modules and try a different connection.
 
-## 怎么玩
+**[Play in your browser →](https://hacking.pub/games/neural-atelier/)** · [Run locally](#run-locally) · [How to play](#how-to-play)
 
-- 点圆形输出口，再点方形输入口完成接线，也可以拖拽接线。
-- 拖动模块调整布局；拖动场景旋转视角，滚轮缩放。
-- 双击模块打开介绍卡片，查看作用和计算示例。
-- 点击“试跑我的网络”，观察向量的流动与计算，结果会在运行后显示。
-- 在“设置”里统一调整速度、语言、背景音乐和音量；通过关卡菜单切换章节。
-- 默认按照浏览器语言偏好选择中文或英文，可以手动覆盖。切换语言保留接线和关卡进度。
-- 开场可直接点击“进入工坊”或按 Esc 跳过；音乐在用户操作后开始，切到后台会暂停。
+25 levels · Desktop / WebGL 2 · English + Chinese · No account required
 
-关卡和接线进度保存在当前浏览器的 `localStorage` 中。URL 中的 `#wire`、`#projection` 等只定位关卡，不携带自己的接线或通关记录。
+## Inside the workshop
 
-面向桌面浏览器，需要 WebGL 2；目前不支持手机布局。
+Start with one wire and a small matrix. Later, combine projections, activation, gating, and residual connections into a working FFN. Double-click a module to open its illustrated card, rotate its model, and explore its computation.
 
-## 本地启动
+| A matrix changes the vector | A closer look inside a module |
+| --- | --- |
+| ![Input vectors connected through a matrix projection to four-feature outputs](docs/images/matrix-projection.jpg) | ![Gate projection card showing its 3D model, matrix, formula, and example](docs/images/module-card.jpg) |
 
-需要 Node.js 22 或更高版本。在终端克隆项目并安装开发依赖：
+<sub>Gameplay images, including the cover, use captures from an earlier Chinese-language build. The current game supports both English and Chinese.</sub>
+
+The circuit you build determines the result. Run it to see data move through the network; feedback appears at the end, leaving you room to work out the connections yourself.
+
+## From the first wire to an inference engine
+
+Each stage adds to the previous one:
+
+| Stage | What you build and explore |
+| --- | --- |
+| **Foundations · 6 levels** | Route a vector, apply a matrix, add activation and gating, reconnect a residual path, and assemble an FFN. |
+| **Transformer · 10 levels** | Connect embeddings, normalization, Q/K/V, attention scores, causal masking, RoPE, and attention. Assemble a block, predict a token, and feed it back into the context. |
+| **On-device inference · 9 levels** | Place work on CPU, GPU, and ANE; explore tensor layouts, batching, KV caching, quantization, fusion, parallel execution, and prefix reuse. |
+
+The later puzzles add memory and execution-cost constraints to the numerical goals. A correct circuit is the starting point; choosing where and how it runs becomes part of the puzzle.
+
+## How to play
+
+| Action | Control |
+| --- | --- |
+| Connect modules | Click a **round output port**, then a **square input port**, or drag between them. |
+| Arrange the workbench | Drag a module to move it. |
+| Explore the scene | Drag empty space to rotate; scroll to zoom. |
+| Inspect a module | Double-click it to open its card. |
+| Test your circuit | Click **Run my network** and watch the vectors move. |
+| Change levels | Open the level menu. Each level keeps its own circuit. |
+| Return to the title screen | Click the **N / Neural Atelier** brand at the top left. |
+
+**Settings** brings together language, animation speed, music, and volume. Language follows your browser preference unless you choose one manually. Runs start at **0.25×** by default so the computation is easy to follow; your chosen speed is remembered.
+
+The animated title screen introduces the workbench. Music starts after you enter and pauses while the tab is in the background. You can mute it or replay the introduction from Settings.
+
+Progress and circuits are saved in this browser's `localStorage`. Links such as `#wire` or `#projection` select a level; they do not share your circuit or progress. The game requires a desktop browser with WebGL 2. Mobile layouts are not supported.
+
+## Run locally
+
+Use **Node.js 22 or newer**:
 
 ```sh
 git clone https://github.com/chainhelen/neural-atelier.git
@@ -31,62 +63,62 @@ npm ci
 npm run dev
 ```
 
-如果已经有源码，进入项目目录后执行 `npm ci` 和 `npm run dev` 即可。
+Open **<http://127.0.0.1:5173/>**. On later visits, run `npm run dev` from the project directory. Refresh after editing files; press `Ctrl+C` to stop the server.
 
-打开 <http://127.0.0.1:5173/#wire>。按 `Ctrl+C` 停止服务。依赖安装后，平时启动只需 `npm run dev`；修改代码后刷新浏览器查看效果。
-
-只想试玩，也可以不用 Node.js，在项目目录运行：
+To serve the game without Node.js, use Python from the project directory:
 
 ```sh
 python3 -m http.server 5173 --bind 127.0.0.1
 ```
 
-请通过 HTTP 打开，直接双击 `index.html` 会受到浏览器对 ES Module 的限制。
+Use an HTTP server rather than opening `index.html` directly, because the game uses ES modules.
 
-## 项目结构
+## Development
 
-这是无需构建的纯前端项目，使用原生 HTML / CSS / JavaScript 和本地附带的 Three.js r180。运行时没有后端接口、账号服务或数据库；Node.js 只用于开发服务器和测试。
+Neural Atelier is a **static frontend** written in HTML, CSS, and JavaScript, with a local copy of Three.js r180. There is no build step, backend, account service, or database. Node.js is used only for development and tests.
 
-| 文件 | 内容 |
+| File | Responsibility |
 | --- | --- |
-| `index.html`、`style.css` | 页面与样式 |
-| `game.js` | 交互、场景、连线、运行动画和关卡导航 |
-| `model.js` | 基础计算、连线检查和前六关 |
-| `campaign.js` | 后续关卡和微型 Transformer 计算 |
-| `engine-model.js` | 调度、存储、量化等教学成本模型 |
-| `scene-art.js` | 3D 组件与矩阵视觉效果 |
-| `module-cards.js` | 模块介绍卡片 |
-| `level-progress.js` | 本地进度与接线存档 |
-| `i18n.js`、`locales/en.js` | 浏览器语言检测和中英文本 |
-| `shell.js` | 开场入口与统一设置 |
-| `music.js` | 原创合成背景音乐，无外部音频下载 |
-| `vendor/` | Three.js 及其 MIT 许可证 |
+| `index.html`, `style.css` | Page structure and styling |
+| `game.js` | Interaction, scene, wiring, run animation, and level navigation |
+| `model.js` | Core arithmetic, circuit validation, and the first six levels |
+| `campaign.js` | Later levels and miniature Transformer calculations |
+| `engine-model.js` | Teaching cost model for scheduling, memory, and quantization |
+| `scene-art.js`, `module-cards.js` | 3D module artwork and illustrated cards |
+| `level-progress.js` | Local progress and circuit saves |
+| `i18n.js`, `locales/en.js` | Browser-language detection and Chinese / English text |
+| `shell.js`, `music.js` | Title screen, settings, and original synthesized music |
+| `vendor/` | Three.js and its MIT license |
 
-## 测试
+Run the checks with:
 
 ```sh
 npm test
 ```
 
-测试覆盖关卡解法、数值计算、进度恢复、关卡链接和动画状态。DOM 与场景测试使用 LinkeDOM 和模拟渲染器，视觉效果和鼠标命中仍需要在浏览器里检查。GitHub Actions 会在 push 和 pull request 时运行这些测试。
+Tests cover level solutions, arithmetic, saved progress, level links, settings, and animation state. DOM and scene tests use LinkeDOM and a stub renderer; visual changes and pointer interactions also need a browser check. GitHub Actions runs the tests on pushes and pull requests.
 
-## 部署
+Ideas, bug reports, and pull requests are welcome. For gameplay bugs, include the level URL, browser, reproduction steps, and a screenshot when useful. For a new mechanic, start with a small playable example so its interaction can be tried early.
 
-可放在 Nginx、GitHub Pages 或其他静态网站托管服务上。网页使用相对资源路径和 hash 关卡导航，支持部署到 `/games/neural-atelier/` 这样的子目录，无需配置应用路由回退。
+## Static hosting
 
-网站运行需要根目录的 HTML、CSS、JavaScript 文件，以及 `locales/` 和 `vendor/`。不需要上传 `node_modules/`、测试、Git 数据或开发服务器。
+Serve the root HTML, CSS, and JavaScript files together with **`locales/` and `vendor/`**. No `node_modules/`, test files, Git data, or development server is needed in production.
 
-公开仓库也可以用 GitHub Pages 免费托管试玩页面：
+Relative asset paths and hash-based level navigation support subdirectories such as `/games/neural-atelier/` without an application-route fallback. Nginx, GitHub Pages, and other static hosts work.
 
-1. 将源码推送到仓库的 `main` 分支。
-2. 打开仓库的 **Settings → Pages**。
-3. 在 **Build and deployment** 中选择 **Deploy from a branch**，分支选 `main`，目录选 `/(root)`，保存。
-4. 等待部署完成，通过 Pages 显示的网址打开游戏，通常为 `https://chainhelen.github.io/neural-atelier/`。
+To enable GitHub Pages on your own copy:
 
-项目包含 `.nojekyll`，不需要构建命令，也不需要在 GitHub 上运行 `npm run dev`。已有的 GitHub Actions 工作流负责测试；Pages 负责发布静态文件。
+1. Push the source to `main`.
+2. Open **Settings → Pages**.
+3. Choose **Deploy from a branch**, select `main` and `/(root)`, then save.
+4. Wait for deployment and open the URL shown by Pages.
 
-## 教学范围
+The repository includes `.nojekyll`; no build command or `npm run dev` process is needed on Pages. The current public demo is hosted at [hacking.pub](https://hacking.pub/games/neural-atelier/).
 
-小矩阵的投影、注意力和 FFN 执行真实的算术计算；ANE 调度和性能数字使用简化的教学模型。游戏不加载真实大模型，也不会调用苹果 ANE。设计参考 Kapitsa 的端侧推理思路，参考版本和模型假设见 [ENGINE_NOTES.md](ENGINE_NOTES.md)。
+## What the game models
 
-Three.js 的第三方授权保留在 [vendor/LICENSE](vendor/LICENSE)。
+Small-matrix projection, attention, and FFN puzzles perform actual arithmetic. Hardware scheduling and performance figures use a simplified teaching model; the game does not load a large language model or access the Apple Neural Engine.
+
+The on-device exercises draw on Kapitsa's approach to inference. The pinned reference revision, model assumptions, and limits are documented in [ENGINE_NOTES.md](ENGINE_NOTES.md).
+
+The third-party Three.js license is preserved in [vendor/LICENSE](vendor/LICENSE).
