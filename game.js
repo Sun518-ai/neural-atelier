@@ -1,5 +1,5 @@
-import {cardFor,exampleFor} from './module-cards.js?v=shelf-actions-1';
-import {createProgress} from './level-progress.js?v=shelf-actions-1';
+import {cardFor,exampleFor} from './module-cards.js?v=level-complete-1';
+import {createProgress} from './level-progress.js?v=level-complete-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -52,6 +52,17 @@ function togglePause(){
 }
 $('#pause').onclick=togglePause;
 let engineReport=null;
+const levelPassed=()=>results.length===stage().sampleCount&&results.every(r=>r.pass)&&(!stage().engine||engineReport?.pass);
+function closeCompletion(){if($('#level-complete').open)$('#level-complete').close();}
+function renderCompletion(){
+ $('#complete-level').textContent=stage().chapter+' · '+stage().title;
+ $('#complete-detail').textContent=stage().engine?I18n.t("数值与性能约束全部通过。"):I18n.t("全部输入验证通过。");
+ $('#complete-next').textContent=stage().next?I18n.t("下一关 →"):I18n.t("选择关卡");
+}
+function showCompletion(){if(busy||!levelPassed())return;renderCompletion();if(!$('#level-complete').open)$('#level-complete').showModal();}
+$('#complete-close').onclick=closeCompletion;
+$('#complete-replay').onclick=()=>{closeCompletion();return run();};
+$('#complete-next').onclick=()=>{closeCompletion();if(stage().next)switchLevel(stage().next);else levelMenu();};
 function engineControls(){
  const c=stage(),area=$('#engine-controls');if(!c.engine){area.innerHTML='';return;}
  area.innerHTML=I18n.t("<div class=\"eyebrow\">引擎参数</div><p class=\"engine-model-note\">教学成本模型 · 非设备实测</p>")+c.controls.map(k=>{const d=M.engineControls[k];return `<label>${d.label}<select data-setting="${k}">${d.values.map(([v,name])=>`<option value="${v}" ${String(state.settings[k])===String(v)?'selected':''}>${name}</option>`).join('')}</select></label>`;}).join('')+I18n.t("<p class=\"engine-model-note\">选中模块，再点芯片区域分配；也可拖动模块的芯片标记。</p>");
@@ -93,7 +104,7 @@ function levelMenu(){
  menuTrack=stage().track;renderLevelMenu();$('#level-menu').showModal();$('#level-list .current')?.scrollIntoView({block:'nearest'});
 }
 function switchLevel(id,fromHash=false){
- if(busy||!M.levels[id])return;if(id===stageId){$('#level-menu').close();return;}
+ if(busy||!M.levels[id])return;closeCompletion();if(id===stageId){$('#level-menu').close();return;}
  save();world?.beforeStage();stageId=id;state=progress.load(id);progress.select(id);
  history=[];selected=pending=current=fault=selectedWire=placing=actionNode=null;engineReport=null;results=[];sample=0;level=99;hints=0;
  stageChrome();world?.setStage();save();refresh();$('#level-menu').close();say('');if(!fromHash)writeLevelHash(id);
@@ -106,6 +117,7 @@ I18n.onChange(()=>{
  if(!$('#run-report').hidden)renderReport();
  if(!busy)say('');
  if($('#level-menu').open)renderLevelMenu();
+ if($('#level-complete').open)renderCompletion();
 });
 window.addEventListener?.('hashchange',()=>{
  const target=levelFromHash();if(!target){writeLevelHash(stageId,true);return;}
@@ -118,7 +130,7 @@ $('#level-tracks').onclick=e=>{const b=e.target.closest('[data-track]');if(b){me
 $('#next-level').onclick=()=>switchLevel(stage().next);
 function say(text,tone=''){$('#feedback').textContent=text;$('#feedback').className='feedback '+tone;}
 function checkpoint(){history.push(clone(state));if(history.length>40)history.shift();}
-function changed(){resetReport();engineReport=null;fault=null;current=null;selectedWire=actionNode=null;results=[];sample=0;level=99;world?.clearPreview?.();save();world?.rebuild();refresh();}
+function changed(){closeCompletion();resetReport();engineReport=null;fault=null;current=null;selectedWire=actionNode=null;results=[];sample=0;level=99;world?.clearPreview?.();save();world?.rebuild();refresh();}
 function select(id){if(world?.focused())return;selected=id;selectedWire=null;actionNode=stage().buildable?id:null;world?.labels();inspect();}
 function outputName(id){return id==='R'?(stageId==='ffn'?I18n.t("原始输入 R"):I18n.t("输入 X")):id==='Z'?I18n.t("归一化输入 Z"):nodeName(id);}
 function chooseOutput(id){if(busy)return;placing=selectedWire=actionNode=null;world?.clearPlacement?.();world?.clearPreview?.();pending=pending===id?null:id;world?.labels();say(pending?`${I18n.t("已拿起「")}${outputName(id)}${I18n.t("」的线，点一个方形输入口。")}`:I18n.t("已放下连线。"));}
@@ -153,8 +165,9 @@ function inspect(){renderShelf();const d=state.nodes.some(n=>n.id===selected)?de
  const n=state.nodes.find(n=>n.id===selected),values=current?.values||{R:samples()[sample].v,Z:M.norm(samples()[sample].v)};
  $('#inspect-values').innerHTML=n.links.map((id,i)=>`${I18n.t("<div class=\"value-line\">输入 ")}${i+1} · ${id?outputName(id):I18n.t("未连接")}<b>${vector(values[id])}</b></div>`).join('')+`${I18n.t("<div class=\"value-line\">输出<b>")}${vector(values[selected])}</b></div>`;
 }
-function refresh(){refreshPauseControl();document.body.classList.toggle('network-running',busy);renderShelf();const t=samples()[sample];const won=results.length===stage().sampleCount&&results.every(r=>r.pass)&&(!stage().engine||engineReport?.pass);$('.route strong').textContent=stage().concept+(won?I18n.t(" · 已通过"):'');$('#next-level').hidden=!(won||progress.completed(stageId))||!stage().next;$('#levels-open').disabled=busy;$('#engine-controls').querySelectorAll('input,select,button').forEach(e=>e.disabled=busy);$('#device-docks').querySelectorAll('button').forEach(e=>e.disabled=busy);$('#sample-name').textContent=t.word;$('#sample-value').textContent=stage().sequence?(stage().sourceDim===3?'Token ID '+vector(t.v):I18n.t("3 个位置 × 2 个特征")):vector(t.v);$('#pass-count').textContent=results.filter(r=>r.pass).length+' / '+stage().sampleCount;$('#test-results').innerHTML=results.map((r,i)=>`<div class="test-row ${r.pass?'pass':'fail'}"><span>${r.pass?'✓':'×'} ${samples()[i].word}</span><span>${stage().tokenOutput&&r.actual?M.readTokens(r.actual):stage().sequence?(r.actual?I18n.t("矩阵 ")+shape(r.actual.length):I18n.t("等待输入")):vector(r.actual)}</span></div>`).join('');$('#run').disabled=!world;$('#run').innerHTML=busy?I18n.t("<span>■</span> 停下检查"):I18n.t("<span>▶</span> 试跑我的网络");$('#undo').disabled=busy||!history.length;$('#reset').disabled=busy;$('#hint').disabled=busy;inspect();}
+function refresh(){refreshPauseControl();document.body.classList.toggle('network-running',busy);renderShelf();const t=samples()[sample];const won=levelPassed();$('.route strong').textContent=stage().concept+(won?I18n.t(" · 已通过"):'');$('#next-level').hidden=!(won||progress.completed(stageId))||!stage().next;$('#levels-open').disabled=busy;$('#engine-controls').querySelectorAll('input,select,button').forEach(e=>e.disabled=busy);$('#device-docks').querySelectorAll('button').forEach(e=>e.disabled=busy);$('#sample-name').textContent=t.word;$('#sample-value').textContent=stage().sequence?(stage().sourceDim===3?'Token ID '+vector(t.v):I18n.t("3 个位置 × 2 个特征")):vector(t.v);$('#pass-count').textContent=results.filter(r=>r.pass).length+' / '+stage().sampleCount;$('#test-results').innerHTML=results.map((r,i)=>`<div class="test-row ${r.pass?'pass':'fail'}"><span>${r.pass?'✓':'×'} ${samples()[i].word}</span><span>${stage().tokenOutput&&r.actual?M.readTokens(r.actual):stage().sequence?(r.actual?I18n.t("矩阵 ")+shape(r.actual.length):I18n.t("等待输入")):vector(r.actual)}</span></div>`).join('');$('#run').disabled=!world;$('#run').innerHTML=busy?I18n.t("<span>■</span> 停下检查"):I18n.t("<span>▶</span> 试跑我的网络");$('#undo').disabled=busy||!history.length;$('#reset').disabled=busy;$('#hint').disabled=busy;inspect();}
 async function run(){
+ closeCompletion();
  if(busy){busy=paused=false;runId++;say(I18n.t("已停止。"));world.clearPackets();world.labels();refresh();return;}
  busy=true;paused=false;pausedDuration=0;pending=selectedWire=placing=actionNode=null;world.clearPreview?.();world.clearPlacement?.();fault=null;engineReport=null;results=[];resetReport();const id=++runId;
  for(let i=0;i<stage().sampleCount;i++){
@@ -167,7 +180,7 @@ async function run(){
   if(!pass){fault={id:'sink',actual,expected};level=99;busy=paused=false;if(stage().engine)engineReport=M.engineReport(state);world.labels();refresh();renderReport();say(`「${samples()[i].word}${I18n.t("」未通过。")}`,'error');return;}
   level=99;world.labels();refresh();
  }
- busy=paused=false;if(stage().engine)engineReport=M.engineReport(state);if(!stage().engine||engineReport.pass)progress.complete(stageId);world.labels();refresh();renderReport();say(stage().engine?(engineReport.pass?I18n.t("数值与性能约束全部通过。"):I18n.t("数值通过；性能验收未通过，查看运行报告。")):`${I18n.t("通过：")}${stage().sampleCount} / ${stage().sampleCount}。`,stage().engine&&!engineReport.pass?'error':'success');
+ busy=paused=false;if(stage().engine)engineReport=M.engineReport(state);if(levelPassed())progress.complete(stageId);world.labels();refresh();renderReport();say(stage().engine?(engineReport.pass?I18n.t("数值与性能约束全部通过。"):I18n.t("数值通过；性能验收未通过，查看运行报告。")):`${I18n.t("通过：")}${stage().sampleCount} / ${stage().sampleCount}。`,stage().engine&&!engineReport.pass?'error':'success');showCompletion();
 }
 $('#inspect-focus').onclick=()=>world?.focus(selected);
 $('#run').onclick=run;$('#undo').onclick=()=>{state=history.pop();pending=null;changed();say(I18n.t("已撤销。"));};$('#reset').onclick=()=>{checkpoint();state=M.initial(stageId);selected=pending=placing=null;world?.clearPlacement?.();changed();say(I18n.t("已恢复本关起点。"));};
@@ -182,7 +195,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=shelf-actions-1');
+ const {createSceneArt}=await import('./scene-art.js?v=level-complete-1');
  const art=createSceneArt(T,scene,colors,{anisotropy:renderer.capabilities.getMaxAnisotropy()});art.surroundings(samples(),stage());
  const assembly=new T.Group(),wires=new T.Group();scene.add(assembly,wires);const neuronGeo=new T.SphereGeometry(.115,16,12);let elements=[],curves=[],packets=[],drag=null,preview=null,yaw=.05,pitch=.8,zoom=stage().zoom,lastDepth=-1;
  const cameraTarget=new T.Vector3();let focusId=null,shelfFocus=null,shelfModel=null,overview=null,cameraFrame=0,transitioning=false,lastTap=null;
@@ -258,7 +271,53 @@ try{
   const flagRect=flag.getBoundingClientRect(),hostRect=host.getBoundingClientRect(),sx=flagRect.right-hostRect.left+5,sy=flagRect.top+flagRect.height/2-hostRect.top;
   placementPath.setAttribute('d',`M${sx} ${sy} Q${(sx+x)/2} ${sy} ${x} ${y}`);placementPath.style.opacity=placing?'0':'.65';
  }
- function render(){const w=host.clientWidth,h=host.clientHeight;if(!w||!h)return;renderer.setSize(w,h,false);const width=23*zoom,height=width*h/w;Object.assign(camera,{left:-width/2,right:width/2,top:height/2,bottom:-height/2});camera.position.set(cameraTarget.x+Math.sin(yaw)*24,cameraTarget.y+Math.sin(pitch)*24,cameraTarget.z+Math.cos(yaw)*Math.cos(pitch)*24);camera.lookAt(cameraTarget);camera.updateProjectionMatrix();art.updateDetail(camera,w,h);renderer.render(scene,camera);syncConnectionGuide(w,h);syncPlacementGuide(w,h);syncWireTargets(w,h);elements.forEach(({el,pos})=>{el.hidden=!!focusId&&(el.dataset.owner!==focusId||el.classList.contains('node-label')||el.classList.contains('local-fault')||el.classList.contains('fault-pin'));if(el.classList.contains('port'))el.disabled=!!focusId;const [x,y]=project(pos());if(el.classList.contains('local-fault')||el.classList.contains('wire-actions')){el.style.left=Math.max(12,Math.min(w-el.offsetWidth-12,x+18))+'px';el.style.top=Math.max(12,Math.min(h-el.offsetHeight-46,y+15))+'px';}else{el.style.left=x+'px';el.style.top=y+'px';}});packets.forEach(p=>{const [x,y]=project(p.p.clone().add(new T.Vector3(0,.7,0)));p.el.style.left=x+'px';p.el.style.top=y+'px';if(p.calculation){const [cx,cy]=project(new T.Vector3(p.node.x,1.05,p.node.z+1.28));p.calculation.style.left=cx+'px';p.calculation.style.top=cy+'px';}});}
+ // Check the visible feature blocks as well as the tray: projection fans the
+ // features away from the packet center. Screen space also follows camera moves.
+ function flowFootprints(pixelsPerUnit){
+  const footprints=[];if(!busy)return footprints;
+  for(const p of packets)for(const mesh of [p.mesh,p.outputMesh]){
+   if(!mesh?.visible)continue;
+   mesh.traverseVisible(o=>{
+    if(!o.userData.packetTray&&o.userData.feature==null&&o.userData.featureValue==null)return;
+    const alpha=o.material?.opacity??1;if(alpha<=0)return;
+    if(!o.geometry.boundingSphere)o.geometry.computeBoundingSphere();
+    const sphere=o.geometry.boundingSphere,center=sphere.center.clone().applyMatrix4(o.matrixWorld),[x,y]=project(center);
+    footprints.push({x,y,r:sphere.radius*o.matrixWorld.getMaxScaleOnAxis()*pixelsPerUnit,alpha:Math.min(1,alpha/.3)});
+   });
+  }
+  return footprints;
+ }
+ function fadePort(el,x,y,footprints,width,height){
+  let fade=0;const halfWidth=(width||27)/2,halfHeight=(height||27)/2;
+  for(const p of footprints){
+   const gap=Math.hypot(Math.max(0,Math.abs(x-p.x)-halfWidth),Math.max(0,Math.abs(y-p.y)-halfHeight))-p.r;
+   const t=Math.max(0,Math.min(1,gap/24)),ease=t*t*(3-2*t);
+   fade=Math.max(fade,(1-ease)*p.alpha);
+  }
+  el.style.opacity=fade?String(1-.92*fade):'';
+ }
+ function render(){
+  const w=host.clientWidth,h=host.clientHeight;if(!w||!h)return;
+  renderer.setSize(w,h,false);const width=23*zoom,height=width*h/w;
+  Object.assign(camera,{left:-width/2,right:width/2,top:height/2,bottom:-height/2});
+  camera.position.set(cameraTarget.x+Math.sin(yaw)*24,cameraTarget.y+Math.sin(pitch)*24,cameraTarget.z+Math.cos(yaw)*Math.cos(pitch)*24);
+  camera.lookAt(cameraTarget);camera.updateProjectionMatrix();art.updateDetail(camera,w,h);renderer.render(scene,camera);
+  syncConnectionGuide(w,h);syncPlacementGuide(w,h);syncWireTargets(w,h);
+  const flow=flowFootprints(w/width);
+  // Measure overlays together before moving them, avoiding layout per port.
+  const layouts=elements.map(({el,pos})=>({el,xy:project(pos()),width:el.offsetWidth,height:el.offsetHeight}));
+  layouts.forEach(({el,xy:[x,y],width,height})=>{
+   el.hidden=!!focusId&&(el.dataset.owner!==focusId||el.classList.contains('node-label')||el.classList.contains('local-fault')||el.classList.contains('fault-pin'));
+   if(el.classList.contains('port')){el.disabled=!!focusId;fadePort(el,x,y,flow,width,height);}
+   if(el.classList.contains('local-fault')||el.classList.contains('wire-actions')){
+    el.style.left=Math.max(12,Math.min(w-width-12,x+18))+'px';el.style.top=Math.max(12,Math.min(h-height-46,y+15))+'px';
+   }else{el.style.left=x+'px';el.style.top=y+'px';}
+  });
+  packets.forEach(p=>{
+   const [x,y]=project(p.p.clone().add(new T.Vector3(0,.7,0)));p.el.style.left=x+'px';p.el.style.top=y+'px';
+   if(p.calculation){const [cx,cy]=project(new T.Vector3(p.node.x,1.05,p.node.z+1.28));p.calculation.style.left=cx+'px';p.calculation.style.top=cy+'px';}
+  });
+ }
 
  function transition(target,targetZoom,targetYaw=yaw,targetPitch=pitch){
   cancelAnimationFrame(cameraFrame);const start=performance.now(),from=cameraTarget.clone(),z0=zoom,y0=yaw,p0=pitch,reduced=matchMedia('(prefers-reduced-motion:reduce)').matches;transitioning=true;host.setAttribute('aria-busy','true');
@@ -435,7 +494,7 @@ try{
  document.addEventListener('pointercancel',()=>{drag=null;pending=placing=null;clearPreview();clearPlacement();labels();});
  function zoomCamera(e){e.preventDefault();if(transitioning)return;zoom=Math.max(focusId ? .13 : .45,Math.min(focusId ? .7 : 1.35,zoom+e.deltaY*(focusId ? .00028 : .0008)));render();}
  host.addEventListener('wheel',zoomCamera,{passive:false});overlay.addEventListener('wheel',zoomCamera,{passive:false});
- document.addEventListener('keydown',e=>{if($('#settings').open||$('#welcome').open||$('#level-menu').open||$('#about').open||/^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName))return;if((e.key==='Delete'||e.key==='Backspace')&&selectedWire&&!busy){e.preventDefault();deleteWire();return;}if((e.key==='Delete'||e.key==='Backspace')&&actionNode&&!busy&&!focusId){e.preventDefault();removeModule(actionNode);return;}if(e.key==='Escape'){if(focusId){e.preventDefault();leaveFocus();}else if(!$('#run-report').hidden){e.preventDefault();closeReport(true);}else{pending=placing=selectedWire=actionNode=null;fault=null;clearPreview();clearPlacement();labels();}}});
+ document.addEventListener('keydown',e=>{if($('#settings').open||$('#welcome').open||$('#level-menu').open||$('#level-complete').open||$('#about').open||/^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName))return;if((e.key==='Delete'||e.key==='Backspace')&&selectedWire&&!busy){e.preventDefault();deleteWire();return;}if((e.key==='Delete'||e.key==='Backspace')&&actionNode&&!busy&&!focusId){e.preventDefault();removeModule(actionNode);return;}if(e.key==='Escape'){if(focusId){e.preventDefault();leaveFocus();}else if(!$('#run-report').hidden){e.preventDefault();closeReport(true);}else{pending=placing=selectedWire=actionNode=null;fault=null;clearPreview();clearPlacement();labels();}}});
  document.addEventListener('pointercancel',()=>{if(drag?.kind==='palette'){placing=null;clearPlacement();}drag=null;render();});
  $('#card-close').onclick=leaveFocus;$('#card-return').onclick=leaveFocus;
  $('#module-card').addEventListener('cancel',e=>{e.preventDefault();leaveFocus();});

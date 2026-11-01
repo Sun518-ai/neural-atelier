@@ -47,6 +47,7 @@ The later puzzles add memory and execution-cost constraints to the numerical goa
 | Inspect a module | Double-click it on the workbench or shelf to open its card. Shelf previews work even when stock is exhausted; Enter also opens a focused shelf item. |
 | Test your circuit | Click **Run my network** and watch the vectors move. |
 | Pause a run | Click **Pause** beside the run button. Rotate or zoom while frozen, then click **Resume** to continue from the same moment. |
+| Finish a level | After all inputs pass, choose **Replay level** to rerun your current circuit, or **Next level**. Replay keeps all modules and wires. |
 | Change levels | Open the level menu. Each level keeps its own circuit. |
 | Return to the title screen | Click the **N / Neural Atelier** brand at the top left. |
 

@@ -1,5 +1,9 @@
 // English copy. Chinese source phrases are stable lookup keys.
 globalThis.AtelierEnglish = {
+  "本关完成": "Level complete",
+  "全部输入验证通过。": "All inputs passed validation.",
+  "组件和接线已保留，重玩会再次运行当前网络。": "Your modules and wires are saved. Replay runs this circuit again.",
+  "重玩本关": "Replay level",
   "收起组件架": "Hide shelf",
   "展开组件架": "Show shelf",
   "双击查看说明": "Double-click to inspect",

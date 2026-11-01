@@ -65,6 +65,64 @@ test('all input rows use the same base animation timing',async()=>{
  const app=boot();app.eval("state=M.solutions('projection');switchLevel('projection');state=M.solutions(stageId);window.timings=[];world.animate=async(ev,ms)=>{timings.push(ms)}");
  await app.eval('run()');assert.deepEqual(Array.from(app.c.timings),[650,650,650]);
 });
+
+function completedCircuit(M,id){
+ const level=M.levels[id];if(!level.engine)return M.solutions(id);
+ const proposal={batch:32,layout:'channels',cache:true,precision:4,fusion:true,resident:true,split:60,prefix:true,context:4096};
+ for(const device of ['gpu','ane']){
+  const s=M.solutions(id);for(const key of level.controls)if(key in proposal)s.settings[key]=proposal[key];
+  for(const n of s.nodes)n.device=['enqkv','enffn'].includes(n.id)?device:['load','enembed','enhead'].includes(n.id)?'cpu':'gpu';
+  if(M.engineReport(s).pass)return s;
+ }
+ throw new Error('No completed circuit fixture: '+id);
+}
+
+test('completion waits for every input, replay preserves the circuit and undo, and next loads the saved destination',async()=>{
+ const app=boot(),dialog=app.document.querySelector('#level-complete');
+ app.eval("switchLevel('ffn');state=M.solutions(stageId);state.nodes[0].x+=.2;save();window.destination=JSON.stringify(state);switchLevel('workshop');state=M.solutions(stageId);checkpoint();state.nodes[0].z+=.25;save();setPlaybackSpeed(.5)");
+ const before=app.eval('JSON.stringify(state)'),undo=app.eval('JSON.stringify(history)');
+ let runs=0;
+ app.eval('world.animate=async()=>{window.checkAnimation()}');
+ app.c.checkAnimation=()=>{runs++;assert.ok(!dialog.open,'no completion before all animation has finished');};
+ await app.eval('run()');
+ assert.equal(dialog.open,true);assert.equal(runs,app.eval('stage().sampleCount'));
+ assert.equal(app.document.querySelector('#complete-title').textContent,'本关完成');
+ app.c.I18n.setPreference('en');assert.equal(app.document.querySelector('#complete-title').textContent,'Level complete');assert.doesNotMatch(dialog.textContent,/[\u3400-\u9fff]/);
+ await app.document.querySelector('#complete-replay').onclick();
+ assert.equal(dialog.open,true);assert.equal(runs,2*app.eval('stage().sampleCount'));
+ assert.equal(app.eval('JSON.stringify(state)'),before);assert.equal(app.eval('JSON.stringify(history)'),undo);assert.equal(app.eval('playbackSpeed'),.5);
+ app.document.querySelector('#complete-next').onclick();assert.equal(dialog.open,false);assert.equal(app.location.hash,'#ffn');assert.equal(app.eval('JSON.stringify(state)'),app.c.destination);
+ app.eval("switchLevel('workshop')");assert.equal(app.eval('JSON.stringify(state)'),before);
+});
+
+test('failure, cancellation and unmet engine constraints never show completion; every solved level does',async()=>{
+ const app=boot(),dialog=app.document.querySelector('#level-complete'),M=app.c.NeuralPrologue;
+ await app.eval('run()');assert.ok(!dialog.open,'unfinished wiring must fail');
+ app.eval('state=M.solutions(stageId);world.animate=()=>new Promise(resolve=>window.finishAnimation=resolve)');
+ const cancelled=app.eval('run()');await app.eval('run()');app.c.finishAnimation();await cancelled;assert.ok(!dialog.open,'a stopped run is not a win');
+ app.eval('world.animate=async()=>{}');
+ for(const id of Object.keys(M.levels)){
+  app.eval(`switchLevel('${id}')`);app.c.solved=completedCircuit(M,id);app.eval('state=solved');await app.eval('run()');
+  assert.equal(dialog.open,true,id+' completes');
+  app.document.querySelector('#complete-close').onclick();assert.equal(dialog.open,false);
+  app.eval('refresh()');assert.equal(dialog.open,false,'dismissed completion stays dismissed');
+ }
+ app.eval("switchLevel('capstone');state=M.solutions(stageId);state.settings.precision=16");await app.eval('run()');
+ assert.ok(app.eval('results.every(r=>r.pass)'));assert.equal(app.eval('engineReport.pass'),false);assert.equal(dialog.open,false);
+});
+
+test('finale completion stays on its track and stale dialogs close on circuit or level changes',async()=>{
+ const app=boot(),dialog=app.document.querySelector('#level-complete'),M=app.c.NeuralPrologue;
+ for(const [id,track]of [['autoregressive','main'],['capstone','engine']]){
+  app.eval(`switchLevel('${id}')`);app.c.solved=completedCircuit(M,id);app.eval('state=solved');await app.eval('run()');
+  assert.equal(app.document.querySelector('#complete-next').textContent,'选择关卡');
+  app.document.querySelector('#complete-next').onclick();assert.equal(dialog.open,false);assert.equal(app.document.querySelector('#level-menu').open,true);assert.equal(app.eval('stageId'),id);assert.equal(app.eval('menuTrack'),track);
+ }
+ app.eval("switchLevel('projection');state=M.solutions(stageId)");await app.eval('run()');assert.equal(dialog.open,true);
+ app.eval('changed()');assert.equal(dialog.open,false);
+ await app.eval('run()');assert.equal(dialog.open,true);
+ app.location.hash='#wire';app.hashchange();assert.equal(dialog.open,false);
+});
 test('speed slider updates while running, persists across levels and reloads, and leaves circuit and results intact',async()=>{
  const app=boot(),slider=app.document.querySelector('#playback-speed');
  assert.equal(app.eval('playbackSpeed'),.25);

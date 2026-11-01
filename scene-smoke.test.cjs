@@ -36,6 +36,44 @@ test('moving trays preserve feature columns and sequence rows through projection
  for(const id of ['projection','scores']){app.api.switchLevel(id);app.api.setState(app.c.NeuralPrologue.solutions(id));app.api.getWorld().rebuild();await app.api.run();assert.equal(app.document.querySelectorAll('#test-results .pass').length,3);}
  for(const shape of ['1x2','1x4','3x2','3x3'])assert.ok(checked.has(shape),shape+' should retain its orientation');
 });
+test('port badges fade around moving and fanned-out features, then recover as vectors leave',async()=>{
+ let app;const seen=new Set();
+ const opacity=el=>Number(el.style.opacity||1);
+ app=await boot({reduced:false,frameMs:100,onFrame:()=>{
+  if(!app)return;
+  const input=app.document.querySelector('[data-input="project:0"]'),output=app.document.querySelector('[data-output="project"]'),sink=app.document.querySelector('[data-input="sink:0"]');
+  if(!input)return;
+  if(opacity(input)<.12){seen.add('input');if(opacity(sink)===1)seen.add('distant stays opaque');}
+  if(opacity(output)<.12)seen.add('output');
+  if(opacity(input)>.12&&opacity(input)<.95)seen.add('gradual fade');
+  const projecting=app.scenes.at(-1).children.find(o=>o.visible&&o.userData.processing==='project'&&o.userData.routing);
+  if(projecting&&projecting.children.some(o=>o.visible&&o.userData.featureValue!=null)&&opacity(input)<.12)seen.add('fanned features');
+  if(seen.has('input')&&opacity(input)===1&&app.document.querySelector('.packet:not([hidden])'))seen.add('departed');
+ }});
+ app.api.switchLevel('projection');app.api.setState(app.c.NeuralPrologue.solutions('projection'));app.api.getWorld().rebuild();await app.api.run();
+ for(const mark of ['input','output','distant stays opaque','gradual fade','fanned features','departed'])assert.ok(seen.has(mark),mark);
+ assert.ok([...app.document.querySelectorAll('.port')].every(el=>opacity(el)===1));
+ assert.equal(app.document.querySelector('#level-complete').open,true);
+});
+
+test('paused port fading follows the camera and stopping restores every badge',async()=>{
+ let app,phase=0,frames=0,before,stop;
+ app=await boot({reduced:false,frameMs:100,onFrame:()=>{
+  if(!app)return;const port=app.document.querySelector('[data-input="project:0"]');if(!port)return;
+  if(!phase&&Number(port.style.opacity||1)<.12){app.api.togglePause();before=port.style.opacity;phase=1;}
+  else if(phase===1&&++frames===3){
+   assert.equal(port.style.opacity,before,'pause freezes the vector and its fading');
+   const scene=app.document.querySelector('#scene'),event=(target,type,props)=>{const e=new app.window.Event(type,{bubbles:true,cancelable:true});Object.assign(e,props);target.dispatchEvent(e);};
+   const view=app.view();event(scene,'pointerdown',{clientX:600,clientY:300});event(app.document,'pointermove',{clientX:800,clientY:350});event(app.document,'pointerup',{});
+   assert.notDeepEqual(app.view().position,view.position);
+   assert.ok([...app.document.querySelectorAll('.port')].every(el=>Number.isFinite(Number(el.style.opacity||1))));
+   stop=app.api.run();phase=2;
+  }
+ }});
+ app.document.querySelector('#welcome').close();app.api.switchLevel('projection');app.api.setState(app.c.NeuralPrologue.solutions('projection'));app.api.getWorld().rebuild();await app.api.run();await stop;
+ assert.equal(phase,2);assert.ok([...app.document.querySelectorAll('.port')].every(el=>Number(el.style.opacity||1)===1));assert.ok(!app.document.querySelector('#level-complete').open);
+});
+
 test('camera drag and zoom remain live during a run without editing the circuit',async()=>{
  let app,checked=false;
  const event=(target,type,properties)=>{const e=new app.window.Event(type,{bubbles:true,cancelable:true});Object.assign(e,properties);target.dispatchEvent(e);};

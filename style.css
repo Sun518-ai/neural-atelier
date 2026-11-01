@@ -10,6 +10,17 @@ body{min-width:1080px}#game{max-width:1920px;padding:18px 24px}main{grid-templat
 .inspect-focus{font-size:11px;margin-top:10px;padding:5px 10px;min-height:31px;color:var(--teal)}.focus-bar{position:absolute;top:14px;left:50%;transform:translateX(-50%);display:flex;gap:12px;align-items:center;background:#fffdf6ed;border:1px solid #c8d7c7;padding:6px 8px 6px 13px;border-radius:11px;box-shadow:0 5px 15px #41695113;font-size:12px;z-index:5}.focus-bar[hidden]{display:none}.focus-bar strong{font-weight:500}.focus-bar button{font-size:11px;min-height:28px;padding:4px 8px;background:#e8f0e3;border:0}.module-focused .scene-legend{display:none}.module-focused .node-label{cursor:grab;font-size:13px}.module-focused .port{font-size:13px;min-width:33px;min-height:33px}.module-focused .node-value{font-size:13px;padding:4px 7px}.module-focused .arena{border-color:#b7cbb6}
 .module-focused .port:disabled{opacity:1;cursor:default}
 
+#level-complete{max-width:440px;padding:30px 32px 28px;text-align:center;overflow:visible;background:radial-gradient(ellipse at 50% 0,#e7efe2,transparent 65%),var(--paper)}
+#level-complete::backdrop{background:#14252133;backdrop-filter:blur(2px)}
+#complete-close{position:absolute;right:13px;top:10px;color:var(--muted)}
+.complete-seal{display:grid;place-items:center;width:54px;height:54px;margin:0 auto 15px;border:1px solid #98b6a3;border-radius:50%;background:#dce9d8;color:var(--teal);font:28px/1 sans-serif;box-shadow:0 0 0 6px #dce9d866}
+#complete-level{margin-top:8px;color:var(--muted);font-size:12px}
+#level-complete #complete-detail{margin-top:20px;color:var(--teal);font-size:14px}
+#level-complete #complete-keep{margin-top:6px;font-size:12px;line-height:1.7}
+.complete-actions{display:flex;gap:10px;margin-top:24px}.complete-actions button{flex:1;padding:10px 12px;font-size:13px}#complete-next{background:var(--teal);color:var(--paper);border-color:var(--teal)}
+#level-complete[open]{animation:complete-in .18s ease-out}@keyframes complete-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+@media(prefers-reduced-motion:reduce){#level-complete[open]{animation:none}}
+
 /* A collectible operator card. The illustration is the live 3D module. */
 .module-card{--card-accent:#75628e;width:960px;max-width:calc(100vw - 80px);max-height:calc(100vh - 40px);padding:24px 28px 18px;overflow:auto;border:2px solid #b7a477;border-radius:17px;background:radial-gradient(ellipse at 0 0,#fffdf2,transparent 65%),repeating-linear-gradient(98deg,#a9955e03 0px,#a9955e03 1px,transparent 1px,transparent 5px),#f6f0df;box-shadow:0 0 0 5px #324038,0 0 0 6px #9e9270,0 30px 100px #0c171b88;color:#34403a;isolation:isolate}
 .module-card[open]{animation:card-reveal .5s cubic-bezier(.17,.8,.25,1) both}.module-card::backdrop{background:#10201fd1;backdrop-filter:blur(7px)}
