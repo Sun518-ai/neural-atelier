@@ -6,14 +6,14 @@ async function boot({reduced=true,frameMs=1000,onFrame=()=>{},languages=['zh-CN'
  document.createElement=function(name){const el=native(name);if(name==='canvas')el.getContext=()=>({fillRect(){},fillText(){},measureText(t){return {width:String(t).length*60}}});return el;};
  for(const el of document.querySelectorAll('dialog')){el.showModal=function(){this.open=true};el.close=function(){this.open=false};}
  for(const el of document.querySelectorAll('*')){Object.defineProperty(el,'clientWidth',{get:()=>el.id==='scene'?1400:100});Object.defineProperty(el,'clientHeight',{get:()=>el.id==='scene'?760:60});el.focus=()=>{};el.scrollIntoView=()=>{};}
- let view;const scenes=[];class Renderer{constructor(){this.domElement=native('canvas');this.shadowMap={};this.capabilities={getMaxAnisotropy:()=>8};}setPixelRatio(){}setClearColor(){}setSize(){}render(scene,camera){view={position:camera.position.toArray(),width:camera.right-camera.left};scenes.push(scene);scene.updateMatrixWorld();camera.updateMatrixWorld();scene.traverse(o=>{if(o.isMesh)assert.ok(o.matrixWorld.elements.every(Number.isFinite),'nonfinite transform '+o.type);});}}
+ let view,renderedCamera;const scenes=[];class Renderer{constructor(){this.domElement=native('canvas');this.shadowMap={};this.capabilities={getMaxAnisotropy:()=>8};}setPixelRatio(){}setClearColor(){}setSize(){}render(scene,camera){renderedCamera=camera;view={position:camera.position.toArray(),width:camera.right-camera.left};scenes.push(scene);scene.updateMatrixWorld();camera.updateMatrixWorld();scene.traverse(o=>{if(o.isMesh)assert.ok(o.matrixWorld.elements.every(Number.isFinite),'nonfinite transform '+o.type);});}}
  const storage=new Map();let now=0;const c={document,console,navigator:{languages},T:{...Three,WebGLRenderer:Renderer},devicePixelRatio:2,ResizeObserver:class{observe(){}},requestAnimationFrame:cb=>setImmediate(()=>{now+=frameMs;onFrame({now,document,window});cb(now);}),cancelAnimationFrame:clearImmediate,performance:{now:()=>now},matchMedia:()=>({matches:reduced}),setTimeout,localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)}};c.window=c;vm.createContext(c);
  for(const f of ['locales/en.js','i18n.js','music.js','shell.js','model.js','campaign.js','engine-model.js'])vm.runInContext(fs.readFileSync(__dirname+'/'+f,'utf8'),c,{filename:f});
  for(const f of ['module-cards.js','level-progress.js','scene-art.js'])vm.runInContext(fs.readFileSync(__dirname+'/'+f,'utf8').replaceAll('export ',''),c,{filename:f});
  let src=fs.readFileSync(__dirname+'/game.js','utf8').replace(/^import .*\n/gm,'').replace("const T=await import('./vendor/three.module.js');",'const T=window.T;').replace(/const \{createSceneArt\}=await import\('\.\/scene-art\.js\?v=[^']+'\);/,'');
  src+='\nwindow.testAPI={switchLevel,run,togglePause,refresh,select,assignDevice,chooseOutput,chooseInput,chooseModule,placeModule,getState:()=>state,setState:s=>state=s,getWorld:()=>world,getFault:()=>fault};';
  await vm.runInContext('(async()=>{'+src+'})()',c);
- assert.ok(c.testAPI.getWorld(),'3D boot failed');return {c,document,window,api:c.testAPI,scenes,time:()=>now,view:()=>view};
+ assert.ok(c.testAPI.getWorld(),'3D boot failed');return {c,document,window,api:c.testAPI,scenes,time:()=>now,view:()=>view,camera:()=>renderedCamera};
 }
 test('moving trays preserve feature columns and sequence rows through projection',async()=>{
  let app;const checked=new Set();
@@ -510,4 +510,53 @@ test('all projection outputs get equal travel time and only the speed slider cha
   assert.equal(app.document.querySelectorAll('#test-results .pass').length,3);runIndex++;
  }
  for(let j=0;j<4;j++){const width=i=>Math.max(...runs[i].get(j))-Math.min(...runs[i].get(j));assert.ok(Math.abs(width(0)-2*width(1))<=40,'the speed slider scales every output equally');}
+});
+
+test('transport takes two-thirds of its former time while matrix processing keeps its slow duration',async()=>{
+ let app;const spans=new Map();
+ app=await boot({reduced:false,frameMs:20,onFrame:({document,now})=>{
+  if(!app)return;
+  for(const el of document.querySelectorAll('.packet:not([hidden])')){
+   const key=[el.dataset.row,el.dataset.motion,el.dataset.from].join(':');
+   if(!spans.has(key))spans.set(key,{start:now,end:now});spans.get(key).end=now;
+  }
+ }});
+ app.api.switchLevel('projection');app.api.setState(app.c.NeuralPrologue.solutions('projection'));app.api.getWorld().rebuild();await app.api.run();
+ assert.equal(app.document.querySelector('#playback-speed').value,'0.25');
+ for(const row of ['0','1','2']){
+  for(const from of ['R','project']){const span=spans.get(row+':wire:'+from);assert.ok(span);assert.ok(Math.abs(span.end-span.start-650/.25/1.5)<40,'travel is faster for every input');}
+  const process=spans.get(row+':process:project');assert.ok(Math.abs(process.end-process.start-2.2*650/.25)<40,'computation keeps its former duration');
+ }
+});
+
+test('one whole weight column, its output sphere and its attached formula highlight together',async()=>{
+ let app,pausedFrames=0,snapshot=null;const columns=new Set(),directions=new Set();
+ const allUnits=()=>app.scenes.at(-1).children.flatMap(o=>o.children).filter(o=>o.userData.node==='project');
+ app=await boot({reduced:false,frameMs:40,onFrame:({document})=>{
+  if(!app)return;const calc=document.querySelector('.projection-calculation[data-node="project"]');if(!calc||calc.hidden||Number(calc.style.getPropertyValue('--calculation-focus'))<.9)return;
+  const unit=allUnits()[0],col=Number(calc.dataset.column),cues=unit.children.filter(o=>o.userData.projectionColumn!=null),spheres=unit.children.filter(o=>o.geometry?.type==='SphereGeometry'&&o.position.x===.7);
+  columns.add(col);assert.equal(unit.userData.activeColumn,col);assert.deepEqual(cues.filter(o=>o.visible).map(o=>o.userData.projectionColumn),[col]);
+  const active=cues[col],faces=unit.children.filter(o=>o.userData.detailText&&Math.abs(o.position.x-active.position.x)<1e-9);
+  assert.equal(faces.length,2,'both weights of the column participate, including zeros');
+  assert.ok(faces.every(o=>o.material.color.getHex()!==0xffffff));
+  assert.ok(unit.children.filter(o=>o.userData.detailText&&!faces.includes(o)).every(o=>o.material.color.getHex()===0xffffff));
+  assert.ok(spheres[col].material.emissiveIntensity>.8);assert.ok(spheres.filter((_,i)=>i!==col).every(o=>o.material.emissiveIntensity<.1),'only the sphere being computed glows');
+  assert.equal(calc.style.getPropertyValue('--calculation-color'),'#'+active.children[1].material.color.getHexString());
+  const screen=spheres[col].getWorldPosition(new app.c.T.Vector3()).project(app.camera()),x=(screen.x+1)*700,y=(1-screen.y)*380,scale=Number(calc.style.getPropertyValue('--calculation-scale'));
+  const radius=.115*spheres[col].scale.x*1400/app.view().width,side=calc.dataset.side;
+  directions.add(side);assert.ok(Math.abs(parseFloat(calc.style.top)-y)<1e-7,'formula stays level with its sphere');
+  assert.ok(Math.abs(Math.abs(parseFloat(calc.style.left)-x)-radius-9*scale)<1e-7,'the pointer reaches the sphere edge');
+  if(col===1&&pausedFrames<3){
+   if(!pausedFrames){app.api.togglePause();snapshot={col,opacity:active.children[0].material.opacity,scale};}
+   assert.equal(col,snapshot.col);assert.equal(active.children[0].material.opacity,snapshot.opacity,'pause also freezes the highlight');
+   const e=new app.window.Event('wheel',{bubbles:true,cancelable:true});e.deltaY=pausedFrames===0?-150:pausedFrames===1?300:0;document.querySelector('#scene').dispatchEvent(e);
+   if(!pausedFrames)assert.ok(Number(calc.style.getPropertyValue('--calculation-scale'))>snapshot.scale,'formula grows with the board');
+   if(pausedFrames===1)assert.ok(Number(calc.style.getPropertyValue('--calculation-scale'))<snapshot.scale,'formula shrinks with the board');
+   if(++pausedFrames===3)app.api.togglePause();
+  }
+ }});
+ app.api.switchLevel('projection');app.api.setState(app.c.NeuralPrologue.solutions('projection'));app.api.getWorld().rebuild();await app.api.run();
+ assert.deepEqual([...columns].sort(),[0,1,2,3]);assert.equal(pausedFrames,3);assert.ok(directions.has('right'));
+ for(const unit of allUnits()){assert.equal(unit.userData.activeColumn,null);assert.ok(unit.children.filter(o=>o.userData.projectionColumn!=null).every(o=>!o.visible));}
+ assert.equal(app.document.querySelectorAll('.projection-calculation,.projection-result').length,0);
 });

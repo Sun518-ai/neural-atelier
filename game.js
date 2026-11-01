@@ -1,5 +1,5 @@
-import {cardFor,exampleFor} from './module-cards.js?v=output-registers-1';
-import {createProgress} from './level-progress.js?v=output-registers-1';
+import {cardFor,exampleFor} from './module-cards.js?v=projection-focus-1';
+import {createProgress} from './level-progress.js?v=projection-focus-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -195,7 +195,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=output-registers-1');
+ const {createSceneArt}=await import('./scene-art.js?v=projection-focus-1');
  const art=createSceneArt(T,scene,colors,{anisotropy:renderer.capabilities.getMaxAnisotropy()});art.surroundings(samples(),stage());
  const assembly=new T.Group(),wires=new T.Group();scene.add(assembly,wires);const neuronGeo=new T.SphereGeometry(.115,16,12);let elements=[],curves=[],packets=[],drag=null,preview=null,yaw=.05,pitch=.8,zoom=stage().zoom,lastDepth=-1;
  const cameraTarget=new T.Vector3();let focusId=null,shelfFocus=null,shelfModel=null,overview=null,cameraFrame=0,transitioning=false,lastTap=null;
@@ -317,11 +317,15 @@ try{
   packets.forEach(p=>{
    const [x,y]=project(p.p.clone().add(new T.Vector3(0,.7,0)));p.el.style.left=x+'px';p.el.style.top=y+'px';
    if(p.calculation){
-    const scale=Math.min(2.2,w/width/60);
+    const scale=w/width/60;
     p.equationVisible=art.detailsVisible();
     p.calculation.dataset.detail=p.equationVisible?'full':'abstract';p.calculation.style.setProperty('--calculation-scale',String(scale));
-    const [cx,cy]=project(art.projectionOutlet(p.node.id,p.column)),cw=(p.equationVisible?(p.calculation.offsetWidth||p.equation.textContent.length*7+14):24)*scale,offset=28*scale;
-    p.calculation.style.left=Math.max(12,cx+offset+cw<w-12?cx+offset:cx-offset-cw)+'px';p.calculation.style.top=Math.max(20,Math.min(h-20,cy))+'px';
+    const [cx,cy]=project(art.projectionOutlet(p.node.id,p.column)),cw=(p.equationVisible?(p.calculation.offsetWidth||p.equation.textContent.length*7+14):24)*scale;
+    const radius=art.projectionRadius(p.node.id,p.column)*w/width,offset=radius+9*scale,side=cx+offset+cw<w-12?'right':'left';
+    p.calculation.dataset.side=side;
+    p.calculation.style.left=(side==='right'?cx+offset:cx-offset)+'px';p.calculation.style.top=cy+'px';
+    p.calculation.style.setProperty('--calculation-color',colorHex(art.projectionColor));
+    p.calculation.style.setProperty('--calculation-focus',String(p.focus||0));
     for(const {el,bar}of p.outputLabels){
      const [rx,ry]=project(bar.getWorldPosition(new T.Vector3())),[sx,sy]=project(art.projectionOutlet(p.node.id,bar.userData.feature)),g=p.outputMesh.userData.gather;
      el.style.left=((sx+28*scale)*(1-g)+(rx-7*scale)*g)+'px';el.style.top=(sy*(1-g)+(ry-12*scale)*g)+'px';
@@ -385,11 +389,13 @@ try{
   let previous=animationTime(),elapsed=0;
   const seq=!!stage().sequence,readyNodes=state.nodes.filter(n=>ev.values[n.id]);
   const lastWave=Math.max(0,...Object.values(ev.depths)),starts=[0],ends=[0];
+  // Travel is 1.5× faster than before; every operator keeps its original clock.
+  const travelDuration=2/3;
   for(let depth=1;depth<=lastWave;depth++){
    const durations=readyNodes.filter(n=>ev.depths[n.id]===depth).map(n=>!seq&&definition(n.id).type==='linear'?art.projectionFrame(0,ev.values[n.id].length).duration:1);
-   starts[depth]=ends[depth-1]+1;ends[depth]=starts[depth]+Math.max(1,...durations);
+   starts[depth]=ends[depth-1]+travelDuration;ends[depth]=starts[depth]+Math.max(1,...durations);
   }
-  const max=ends[lastWave]+1;
+  const max=ends[lastWave]+travelDuration;
   const clamp=x=>Math.max(0,Math.min(1,x)),ramp=(x,a,b)=>{const v=clamp((x-a)/(b-a));return v*v*(3-2*v);};
   function fadeMaterials(mesh){const materials=[];mesh.traverse(o=>{if(o.material){o.material.transparent=true;o.material.depthWrite=false;o.castShadow=false;materials.push(o.material);}});return materials;}
   function movingPacket(values,from,to,motion){
@@ -409,7 +415,7 @@ try{
    const p=movingPacket(ev.values[edge.from],edge.from,edge.to,'wire');
    const perRow=!seq&&sample<3,departure=perRow&&['R','Z'].includes(edge.from)?new T.LineCurve3(rowEndpoint('source'),edge.curve.getPoint(0)):null,arrival=perRow&&edge.to==='sink'?new T.LineCurve3(edge.curve.getPoint(1),rowEndpoint('sink')):null;
    const start=ends[ev.depths[edge.from]||0],processStart=processPaths.has(edge.to)?starts[ev.depths[edge.to]]:null;
-   Object.assign(p,{edge,departure,arrival,start,processStart,end:processStart==null?start+1:processStart+(edge.index>0?.25:0)});
+   Object.assign(p,{edge,departure,arrival,start,processStart,end:processStart==null?start+travelDuration:processStart+(edge.index>0?.25:0)});
    p.p=departure?.getPoint(0)||edge.curve.getPoint(0);p.mesh.position.copy(p.p);packets.push(p);
   });
   readyNodes.forEach(n=>{
@@ -452,7 +458,7 @@ try{
    if(level!==lastDepth){lastDepth=level;labels();inspect();}
    art.pulseSource(reduced?1:t);
    packets.forEach(p=>{
-    const tt=t-p.start,timing=p.detailed?art.projectionFrame(tt,p.output.length):null,progress=timing?timing.phase:clamp(tt);
+    const tt=t-p.start,timing=p.detailed?art.projectionFrame(tt,p.output.length):null,progress=timing?timing.phase:clamp(tt/(p.motion==='wire'?travelDuration:1));
     if(p.motion==='process'){
      p.progress=tt;
      const visible=tt>=0&&t<p.end&&(!focusId||focusId===p.node.id),blend=ramp(progress,p.detailed?.76:.55,p.detailed?.9:.83);
@@ -467,6 +473,7 @@ try{
       p.outputMesh.visible=visible&&tt>=.67;
       p.portFade=visible?ramp(progress,.2,.38):0;
       const local=tt-timing.offset;
+      p.focus=visible?timing.focus:0;
       p.calculation.hidden=!visible||local<.36||local>=.76;p.calculation.style.opacity=String(ramp(local,.36,.4)*(1-ramp(local,.71,.76)));p.sum.style.opacity=String(ramp(local,.61,.67));
       p.outputLabels.forEach(({el},j)=>{
        const alpha=ramp(tt,.76+j*timing.step,.8+j*timing.step)*(1-ramp(progress,.89,.97));

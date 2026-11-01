@@ -4,6 +4,7 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
  const units=new Map(),sharedSphere=new T.SphereGeometry(.115,18,14),rows=[],tokens=[];
  const rowColor=i=>[0x397aa2,0x8862aa,0x288778][i]??0x557e6b;
  const featureColor=i=>[0x397aa2,0x8862aa,0xb68036,0x288778][i%4];
+ const projectionColor=0xb77724;
  const rowZ=i=>-1.05+i*.96;
  sharedSphere.userData.shared=true;
  const mat=(color,extra={})=>new T.MeshStandardMaterial({color,roughness:.5,metalness:.12,...extra});
@@ -101,10 +102,18 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   slab(g,2.05,2.4,.26,0,.07,0,color);slab(g,1.91,2.26,.08,0,.36,0,0xf4f5e9);
   const glow=box(g,1.6,.035,.055,0,.41,1.13,color,{emissive:color,emissiveIntensity:.18});
   const border=new T.Group();g.add(border);[[[-.96,.49,-1.12],[-.96,.49,-.78]],[[-.96,.49,-1.12],[-.62,.49,-1.12]],[[.96,.49,1.12],[.96,.49,.78]],[[.96,.49,1.12],[.62,.49,1.12]]].forEach(points=>tube(border,points,color,.018));
-  let outputs=[],inputs=[],connections=[],weightCells=[],activationChannels=[];
+  let outputs=[],inputs=[],connections=[],weightCells=[],activationChannels=[],columnCues=[];
   if(d.type==='linear'){
    const w=weights[n.kind||n.id],a=w.length,b=w[0].length,cw=1.5/b,ch=1.5/a;
    for(let i=0;i<a;i++)for(let j=0;j<b;j++){const x=(j-(b-1)/2)*cw,z=(i-(a-1)/2)*ch,c=w[i][j]<0?0xc89d70:w[i][j]===0?0xd7dfd4:color;const tile=box(g,cw*.84,.055+Math.abs(w[i][j])*.065,ch*.82,x,.49,z,c);const face=textTile(g,String(w[i][j]),cw*.8,ch*.76,x,.53+Math.abs(w[i][j])*.065,z,{bg:w[i][j]<0?'#d7b68b':w[i][j]===0?'#dfe5d9':'#d2dfcc',color:'#456052',size:63});weightCells.push({tile,face:face.mesh,i,j,weight:w[i][j]});}
+   // One outline encloses the whole weight column, including zero entries.
+   for(let j=0;j<b;j++){
+    const cue=new T.Group(),top=.55+Math.max(...w.map(row=>Math.abs(row[j])))*.065;
+    cue.position.set((j-(b-1)/2)*cw,top,0);cue.userData.projectionColumn=j;cue.visible=false;g.add(cue);
+    const fill=new T.Mesh(new T.PlaneGeometry(cw*.96,1.57),new T.MeshBasicMaterial({color:projectionColor,transparent:true,opacity:.14,depthWrite:false,toneMapped:false}));fill.rotation.x=-Math.PI/2;cue.add(fill);
+    const outline=new T.LineLoop(new T.BufferGeometry().setFromPoints([new T.Vector3(-cw*.48,.003,-.785),new T.Vector3(cw*.48,.003,-.785),new T.Vector3(cw*.48,.003,.785),new T.Vector3(-cw*.48,.003,.785)]),new T.LineBasicMaterial({color:projectionColor,transparent:true,opacity:1,depthWrite:false,toneMapped:false}));cue.add(outline);
+    columnCues.push({cue,fill,outline});
+   }
    for(let i=0;i<a;i++)inputs.push(neuron(g,-.7,.98,(i-(a-1)/2)*ch,0x6c9eb1));
    for(let j=0;j<b;j++)outputs.push(neuron(g,.7,1.28,(j-(b-1)/2)*.4,color));
    for(let i=0;i<a;i++)for(let j=0;j<b;j++){
@@ -142,7 +151,7 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   }
   d.ins.forEach((dim,i)=>{const z=d.ins.length===2?(i?.55:-.55):0;box(g,.21,.17,.27,-1.08,.58,z,0x6e887c);for(let j=0;j<Math.min(dim,4);j++)box(g,.12,.02,.035,-1.08,.68,z+(j-(Math.min(dim,4)-1)/2)*.055,0xc6d7c3);});
   const sock=new T.Mesh(new T.CylinderGeometry(.15,.15,.18,20),mat(color));sock.rotation.z=Math.PI/2;sock.position.set(1.05,.68,0);g.add(sock);
-  if(register)units.set(n.id,{g,glow,outputs,inputs,connections,weightCells,activationChannels,links:n.links,color});return g;
+  if(register)units.set(n.id,{g,glow,outputs,inputs,connections,weightCells,activationChannels,columnCues,links:n.links,color});return g;
  }
  function sync(values,depths,depth,selected,activeSample,results,busy,layout={},output=null){
   if(!busy)clearProcessing();
@@ -176,12 +185,16 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   const step=.4,extra=Math.max(0,columns-1)*step,duration=1+extra;
   const phase=time<.4?time:time<.67+extra?.4+(time-.4)*.27/(.27+extra):time-extra;
   const column=Math.max(0,Math.min(columns-1,Math.floor((time-.4)/step)));
-  return {duration,phase:Math.max(0,Math.min(1,phase)),column,offset:column*step,step};
+  const offset=column*step,local=time-offset,focus=local>=.4&&local<.76?ramp(local,.4,.43)*(1-ramp(local,.71,.76)):0;
+  return {duration,phase:Math.max(0,Math.min(1,phase)),column,offset,step,focus};
  }
  function processing(id,progress,input,output,color,{sequence=false,detailed=false}={}){
   const u=units.get(id);if(!u)return;
   const timing=detailed?projectionFrame(progress,output.length):null,active=progress>=0&&progress<(timing?.duration||1),p=timing?timing.phase:Math.max(0,Math.min(1,progress));u.g.userData.processing=active;
   const entering=ramp(p,0,.23),gathering=ramp(p,.6,.9),pulse=active?Math.sin(Math.PI*p):0;
+  const focus=active&&detailed?timing.focus:0;
+  u.g.userData.activeColumn=focus>0?timing.column:null;
+  u.columnCues.forEach(({cue,fill,outline},j)=>{const strength=j===timing?.column?focus:0;cue.visible=strength>0;fill.material.opacity=.19*strength;outline.material.opacity=strength;});
   u.glow.material.emissiveIntensity=.12+1.5*pulse;
   u.inputs.forEach((o,i)=>{const v=sequence?1:input[i],size=Math.abs(v)<1e-9?.55:1+Math.min(2,Math.abs(v))*.3;o.scale.setScalar(1+(size-1)*entering);if(u.connections.length){o.material.color.set(detailed&&active?featureColor(i):0x6c9eb1);o.material.emissive.set(detailed?featureColor(i):0x6c9eb1);}o.material.emissiveIntensity=.08+(active&&Math.abs(v)>1e-9?entering*(1-ramp(p,.65,1)):0);});
   for(const {mesh,spark,i,j,weight} of u.connections){
@@ -193,7 +206,7 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
    spark.userData.value=contribution;
    if(spark.visible){const tone=detailed?featureColor(i):contribution<0?0xd6a578:color;spark.material.color.set(tone);spark.material.emissive.set(tone);spark.material.opacity=ramp(clock,start,start+.025)*(1-ramp(clock,end-.025,end));spark.scale.setScalar(.48+Math.min(2,Math.abs(contribution))*.15);spark.position.copy(mesh.geometry.parameters.path.getPoint(ramp(clock,start,end)));}
   }
-  for(const {tile,face,i,j,weight} of u.weightCells){const contribution=sequence?weight:input[i]*weight,lit=active&&(detailed||Math.abs(contribution)>1e-9),highlight=detailed?ramp(progress,j===0?.16:.26+j*timing.step,.38+j*timing.step)*(1-ramp(progress,.69+j*timing.step,.79+j*timing.step)):pulse,tone=detailed?featureColor(i):color;tile.material.emissive.set(lit?tone:0);tile.material.emissiveIntensity=lit?highlight*(detailed?1.4:.5):0;face.material.color.set(0xffffff);if(lit)face.material.color.lerp(new T.Color(tone),highlight*.32);}
+  for(const {tile,face,i,j,weight} of u.weightCells){const contribution=sequence?weight:input[i]*weight,lit=active&&(detailed||Math.abs(contribution)>1e-9),highlight=detailed?(j===timing.column?focus:0):pulse,tone=detailed?projectionColor:color;tile.material.emissive.set(lit?tone:0);tile.material.emissiveIntensity=lit?highlight*.35:0;face.material.color.set(0xffffff);if(lit)face.material.color.lerp(new T.Color(tone),highlight*.4);}
   for(const {channel,gate,spark,i} of u.activationChannels){
    const from=input[i],to=output[i],sigmoid=1/(1+Math.exp(-from)),travel=ramp(p,.16,.84),transform=ramp(p,.35,.7),value=from+(to-from)*transform,tone=from<0?0xd6a578:color;
    gate.scale.setScalar(1-(1-(.22+.78*sigmoid))*pulse);gate.material.emissive.set(tone);gate.material.emissiveIntensity=active?pulse*.85:0;
@@ -202,9 +215,9 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
    Object.assign(spark.userData,{inputValue:from,outputValue:to,value,sigmoid,phase:transform});
    if(spark.visible){spark.position.copy(channel.geometry.parameters.path.getPoint(travel));spark.scale.setScalar(.3+Math.min(3,Math.abs(value))*.5);spark.material.color.set(tone);spark.material.emissive.set(tone);spark.material.opacity=ramp(p,.16,.23)*(1-ramp(p,.78,.86));}
   }
-  u.outputs.forEach((o,i)=>{const v=sequence?1:output[i],size=Number.isFinite(v)?Math.abs(v)<1e-9?.55:1+Math.min(2,Math.abs(v))*.18:1,gather=detailed?ramp(progress,.59+i*timing.step,.68+i*timing.step):gathering;o.scale.setScalar(1+(size-1)*gather);o.material.color.set(v<0?0xc79868:u.color);o.material.emissiveIntensity=.08+(active?1.3*gather*(1-ramp(p,.9,1)):progress>=1?.35:0);});
+  u.outputs.forEach((o,i)=>{const v=sequence?1:output[i],size=Number.isFinite(v)?Math.abs(v)<1e-9?.55:1+Math.min(2,Math.abs(v))*.18:1,gather=detailed?ramp(progress,.59+i*timing.step,.68+i*timing.step):gathering,highlight=detailed&&i===timing.column?focus:0;o.scale.setScalar(1+(size-1)*gather);o.material.color.set(v<0?0xc79868:u.color);if(highlight)o.material.color.lerp(new T.Color(projectionColor),highlight*.7);o.material.emissive.set(highlight?projectionColor:u.color);o.material.emissiveIntensity=detailed?.08+highlight*.85:.08+(active?1.3*gather*(1-ramp(p,.9,1)):progress>=1?.35:0);});
  }
- function clearProcessing(){for(const u of units.values()){u.g.userData.processing=false;if(u.connections.length)u.inputs.forEach(o=>{o.material.color.set(0x6c9eb1);o.material.emissive.set(0x6c9eb1);o.material.emissiveIntensity=.08;});u.connections.forEach(c=>c.spark.visible=false);u.activationChannels.forEach(({spark,gate,channel})=>{spark.visible=false;gate.scale.setScalar(1);gate.material.emissiveIntensity=0;channel.material.emissiveIntensity=0;});u.weightCells.forEach(({tile,face})=>{tile.material.emissiveIntensity=0;face.material.color.set(0xffffff);});}}
+ function clearProcessing(){for(const u of units.values()){u.g.userData.processing=false;u.g.userData.activeColumn=null;u.columnCues.forEach(({cue})=>cue.visible=false);u.outputs.forEach(o=>{o.material.emissive.set(u.color);o.material.emissiveIntensity=.08;});if(u.connections.length)u.inputs.forEach(o=>{o.material.color.set(0x6c9eb1);o.material.emissive.set(0x6c9eb1);o.material.emissiveIntensity=.08;});u.connections.forEach(c=>c.spark.visible=false);u.activationChannels.forEach(({spark,gate,channel})=>{spark.visible=false;gate.scale.setScalar(1);gate.material.emissiveIntensity=0;channel.material.emissiveIntensity=0;});u.weightCells.forEach(({tile,face})=>{tile.material.emissiveIntensity=0;face.material.color.set(0xffffff);});}}
  // A single colour pulse identifies the departing row without moving its tray.
  function pulseSource(progress=1){
   const pulse=Math.pow(1-Math.min(1,Math.max(0,progress)/.65),2);
@@ -247,6 +260,7 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   }
  }
  function projectionOutlet(id,column){return units.get(id).outputs[column].getWorldPosition(new T.Vector3());}
+ function projectionRadius(id,column){const sphere=units.get(id).outputs[column];return sphere.geometry.parameters.radius*sphere.getWorldScale(new T.Vector3()).x;}
  function prepareProjectionOutput(mesh){
   mesh.userData.outputHomes=mesh.children.map(o=>o.position.clone());mesh.userData.gather=0;mesh.userData.routing=true;
  }
@@ -264,5 +278,5 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   });
  }
  function resetUnits(){units.clear();}
- return {surroundings,module,sync,updateDetail,detailsVisible:()=>detailModes[detailScope],pulseSource,projectionFrame,processing,clearProcessing,packet,prepareProjectionPacket,routeProjectionPacket,projectionOutlet,prepareProjectionOutput,routeProjectionOutput,featureColor,rowColor,rowZ,resetUnits,focus(active){context.visible=!active;floor.visible=!active;detailScope=active?'card':'board';if(active)detailModes.card=true;}};
+ return {surroundings,module,sync,updateDetail,detailsVisible:()=>detailModes[detailScope],pulseSource,projectionFrame,projectionColor,processing,clearProcessing,packet,prepareProjectionPacket,routeProjectionPacket,projectionOutlet,projectionRadius,prepareProjectionOutput,routeProjectionOutput,featureColor,rowColor,rowZ,resetUnits,focus(active){context.visible=!active;floor.visible=!active;detailScope=active?'card':'board';if(active)detailModes.card=true;}};
 }
