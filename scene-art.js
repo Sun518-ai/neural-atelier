@@ -68,14 +68,14 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   context.userData={samples,layout};
 
  }
- function module(parent,n,d,weights){
-  const g=new T.Group();g.position.set(n.x,0,n.z);g.userData.node=n.id;parent.add(g);const color=colors[n.id];
+ function module(parent,n,d,weights,{register=true}={}){
+  const g=new T.Group();g.position.set(n.x,0,n.z);g.userData.node=n.id;parent.add(g);const color=colors[n.kind||n.id];
   slab(g,2.05,2.4,.26,0,.07,0,color);slab(g,1.91,2.26,.08,0,.36,0,0xf4f5e9);
   const glow=box(g,1.6,.035,.055,0,.41,1.13,color,{emissive:color,emissiveIntensity:.18});
   const border=new T.Group();g.add(border);[[[-.96,.49,-1.12],[-.96,.49,-.78]],[[-.96,.49,-1.12],[-.62,.49,-1.12]],[[.96,.49,1.12],[.96,.49,.78]],[[.96,.49,1.12],[.62,.49,1.12]]].forEach(points=>tube(border,points,color,.018));
   let outputs=[],inputs=[],connections=[],weightCells=[],activationChannels=[];
   if(d.type==='linear'){
-   const w=weights[n.id],a=w.length,b=w[0].length,cw=1.5/b,ch=1.5/a;
+   const w=weights[n.kind||n.id],a=w.length,b=w[0].length,cw=1.5/b,ch=1.5/a;
    for(let i=0;i<a;i++)for(let j=0;j<b;j++){const x=(j-(b-1)/2)*cw,z=(i-(a-1)/2)*ch,c=w[i][j]<0?0xc89d70:w[i][j]===0?0xd7dfd4:color;const tile=box(g,cw*.84,.055+Math.abs(w[i][j])*.065,ch*.82,x,.49,z,c);const face=textTile(g,String(w[i][j]),cw*.8,ch*.76,x,.53+Math.abs(w[i][j])*.065,z,{bg:w[i][j]<0?'#d7b68b':w[i][j]===0?'#dfe5d9':'#d2dfcc',color:'#456052',size:63});weightCells.push({tile,face:face.mesh,i,j,weight:w[i][j]});}
    for(let i=0;i<a;i++)inputs.push(neuron(g,-.7,.98,(i-(a-1)/2)*ch,0x6c9eb1));
    for(let j=0;j<b;j++)outputs.push(neuron(g,.7,1.28,(j-(b-1)/2)*.4,color));
@@ -114,7 +114,7 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   }
   d.ins.forEach((dim,i)=>{const z=d.ins.length===2?(i?.55:-.55):0;box(g,.21,.17,.27,-1.08,.58,z,0x6e887c);for(let j=0;j<Math.min(dim,4);j++)box(g,.12,.02,.035,-1.08,.68,z+(j-(Math.min(dim,4)-1)/2)*.055,0xc6d7c3);});
   const sock=new T.Mesh(new T.CylinderGeometry(.15,.15,.18,20),mat(color));sock.rotation.z=Math.PI/2;sock.position.set(1.05,.68,0);g.add(sock);
-  units.set(n.id,{g,glow,outputs,inputs,connections,weightCells,activationChannels,links:n.links,color});return g;
+  if(register)units.set(n.id,{g,glow,outputs,inputs,connections,weightCells,activationChannels,links:n.links,color});return g;
  }
  function sync(values,depths,depth,selected,activeSample,results,busy,layout={},output=null){
   if(!busy)clearProcessing();

@@ -85,7 +85,11 @@ engine('parallel',7,I18n.t("GPU 与 ANE 一起工作"),I18n.t("首词 ≤ 78 ms�
 engine('session',8,I18n.t("下一轮不用从头读"),I18n.t("第二轮首词 ≤ 60 ms，内存 ≤ 24 GB"),I18n.t("两轮提示共用一段前缀。复用匹配的前缀状态，只计算新增部分；更长上下文会增加 KV 内存。"),{controls:['prefix','context','precision'],settings:{batch:16,layout:'channels',precision:8,cache:true,fusion:true,resident:true,split:40,prefix:false,context:2048},limits:{second:60,memory:24,error:.30}});
 engine('capstone',9,I18n.t("让引擎真的跑得动"),I18n.t("通过两种负载的验收"),I18n.t("长提示和多轮长上下文都要通过。检查正确性、内存、首词与解码速度；完成后可继续试更快的方案。"),{controls:['layout','batch','cache','precision','fusion','resident','split','prefix','context'],settings:{batch:1,layout:'sequence',precision:16,cache:false,fusion:false,resident:false,split:0,prefix:false,context:2048},limits:{ttft:110,tps:45,memory:24,error:.30,second:65,aneMin:15,scratch:650},workloads:[{prompt:128,context:2048},{prompt:256,context:4096}],devices:Object.fromEntries(engineNodes.map(k=>[k,'cpu']))});
 Object.assign(M.levels,extra);
-for(const id of ['ffn','attention','block'])M.levels[id].buildable=true;
+for(const [id,maxModules]of [['ffn',8],['attention',12],['block',7]]){
+ const level=M.levels[id];level.buildable=true;level.maxModules=maxModules;
+ level.inventory=Object.fromEntries(level.nodes.map(kind=>[kind,2]));
+}
+M.levels.ffn.inventory.project=2;
 M.routes={main:{name:I18n.t("主线 · Transformer"),description:I18n.t("从向量与矩阵开始，亲手搭出 Attention、FFN 和逐词生成。"),ids:Object.keys(M.levels).filter(id=>!M.levels[id].engine)},engine:{name:I18n.t("番外 · 端侧推理"),description:I18n.t("以 Qwen 27B、Kapitsa 与 Apple ANE 为背景的独立挑战，使用教学成本模型。"),ids:Object.keys(M.levels).filter(id=>M.levels[id].engine)}};
 for(const [track,route]of Object.entries(M.routes))route.ids.forEach((id,i)=>{M.levels[id].track=track;M.levels[id].next=route.ids[i+1]||null;});
 M.samplesFor=id=>M.levels[id]?.sequence?(M.levels[id].sourceDim===3?idSamples:sequenceSamples):M.samples;
@@ -125,7 +129,7 @@ M.attentionWeights=ev=>ev.values.softmax||null;
 M.extraCard=(id)=>{const d=M.definitions[id];if(!d)return null;return {number:'',seal:d.name[0],english:id.toUpperCase(),family:I18n.t("计算组件"),color:'#477f78',ability:d.name,formula:{q:'Q = XWq',k:'K = XWk',v:'V = XWv',score:'S = QKᵀ / √2',mask:'S[i,j] = −∞  (j > i)',softmax:'Aᵢ = exp(Sᵢ) / Σ exp(Sⱼ)',ropeq:'Q[p] ← R(p) Q[p]',ropek:'K[p] ← R(p) K[p]',aggregate:'O = AV',norm:'x / √(mean(x²) + ε)',output:'O ← OWo',lmhead:I18n.t("L = XW词表 + b"),pick:'token = argmax(L)',invert:'Y = −X',residual1:'R = X + Attention(Norm(X))',residual2:'Y = R + FFN(R)',embedding:'X[p] = E[token_id[p]]'}[id]||I18n.t("输入 → ")+d.name+I18n.t(" → 输出"),meaning:d.hint,purpose:I18n.t("这里展示的是教学缩尺计算。接线决定数据来源，运行轨迹由实际计算得到。"),weight:M.weights[id]?M.weights[id].length+' × '+M.weights[id][0].length:I18n.t("无 / 已封装"),trait:extra[id]?.engine?I18n.t("调度任务"):I18n.t("数值计算"),stage:0};};
 M.extraExample=(id,levelId)=>{if(!M.operations[id])return null;const s=M.solutions(levelId),ev=M.evaluate(s,M.samplesFor(levelId)[0].v),n=s.nodes.find(n=>n.id===id);if(!n)return null;return {inputs:n.links.map((k,i)=>[I18n.t("输入 ")+(i+1),ev.values[k]||[]]),output:[I18n.t("结果"),ev.values[id]||[]]};};
 // Reference circuits are for automated verification only, never auto-filled by UI.
-M.solutions=id=>{const s=M.initial(id,{complete:true}),links={
+M.solutions=id=>{const s=M.initial(id,{complete:true}),links={workshop:{project:['R'],sink:'project'},
  wire:{sink:'R'},projection:{project:['R'],sink:'project'},activation:{project:['R'],silu:['project'],sink:'silu'},
  gating:{gate:['R'],up:['R'],silu:['gate'],multiply:['silu','up'],sink:'multiply'},residual:{project:['R'],down:['project'],add:['R','down'],sink:'add'},ffn:{gate:['Z'],up:['Z'],silu:['gate'],multiply:['silu','up'],down:['multiply'],add:['R','down'],sink:'add'},
  embedding:{embedding:['R'],sink:'embedding'},normalize:{norm:['R'],sink:'norm'},qkv:{q:['R'],k:['R'],v:['R'],sink:'v'},scores:{q:['R'],k:['R'],score:['q','k'],sink:'score'},

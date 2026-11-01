@@ -8,7 +8,7 @@
 
 **[Play in your browser →](https://hacking.pub/games/neural-atelier/)** · [Run locally](#run-locally) · [How to play](#how-to-play)
 
-25 levels · Desktop / WebGL 2 · English + Chinese · No account required
+26 levels · Desktop / WebGL 2 · English + Chinese · No account required
 
 ## Inside the workshop
 
@@ -24,11 +24,11 @@ The circuit you build determines the result. Run it to see data move through the
 
 ## From the first wire to an inference engine
 
-The **16-level main track** covers Transformer fundamentals. A separate **9-level bonus track** explores on-device inference inspired by Qwen 27B, Kapitsa, and Apple ANE. Finishing the main track does not send you into the bonus track; choose either from the level menu.
+The **17-level main track** covers Transformer fundamentals. A separate **9-level bonus track** explores on-device inference inspired by Qwen 27B, Kapitsa, and Apple ANE. Finishing the main track does not send you into the bonus track; choose either from the level menu.
 
 | Stage | What you build and explore |
 | --- | --- |
-| **Foundations · 6 levels** | Route a vector, apply a matrix, add activation and gating, reconnect a residual path, and assemble an FFN. |
+| **Foundations · 7 levels** | Route a vector, apply a matrix, add activation and gating, reconnect a residual path, and assemble an FFN. |
 | **Transformer · 10 levels** | Connect embeddings, normalization, Q/K/V, attention scores, causal masking, RoPE, and attention. Assemble a block, predict a token, and feed it back into the context. |
 | **On-device inference · 9 levels** | Place work on CPU, GPU, and ANE; explore tensor layouts, batching, KV caching, quantization, fusion, parallel execution, and prefix reuse. |
 
@@ -41,8 +41,7 @@ The later puzzles add memory and execution-cost constraints to the numerical goa
 | Connect modules | Click a **round output port**, then a **square input port**, or drag between them. |
 | Delete a wire | Click the wire (or its connected input port), then **Delete wire**. **Delete / Backspace** also removes the selected wire. |
 | Arrange the workbench | Drag a module to move it. |
-| Try a different arrangement | **Shuffle layout** moves the modules without changing their wires. New starting layouts are randomized. |
-| Build from the shelf | In the FFN, full-attention, and Transformer-block challenges, drag modules from the **Module shelf**, or select one and click a free spot. **Return module** removes it and its wires. |
+| Build from the shelf | Drag a module card onto the table; its 3D preview follows your cursor. Click a card, then a free spot as an alternative. **Return module** removes that copy and its wires. |
 | Explore the scene | Drag empty space to rotate; scroll to zoom. During a run, dragging the workbench or a module rotates the view without moving the module. |
 | Inspect a module | Double-click it to open its card. |
 | Test your circuit | Click **Run my network** and watch the vectors move. |
@@ -50,11 +49,13 @@ The later puzzles add memory and execution-cost constraints to the numerical goa
 | Change levels | Open the level menu. Each level keeps its own circuit. |
 | Return to the title screen | Click the **N / Neural Atelier** brand at the top left. |
 
+The first five lessons provide fixed modules. **[Take a module](https://hacking.pub/games/neural-atelier/#workshop)** is a short placement tutorial with just one familiar projection. Later construction levels allow multiple copies, each with independent connections. The shelf shows remaining stock and the table limit: **8** modules for the FFN, **12** for Attention, and **7** for the Transformer block. Each module type has two copies; returning one restores its stock.
+
 **Settings** brings together language, animation speed, music, and volume. Language follows your browser preference unless you choose one manually. Runs start at **0.25×** by default so the computation is easy to follow; your chosen speed is remembered.
 
 The animated title screen introduces the workbench. Music starts after you enter and pauses while the tab is in the background. You can mute it or replay the introduction from Settings.
 
-SiLU has its own activation animation: values travel along curved channels and shrink according to their sigmoid gates. For vector projections, individual components leave the horizontal tray and align with their weight rows. Matching colors and one worked sum explain the first output; the remaining outputs follow in a quicker pass. Existing saves keep your placed modules and wiring; use **Shuffle layout** to rearrange them or **Reset** to start the level again.
+SiLU has its own activation animation: values travel along curved channels and shrink according to their sigmoid gates. For vector projections, individual components leave the horizontal tray and align with their weight rows. Matching colors and one worked sum explain the first output; the remaining outputs follow in a quicker pass. Existing saves keep your placed modules and wiring; drag modules to rearrange them or use **Reset** to start the level again.
 
 Moving vectors share a small tray with features arranged left to right, matching the input and output racks. A sequence keeps its token rows separate. You can rotate and zoom during execution; wiring and module placement stay locked until the run stops.
 

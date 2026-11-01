@@ -316,3 +316,29 @@ test('stopping a paused run clears its effects and the next run starts unpaused'
  app.api.switchLevel('projection');app.api.setState(app.c.NeuralPrologue.solutions('projection'));app.api.getWorld().rebuild();await app.api.run();await restart;
  assert.ok(stopped);assert.equal(app.document.querySelectorAll('#test-results .pass').length,3);
 });
+
+test('dragging a module card previews the operator, places one copy and dismisses the tutorial guide',async()=>{
+ const app=await boot(),doc=app.document;doc.querySelector('#welcome').close();app.api.switchLevel('workshop');
+ const scene=()=>app.scenes.at(-1),ghost=()=>scene().children.find(o=>o.userData.placementGhost),guide=()=>doc.querySelector('.placement-guide');
+ const event=(target,type,properties={})=>{const e=new app.window.Event(type,{bubbles:true,cancelable:true});Object.assign(e,properties);target.dispatchEvent(e);};
+ doc.querySelector('#scene').getBoundingClientRect=()=>({left:0,top:0,width:1400,height:760,right:1400,bottom:760});
+ assert.equal(guide().hasAttribute('hidden'),false);const card=doc.querySelector('[data-add-module="project"]');
+ event(card,'pointerdown',{clientX:120,clientY:160});event(doc,'pointermove',{clientX:700,clientY:380});
+ assert.ok(ghost());assert.ok(ghost().children.length>10,'preview is the matrix module, not a placeholder cube');assert.equal(app.api.getState().nodes.length,0);
+ event(doc,'pointerup',{clientX:700,clientY:380});card.dispatchEvent(new app.window.Event('click',{bubbles:true}));
+ assert.equal(ghost(),undefined);assert.equal(app.api.getState().nodes.length,1);assert.equal(guide().hasAttribute('hidden'),true);assert.equal(doc.querySelector('#module-count').textContent,'1 / 1');
+ app.api.chooseOutput('R');app.api.chooseInput('project',0);app.api.chooseOutput('project');app.api.chooseInput('sink',0);await app.api.run();assert.equal(doc.querySelectorAll('#test-results .pass').length,3);
+ app.document.querySelector('#reset').onclick();assert.equal(guide().hasAttribute('hidden'),false);
+ event(doc.querySelector('[data-add-module="project"]'),'pointerdown',{clientX:120,clientY:160});event(doc,'pointermove',{clientX:700,clientY:380});event(doc,'pointerup',{clientX:1500,clientY:380});assert.equal(ghost(),undefined);assert.equal(app.api.getState().nodes.length,0,'dropping outside does not create or spend a copy');
+});
+
+test('duplicate modules render cards, distinct processing and correctly sized weight matrices',async()=>{
+ let app;const seen=new Set();
+ app=await boot({reduced:false,frameMs:120,onFrame:({document})=>{for(const el of document.querySelectorAll('.processing-packet'))if(!el.hidden)seen.add(el.dataset.node);}});
+ app.api.switchLevel('ffn');const s=app.c.NeuralPrologue.initial('ffn');
+ const coords=[[-4.7,-2],[-1.4,-2],[1.9,-2],[5.2,-2],[-4.7,2],[-1.4,2]];['project','down','project','down','add','add'].forEach((kind,i)=>app.c.NeuralPrologue.addNode(s,kind,...coords[i]));
+ for(const edge of [['R','project',0],['project','down',0],['down','project-2',0],['project-2','down-2',0],['down','add',0],['down-2','add',1],['add','add-2',0],['R','add-2',1],['add-2','sink',0]])app.c.NeuralPrologue.connect(s,...edge);
+ app.api.setState(s);app.api.getWorld().rebuild();app.api.refresh();
+ for(const id of ['project-2','down-2','add-2']){app.api.getWorld().focus(id);assert.ok(app.document.querySelector('#card-name').textContent.endsWith(' · 2'));app.document.querySelector('#card-close').onclick();}
+ await app.api.run();assert.equal(app.document.querySelector('#loading').hidden,true);for(const id of s.nodes.map(n=>n.id))assert.ok(seen.has(id),id+' has an independent processing event');assert.equal(app.document.querySelectorAll('#test-results .fail').length,1,'a freely built incorrect circuit still receives real numerical validation');
+});
