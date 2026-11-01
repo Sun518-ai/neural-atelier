@@ -102,6 +102,14 @@ npm test
 
 网站运行需要根目录的 HTML、CSS、JavaScript 文件，以及 `locales/` 和 `vendor/`。不需要上传 `node_modules/`、测试、Git 数据或开发服务器。
 
+也可以让 Web 服务器直接指向 Git 仓库目录，之后在该目录运行：
+
+```sh
+git pull --ff-only
+```
+
+拉取后刷新网页即可，不需要构建或重启服务。Web 服务器需要禁止访问隐藏路径（包括 `.git/`），并为 HTML、CSS、JavaScript 设置 `Cache-Control: no-cache`，让浏览器检查更新。服务器专用配置和凭证放在仓库外。
+
 公开仓库也可以用 GitHub Pages 免费托管试玩页面：
 
 1. 将源码推送到仓库的 `main` 分支。

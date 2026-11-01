@@ -106,6 +106,14 @@ Serve the root HTML, CSS, and JavaScript files together with **`locales/` and `v
 
 Relative asset paths and hash-based level navigation support subdirectories such as `/games/neural-atelier/` without an application-route fallback. Nginx, GitHub Pages, and other static hosts work.
 
+If your web server serves a Git checkout directly, update it from the repository directory:
+
+```sh
+git pull --ff-only
+```
+
+There is no build step or service restart. Refresh the browser after pulling. Configure the web server to deny hidden paths (including `.git/`) and revalidate HTML, CSS, and JavaScript with `Cache-Control: no-cache`, so visitors receive updates. Keep server-specific files and credentials outside the checkout.
+
 To enable GitHub Pages on your own copy:
 
 1. Push the source to `main`.
