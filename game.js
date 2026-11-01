@@ -1,5 +1,5 @@
-import {cardFor,exampleFor} from './module-cards.js?v=compact-shelf-1';
-import {createProgress} from './level-progress.js?v=compact-shelf-1';
+import {cardFor,exampleFor} from './module-cards.js?v=left-shelf-lod-1';
+import {createProgress} from './level-progress.js?v=left-shelf-lod-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -17,6 +17,18 @@ let selectedWire=null,placing=null,menuTrack=M.levels[stageId].track;
 const stage=()=>M.levels[stageId],samples=()=>M.samplesFor?.(stageId)||M.samples,save=()=>progress.save(state);
 const kindOf=id=>M.kindOf(state,id),definition=id=>M.definitionFor(state,id),weightsFor=id=>M.weights[kindOf(id)],nodeName=id=>M.nodeName(state,id);
 let suppressPaletteClick=false;
+const shelfSizeKey='neural-atelier-shelf-size-v1';
+let shelfSize=1;
+function setShelfSize(value,persist=true){
+ const next=Number(value);shelfSize=Number.isInteger(next)&&next>=0&&next<=2?next:1;
+ $('#module-shelf').dataset.size=['small','medium','large'][shelfSize];
+ $('#shelf-smaller').disabled=shelfSize===0;$('#shelf-larger').disabled=shelfSize===2;
+ if(persist)try{localStorage.setItem(shelfSizeKey,String(shelfSize));}catch{}
+ world?.syncShelf?.();
+}
+try{const saved=localStorage.getItem(shelfSizeKey);setShelfSize(saved===null?1:saved,false);}catch{setShelfSize(1,false);}
+$('#shelf-smaller').onclick=()=>setShelfSize(shelfSize-1);
+$('#shelf-larger').onclick=()=>setShelfSize(shelfSize+1);
 const shape=dim=>stage().sequence?({3:I18n.t("3 个 ID"),6:'3 × 2',9:'3 × 3',18:'3 × 6'}[dim]||dim):dim;
 const playbackSpeedKey='neural-atelier-playback-speed-v1';
 const defaultPlaybackSpeed=.25;
@@ -124,8 +136,9 @@ function renderShelf(){
   const symbols={activation:'∿',add:'+',residual:'+',multiply:'×',norm:'RMS',rope:'↻',score:'QKᵀ',mask:'◩',softmax:'σ',mix:'AV',attention:'Attn',ffn:'FFN'};
   const visual=w?`<span class="stock-matrix" aria-hidden="true" style="grid-template-columns:repeat(${w[0].length},1fr)">`+w.flat().slice(0,8).map(v=>`<i class="${v<0?'negative':''}"></i>`).join('')+'</span>':`<span class="stock-symbol" aria-hidden="true">${symbols[d.type]||'◇'}</span>`;
   const color=M.extraColors?.[kind]?'#'+M.extraColors[kind].toString(16).padStart(6,'0'):({project:'#5eaa9c',down:'#90a79a',add:'#c3a26f',gate:'#a894bf',up:'#5eaa9c'})[kind]||'#8aa59a';
+  const code=({project:'W',gate:'Wg',up:'Wu',down:'Wd',output:'Wo',q:'Q',k:'K',v:'V',ropeq:'Q ↻',ropek:'K ↻',residual1:'+ A',residual2:'+ F'})[kind]||({activation:'SiLU',add:'+',residual:'+',multiply:'×',norm:'RMS',score:'QKᵀ',mask:'◩',softmax:'σ',mix:'AV',attention:'Attn',ffn:'FFN'})[d.type]||kind;
   const description=`${d.name} · ${d.ins.map(shape).join(' + ')} → ${shape(d.out)} · ${I18n.t("可用数量")} ${remaining} / ${available[kind]}`;
-  return `<div class="module-stock" role="button" tabindex="${disabled?'-1':'0'}" aria-disabled="${disabled}" aria-label="${description}" title="${description}" data-add-module="${kind}" style="--stock-color:${color}">${visual}<b class="stock-name">${d.name}</b><span class="stock-count" aria-hidden="true">${remaining}</span></div>`;
+  return `<div class="module-stock" role="button" tabindex="${disabled?'-1':'0'}" aria-disabled="${disabled}" aria-label="${description}" title="${description}" data-add-module="${kind}" style="--stock-color:${color}">${visual}<span class="stock-description"><b class="stock-name">${d.name}</b><small>${d.ins.map(shape).join(' + ')} → ${shape(d.out)}</small></span><b class="stock-code" aria-hidden="true">${code}</b><span class="stock-count" aria-hidden="true">${remaining}</span></div>`;
  }).join('');
  world?.syncShelf?.();
 }
@@ -167,7 +180,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=compact-shelf-1');
+ const {createSceneArt}=await import('./scene-art.js?v=left-shelf-lod-1');
  const art=createSceneArt(T,scene,colors,{anisotropy:renderer.capabilities.getMaxAnisotropy()});art.surroundings(samples(),stage());
  const assembly=new T.Group(),wires=new T.Group();scene.add(assembly,wires);const neuronGeo=new T.SphereGeometry(.115,16,12);let elements=[],curves=[],packets=[],drag=null,preview=null,yaw=.05,pitch=.8,zoom=stage().zoom,lastDepth=-1;
  const cameraTarget=new T.Vector3();let focusId=null,overview=null,cameraFrame=0,transitioning=false,lastTap=null;
@@ -238,10 +251,10 @@ try{
   const [x,y]=project(new T.Vector3(0,.13,0));
   const corners=[[-1.04,-1.22],[1.04,-1.22],[1.04,1.22],[-1.04,1.22]].map(([a,b])=>project(new T.Vector3(a,.13,b)));
   placementOutline.setAttribute('d',corners.map(([a,b],i)=>`${i?'L':'M'}${a} ${b}`).join(' ')+' Z');
-  const flagRect=flag.getBoundingClientRect(),hostRect=host.getBoundingClientRect(),sx=flagRect.left+flagRect.width/2-hostRect.left,sy=flagRect.bottom-hostRect.top+5;
-  placementPath.setAttribute('d',`M${sx} ${sy} Q${sx} ${(sy+y)/2} ${x} ${y}`);placementPath.style.opacity=placing?'0':'.65';
+  const flagRect=flag.getBoundingClientRect(),hostRect=host.getBoundingClientRect(),sx=flagRect.right-hostRect.left+5,sy=flagRect.top+flagRect.height/2-hostRect.top;
+  placementPath.setAttribute('d',`M${sx} ${sy} Q${(sx+x)/2} ${sy} ${x} ${y}`);placementPath.style.opacity=placing?'0':'.65';
  }
- function render(){const w=host.clientWidth,h=host.clientHeight;if(!w||!h)return;renderer.setSize(w,h,false);const width=23*zoom,height=width*h/w;Object.assign(camera,{left:-width/2,right:width/2,top:height/2,bottom:-height/2});camera.position.set(cameraTarget.x+Math.sin(yaw)*24,cameraTarget.y+Math.sin(pitch)*24,cameraTarget.z+Math.cos(yaw)*Math.cos(pitch)*24);camera.lookAt(cameraTarget);camera.updateProjectionMatrix();renderer.render(scene,camera);syncConnectionGuide(w,h);syncPlacementGuide(w,h);syncWireTargets(w,h);elements.forEach(({el,pos})=>{el.hidden=!!focusId&&(el.dataset.owner!==focusId||el.classList.contains('node-label')||el.classList.contains('local-fault')||el.classList.contains('fault-pin'));if(el.classList.contains('port'))el.disabled=!!focusId;const [x,y]=project(pos());if(el.classList.contains('local-fault')||el.classList.contains('wire-actions')){el.style.left=Math.max(12,Math.min(w-el.offsetWidth-12,x+18))+'px';el.style.top=Math.max(12,Math.min(h-el.offsetHeight-46,y+15))+'px';}else{el.style.left=x+'px';el.style.top=y+'px';}});packets.forEach(p=>{const [x,y]=project(p.p.clone().add(new T.Vector3(0,.7,0)));p.el.style.left=x+'px';p.el.style.top=y+'px';if(p.calculation){const [cx,cy]=project(new T.Vector3(p.node.x,1.05,p.node.z+1.28));p.calculation.style.left=cx+'px';p.calculation.style.top=cy+'px';}});}
+ function render(){const w=host.clientWidth,h=host.clientHeight;if(!w||!h)return;renderer.setSize(w,h,false);const width=23*zoom,height=width*h/w;Object.assign(camera,{left:-width/2,right:width/2,top:height/2,bottom:-height/2});camera.position.set(cameraTarget.x+Math.sin(yaw)*24,cameraTarget.y+Math.sin(pitch)*24,cameraTarget.z+Math.cos(yaw)*Math.cos(pitch)*24);camera.lookAt(cameraTarget);camera.updateProjectionMatrix();art.updateDetail(camera,w,h);renderer.render(scene,camera);syncConnectionGuide(w,h);syncPlacementGuide(w,h);syncWireTargets(w,h);elements.forEach(({el,pos})=>{el.hidden=!!focusId&&(el.dataset.owner!==focusId||el.classList.contains('node-label')||el.classList.contains('local-fault')||el.classList.contains('fault-pin'));if(el.classList.contains('port'))el.disabled=!!focusId;const [x,y]=project(pos());if(el.classList.contains('local-fault')||el.classList.contains('wire-actions')){el.style.left=Math.max(12,Math.min(w-el.offsetWidth-12,x+18))+'px';el.style.top=Math.max(12,Math.min(h-el.offsetHeight-46,y+15))+'px';}else{el.style.left=x+'px';el.style.top=y+'px';}});packets.forEach(p=>{const [x,y]=project(p.p.clone().add(new T.Vector3(0,.7,0)));p.el.style.left=x+'px';p.el.style.top=y+'px';if(p.calculation){const [cx,cy]=project(new T.Vector3(p.node.x,1.05,p.node.z+1.28));p.calculation.style.left=cx+'px';p.calculation.style.top=cy+'px';}});}
 
  function transition(target,targetZoom,targetYaw=yaw,targetPitch=pitch){
   cancelAnimationFrame(cameraFrame);const start=performance.now(),from=cameraTarget.clone(),z0=zoom,y0=yaw,p0=pitch,reduced=matchMedia('(prefers-reduced-motion:reduce)').matches;transitioning=true;host.setAttribute('aria-busy','true');

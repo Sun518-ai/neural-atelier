@@ -62,6 +62,20 @@ test('construct every 3D level, run its data through scene updates, open and clo
   for(const n of s.nodes){app.api.getWorld().focus(n.id);assert.equal(app.document.querySelector('#module-card').open,true);assert.ok(app.document.querySelector('#card-name').textContent);app.document.querySelector('#card-close').onclick();assert.equal(app.document.querySelector('#module-card').open,false);assert.ok(app.document.querySelector('.arena > #scene'));}
  }
 });
+test('small matrices keep their blocks while numbers return when zoomed in',async()=>{
+ const app=await boot();app.api.switchLevel('residual');app.api.setState(app.c.NeuralPrologue.solutions('residual'));app.api.getWorld().rebuild();
+ const state=JSON.stringify(app.api.getState());
+ let down;app.scenes.at(-1).traverse(o=>{if(o.userData.node==='down')down=o;});
+ const faces=down.children.filter(o=>o.userData.detailText);assert.equal(faces.length,8);
+ const wheel=new app.window.Event('wheel',{bubbles:true,cancelable:true});wheel.deltaY=2000;app.document.querySelector('#scene').dispatchEvent(wheel);
+ assert.ok(faces.every(o=>!o.visible),'unreadable matrix numbers are hidden');
+ assert.ok(down.children.filter(o=>o.geometry?.type==='BoxGeometry'&&o.visible).length>=8,'the colored weight blocks stay visible');
+ await app.api.run();assert.equal(app.document.querySelectorAll('#test-results .pass').length,app.c.NeuralPrologue.levels.residual.sampleCount,'abstract rendering does not change the calculation');
+ app.api.getWorld().focus('down');await new Promise(setImmediate);
+ assert.ok(faces.every(o=>o.visible),'the close-up restores the actual numbers');
+ app.document.querySelector('#card-close').onclick();assert.ok(faces.every(o=>!o.visible),'returning to the distant view restores abstraction immediately');
+ assert.equal(JSON.stringify(app.api.getState()),state);
+});
 test('3D fault bubble and pin dismiss without losing recorded failure',async()=>{
  const app=await boot();app.api.switchLevel('vocabulary');await app.api.run();assert.ok(app.api.getFault());const b=app.document.querySelector('[data-dismiss-result]');assert.ok(b);b.dispatchEvent(new app.window.Event('click',{bubbles:true}));assert.equal(app.api.getFault(),null);assert.equal(app.document.querySelectorAll('.local-fault,.fault-pin').length,0);assert.ok(app.document.querySelector('#test-results .fail'));await app.api.run();assert.ok(app.document.querySelector('[data-dismiss-result]'));
 });

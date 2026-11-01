@@ -16,7 +16,7 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   // Match the physical tile's aspect ratio so letters are never stretched to fit.
   const canvas=document.createElement('canvas'),height=Math.min(384,2048*d/w);
   canvas.width=Math.round(height*w/d);canvas.height=Math.round(height);
-  const ctx=canvas.getContext('2d');
+  const ctx=canvas.getContext('2d');let fontFraction=size/128;
   function draw(value,tone){
    ctx.fillStyle=bg;ctx.fillRect(0,0,canvas.width,canvas.height);
    ctx.fillStyle=tone;ctx.textAlign='center';ctx.textBaseline='middle';
@@ -24,14 +24,29 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
    const font=()=>`600 ${fontSize}px -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif`;
    ctx.font=font();
    fontSize*=Math.min(1,canvas.width*.88/Math.max(1,ctx.measureText(String(value)).width));
+   fontFraction=fontSize/canvas.height;
    ctx.font=font();ctx.fillText(String(value),canvas.width/2,canvas.height*.52);
   }
   draw(text,color);
   const texture=new T.CanvasTexture(canvas);texture.colorSpace=T.SRGBColorSpace;texture.anisotropy=anisotropy;
   const mesh=new T.Mesh(new T.PlaneGeometry(w,d),new T.MeshBasicMaterial({map:texture,toneMapped:false}));
   mesh.rotation.x=-Math.PI/2;mesh.position.set(x,y,z);parent.add(mesh);
+  if(parent.userData.node)mesh.userData.detailText={height:d,fontFraction};
   let previousText=text,previousTone=color;
-  return {mesh,ctx,texture,write(value,tone=color){if(value===previousText&&tone===previousTone)return;previousText=value;previousTone=tone;draw(value,tone);texture.needsUpdate=true;}};
+  return {mesh,ctx,texture,write(value,tone=color){if(value===previousText&&tone===previousTone)return;previousText=value;previousTone=tone;draw(value,tone);if(mesh.userData.detailText)mesh.userData.detailText.fontFraction=fontFraction;texture.needsUpdate=true;}};
+ }
+ const detailBottom=new T.Vector3(),detailTop=new T.Vector3();
+ function updateDetail(camera,width,height){
+  scene.updateMatrixWorld(true);camera.updateMatrixWorld();
+  scene.traverse(mesh=>{
+   const detail=mesh.userData.detailText;if(!detail)return;
+   detailBottom.set(0,-detail.height/2,0).applyMatrix4(mesh.matrixWorld).project(camera);
+   detailTop.set(0,detail.height/2,0).applyMatrix4(mesh.matrixWorld).project(camera);
+   const pixels=Math.hypot((detailTop.x-detailBottom.x)*width/2,(detailTop.y-detailBottom.y)*height/2)*detail.fontFraction;
+   // Small labels give way to the colored blocks below. Separate thresholds
+   // prevent flickering while orbiting near the readable size.
+   mesh.visible=pixels>=(mesh.visible?9:11);
+  });
  }
  function surroundings(samples,layout={}){
   for(const parent of [floor,context])for(const o of [...parent.children]){parent.remove(o);o.traverse(c=>{if(c.geometry&&!c.geometry.userData?.shared)c.geometry.dispose();c.material?.map?.dispose();c.material?.dispose?.();});}
@@ -219,5 +234,5 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   }
  }
  function resetUnits(){units.clear();}
- return {surroundings,module,sync,pulseSource,projectionFrame,processing,clearProcessing,packet,prepareProjectionPacket,routeProjectionPacket,featureColor,rowColor,rowZ,resetUnits,focus(active){context.visible=!active;floor.visible=!active;}};
+ return {surroundings,module,sync,updateDetail,pulseSource,projectionFrame,processing,clearProcessing,packet,prepareProjectionPacket,routeProjectionPacket,featureColor,rowColor,rowZ,resetUnits,focus(active){context.visible=!active;floor.visible=!active;}};
 }

@@ -1,5 +1,7 @@
 // English copy. Chinese source phrases are stable lookup keys.
 globalThis.AtelierEnglish = {
+  "缩小组件架": "Smaller module shelf",
+  "放大组件架": "Larger module shelf",
   "序章 / 06": "PROLOGUE / 06",
   "从架上拿一块": "Take a module",
   "拖进一块投影，再接上线": "Drag in a projection, then wire it",

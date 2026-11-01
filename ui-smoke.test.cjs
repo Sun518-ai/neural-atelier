@@ -154,3 +154,12 @@ test('multiple module saves preserve instance identities and undo refunds only t
 test('the simple placement lesson introduces one familiar module between residuals and the FFN',()=>{
  const app=boot(new Map(),'#workshop',['en-US']);assert.equal(app.eval('state.nodes.length'),0);assert.equal(app.document.querySelectorAll('[data-add-module]').length,1);assert.equal(app.document.querySelector('#module-count').textContent,'0 / 1');assert.equal(app.eval('M.levels.residual.next'),'workshop');assert.equal(app.eval('M.levels.workshop.next'),'ffn');assert.doesNotMatch(app.document.querySelector('#module-shelf').textContent,/[\u3400-\u9fff]/);
 });
+test('shelf sizing persists independently of circuits, language and the current level',()=>{
+ const app=boot(new Map(),'#ffn',['en-US']),shelf=app.document.querySelector('#module-shelf');
+ assert.equal(shelf.dataset.size,'medium');const state=app.eval('JSON.stringify(state)');
+ app.document.querySelector('#shelf-smaller').onclick();assert.equal(shelf.dataset.size,'small');assert.equal(app.document.querySelector('#shelf-smaller').disabled,true);
+ app.c.I18n.setPreference('zh');assert.equal(shelf.dataset.size,'small');assert.equal(app.eval('JSON.stringify(state)'),state);
+ app.eval("switchLevel('workshop')");assert.equal(shelf.dataset.size,'small');
+ const reloaded=boot(app.storage,'#ffn');assert.equal(reloaded.document.querySelector('#module-shelf').dataset.size,'small');assert.equal(reloaded.eval('JSON.stringify(state)'),state);
+ reloaded.document.querySelector('#shelf-larger').onclick();reloaded.document.querySelector('#shelf-larger').onclick();assert.equal(reloaded.document.querySelector('#module-shelf').dataset.size,'large');assert.equal(reloaded.document.querySelector('#shelf-larger').disabled,true);
+});
