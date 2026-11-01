@@ -11,7 +11,7 @@ const definitions={
  silu:{name:'SiLU',hint:I18n.t("对每个数做 x / (1 + exp(−x))，形成门值；不改变维度。"),ins:[4],out:4,type:'activation',x:-.9,z:-2.6},
  multiply:{name:I18n.t("逐元素相乘"),hint:I18n.t("两个 4 维向量，对应位置相乘。门值控制各个内容特征的贡献。"),ins:[4,4],out:4,type:'multiply',x:.1,z:1.8},
  down:{name:I18n.t("降维投影"),hint:I18n.t("4 维向量乘 Wd，压回 2 维，得到 FFN 的变换 F。"),ins:[4],out:2,type:'linear',x:3.5,z:1.5},
- add:{name:I18n.t("残差相加"),hint:I18n.t("两个 2 维向量相加，把这次变换加回进入 FFN 前的 R。"),ins:[2,2],out:2,type:'add',x:6.4,z:-1.5}
+ add:{name:I18n.t("残差相加"),hint:I18n.t("原有特征加上支路算出的修改量。正的修改量让值增加，负的让值减少，零则保持该值。"),ins:[2,2],out:2,type:'add',x:6.4,z:-1.5}
 };
 const levels={
  wire:{id:'wire',chapter:I18n.t("序章 / 01"),title:I18n.t("让信号抵达"),nodes:[],sources:['R'],sinkDim:2,sampleCount:3,sourceX:-3.5,sinkX:3.5,zoom:.65,
@@ -31,7 +31,8 @@ const levels={
   hints:[I18n.t("端口维度相同只说明能接上，不代表计算结果正确。"),I18n.t("逐元素相乘把两条支路对应的数相乘；激活放在哪一条支路会改变结果。")]},
  residual:{id:'residual',chapter:I18n.t("序章 / 05"),title:I18n.t("留一条回来的路"),nodes:['project','down','add'],sources:['R'],sinkDim:2,sampleCount:5,sourceX:-7.5,sinkX:7.5,zoom:.96,boardWidth:20,boardDepth:9,
   positions:{project:[-3.8,1.3],down:[0,1.3],add:[3.8,-.3]},initialLinks:{project:['R'],down:['project']},initialSink:'down',
-  mission:I18n.t("让出口同时保留原值与变化"),description:I18n.t("桌上的变换已把 2 维展开成 4 维，再压回 2 维。目标是把这次变化加到原输入上；找出需要保留的那条路。"),summary:I18n.t("新增降维与残差相加。形状回到原宽度，才能把输入加回来。"),concept:I18n.t("降维与残差"),sourceTitle:I18n.t("输入 X"),sourceNote:'',outputTitle:I18n.t("残差特征 Y"),boardText:'RESIDUAL / 05',shape:'2 → 4 → 2 + 2',next:'ffn',
+  mission:I18n.t("在原有特征上做调整"),description:I18n.t("桌上两块投影算出 2 维修改量 F。出口要得到 X + F，在原有特征 X 的基础上完成一次调整。接好模块，让 5 组输入都匹配目标。"),summary:I18n.t("用残差学习修改量：在已有特征上增加或减少，而无需重新复制每个原值。"),concept:I18n.t("降维与残差"),sourceTitle:I18n.t("输入 X"),sourceNote:'',outputTitle:I18n.t("残差特征 Y"),boardText:'RESIDUAL / 05',shape:'2 → 4 → 2 + 2',next:'ffn',
+  rationale:{kind:'residual',title:I18n.t("为什么要加回输入？"),input:[1,0],text:I18n.t("假如这一层只需要调整部分特征，支路就只需学习“加多少或减多少”。无需修改的值沿直连路径继续传递，支路不用再学一遍如何复制它们。"),takeaway:I18n.t("修改量为 0 时，输出就是原输入；修改量为负时，对应的值会减小。相加后的数值仍可能改变，甚至抵消到 0。"),scope:I18n.t("真实模型通过训练学习修改量。直连路径也为训练信号提供回传路线，有助于训练更深的网络。本关的矩阵是固定的。")},
   hints:[I18n.t("一个圆形输出口可以连接多条线，不会消耗原来的向量。"),I18n.t("相加的两份向量需要同样长度；一份是原输入，一份是刚算出的变化。")]},
  workshop:{id:'workshop',chapter:I18n.t("序章 / 06"),title:I18n.t("从架上拿一块"),nodes:['project'],inventory:{project:1},maxModules:1,buildable:true,placementTutorial:true,sources:['R'],sinkDim:4,sampleCount:3,sourceX:-5.5,sinkX:5.5,zoom:.8,boardWidth:16,boardDepth:7,
   mission:I18n.t("拖进一块投影，再接上线"),description:I18n.t("台面上少了一块熟悉的投影。从组件架拖一块进来，连接输入和出口，然后试跑。"),summary:I18n.t("只学一个新操作：从组件架拖入模块。"),concept:I18n.t("自己放置组件"),sourceTitle:I18n.t("输入 X"),sourceNote:'',outputTitle:I18n.t("投影特征 P"),boardText:'WORKSHOP / 06',shape:'2 → 4',next:'ffn',

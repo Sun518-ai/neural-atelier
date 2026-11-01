@@ -45,8 +45,8 @@ export const moduleCards = {
   add: {
     number:'06', seal:I18n.t("续"), english:'RESIDUAL ADDITION', family:I18n.t("残差"), color:'#a17949',
     ability:I18n.t("把变化加回原输入"), formula:'Y = R + F',
-    meaning:I18n.t("接回进入 FFN 前保留的原始输入 R，与这次算出的变换 F 逐项相加。得到的 Y 仍然是一个 2 维向量。"),
-    purpose:I18n.t("原输入通过旁路继续传递，FFN 在它的基础上增加一次变化。这个向量仍对应原来的 token，可以交给下一层。"),
+    meaning:I18n.t("R 是进入 FFN 前的特征，F 是支路算出的修改量。对应位置相加得到 Y：正的修改量让数值增加，负的让它减少。"),
+    purpose:I18n.t("支路可以学习需要改动的部分。无需修改的位置只要输出 0，原值就能通过直连路径继续传递；不必让支路再学一遍如何复制原值。相加也可能抵消数值，因此并不保证原信息完整保留。"),
     input:I18n.t("原始输入 R 与变换 F"), output:I18n.t("本层输出 Y"), weight:I18n.t("无"), trait:I18n.t("对应位置相加"), stage:4
   }
 };
@@ -71,24 +71,25 @@ export function cardFor(id,levelId){
   card.purpose=I18n.t("乘一个固定比例会把所有数一起缩放；SiLU 的缩放比例随数值变化。较大的负数被压近 0，较大的正数接近原值，因此它能改变特征之间的数值关系。");
  }
  if(id==='down'&&levelId==='residual'){
-  card.formula='F = P × Wd';card.meaning=I18n.t("接过投影 P 中的 4 个数，乘上 4 × 2 权重矩阵。每个输出由 4 项乘积求和，得到 2 维变换 F。");card.purpose=I18n.t("F 的长度回到与输入 X 相同，才能逐项相加。单独得到 F，还没有保留原输入。");
+  card.formula='F = P × Wd';card.meaning=I18n.t("接过投影 P 中的 4 个数，乘上 4 × 2 权重矩阵。每个输出由 4 项乘积求和，得到 2 维变换 F。");card.purpose=I18n.t("修改量 F 与输入 X 同为 2 维，才能逐项加到 X 上，得到更新后的特征。");
  }
  if(id==='add'&&levelId==='residual'){
-  card.formula='Y = X + F';card.meaning=I18n.t("把原输入 X 与本次变换 F 按对应位置相加。输出 Y 是更新后的特征，仍对应同一个输入位置。");card.purpose=I18n.t("一条路计算变化，一条路保留原输入。残差把它们在出口前合起来。");
+  card.formula='Y = X + F';card.meaning=I18n.t("X 是原有特征，F 是两块投影算出的修改量。对应位置相加得到 Y：正的修改量让数值增加，负的让它减少。");
+  card.input=I18n.t("原有特征 X 与修改量 F");
  }
  return card;
 }
 
 export function exampleFor(M,id,levelId='ffn'){
-  const shared=levelId==='gating'||levelId==='ffn',compare=id==='gate'||id==='up',R=shared?[1,0]:[1,1],Z=levelId==='ffn'?M.norm(R):R,P=M.linear(R,M.weights.project);
+  const shared=['gating','ffn','residual'].includes(levelId),compare=id==='gate'||id==='up',R=shared?[1,0]:[1,1],Z=levelId==='ffn'?M.norm(R):R,P=M.linear(R,M.weights.project);
   const meta={sampleIndex:shared?0:2,exampleSource:[levelId==='ffn'?'R':'X',R]};
   if(id==='project')return {...meta,inputs:[['X',R]],output:['P',P]};
   if(levelId==='activation')return {...meta,inputs:[['P',P]],output:['S',P.map(M.silu)],activation:{feature:2}};
   if(levelId==='residual'){
    const F=M.linear(P,M.weights.down);
-   return id==='down'?{...meta,inputs:[['P',P]],output:['F',F]}:{...meta,inputs:[['X',R],['F',F]],output:['Y',R.map((x,i)=>x+F[i])]};
+   return id==='down'?{...meta,inputs:[['P',P]],output:['F',F]}:{...meta,inputs:[['X',R],['F',F]],output:['Y',R.map((x,i)=>x+F[i])],addition:{feature:0}};
   }
   const G=M.linear(Z,M.weights.gate),U=M.linear(Z,M.weights.up),S=G.map(M.silu),H=S.map((x,i)=>x*U[i]),F=M.linear(H,M.weights.down),Y=R.map((x,i)=>x+F[i]),source=levelId==='ffn'?'Z':'X';
   const paths={gate:[[[source,Z]],['G',G]],up:[[[source,Z]],['U',U]],silu:[[['G',G]],['S',S]],multiply:[[['S',S],['U',U]],['H',H]],down:[[['H',H]],['F',F]],add:[[['R',R],['F',F]],['Y',Y]]};
-  return {...meta,inputs:paths[id][0],output:paths[id][1],...(compare?{comparison:{input:[source,Z],rows:[['U',U],['G',G],['S',S],['H',H]],feature:2}}:{}),...(id==='silu'?{activation:{feature:2,content:U,product:H}}:{})};
+  return {...meta,inputs:paths[id][0],output:paths[id][1],...(compare?{comparison:{input:[source,Z],rows:[['U',U],['G',G],['S',S],['H',H]],feature:2}}:{}),...(id==='silu'?{activation:{feature:2,content:U,product:H}}:{}),...(id==='add'?{addition:{feature:0}}:{})};
 }

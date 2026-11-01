@@ -1,5 +1,5 @@
-import {cardFor,exampleFor} from './module-cards.js?v=gating-meaning-1';
-import {createProgress} from './level-progress.js?v=gating-meaning-1';
+import {cardFor,exampleFor} from './module-cards.js?v=residual-flow-1';
+import {createProgress} from './level-progress.js?v=residual-flow-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -94,8 +94,12 @@ function stageChrome(){
  const c=stage();document.body.classList.toggle('engine-level',!!c.engine);$('#device-docks').hidden=!c.engine;resetReport();$('#engine-controls').hidden=!c.engine;engineControls();$('.inspector').hidden=c.nodes.length===0;$('.scene-legend').hidden=c.nodes.length===0;$('#scene-help').textContent=c.nodes.length?I18n.t("拖模块摆放 · 点连线删除 · 双击查看模块卡"):I18n.t("圆口出，方口进 · 拖动空白转动视角");$('#pass-count').textContent='0 / '+c.sampleCount;document.title=I18n.t("神经工坊 · ")+c.title;$('.chapter span').textContent=c.chapter;$('.chapter strong').textContent=c.title;
  $('.mission h2').textContent=c.mission;$('.mission p').textContent=c.description;$('#mission-limits').innerHTML=c.engine?Object.entries(c.limits).map(([key,value])=>{const [name,unit]=M.metricLabels[key];return `<span>${name} ${key==='tps'||key==='aneMin'?'≥':'≤'} ${value} ${unit}</span>`;}).join(''):'';
  const reason=c.rationale;$('#mission-reason').hidden=!reason;
+ $('#mission-reason-title').textContent=reason?.title||I18n.t("为什么要这样算");
  for(const field of ['text','takeaway','scope'])$('#mission-reason-'+field).textContent=reason?.[field]||'';
- $('#mission-reason-example').innerHTML=reason?`<table><caption>${I18n.t("比较两种输入的第 3 个特征")}</caption><thead><tr><th>${I18n.t("输入")}</th><th>${I18n.t("内容 × 系数 ≈ 结果")}</th></tr></thead><tbody>${reason.inputs.map(input=>{
+ if(reason?.kind==='residual'){
+  const x=reason.input,f=M.linear(M.linear(x,M.weights.project),M.weights.down),y=x.map((v,i)=>v+f[i]);
+  $('#mission-reason-example').innerHTML=`<div class="residual-example">${[['baseline',I18n.t("原有特征 X"),x],['update',I18n.t("修改量 F"),f],['result',I18n.t("更新结果 Y"),y]].map(([role,label,values])=>`<div data-role="${role}"><span>${label}</span><code>${vector(values)}</code></div>`).join('')}<small>Y = X + F</small></div>`;
+ }else $('#mission-reason-example').innerHTML=reason?`<table><caption>${I18n.t("比较两种输入的第 3 个特征")}</caption><thead><tr><th>${I18n.t("输入")}</th><th>${I18n.t("内容 × 系数 ≈ 结果")}</th></tr></thead><tbody>${reason.inputs.map(input=>{
   const i=reason.feature,u=M.linear(input,M.weights.up)[i],g=M.linear(input,M.weights.gate)[i],s=M.silu(g);
   return `<tr><td>${vector(input)}</td><td><span data-factor="content">${fmt(u)}</span> × <span data-factor="scale">${fmt(s)}</span> ≈ <strong data-factor="result">${fmt(u*s)}</strong></td></tr>`;
  }).join('')}</tbody></table>`:'';
@@ -201,7 +205,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=gating-meaning-1');
+ const {createSceneArt}=await import('./scene-art.js?v=residual-flow-1');
  const art=createSceneArt(T,scene,colors,{anisotropy:renderer.capabilities.getMaxAnisotropy()});art.surroundings(samples(),stage());
  const assembly=new T.Group(),wires=new T.Group();scene.add(assembly,wires);const neuronGeo=new T.SphereGeometry(.115,16,12);let elements=[],curves=[],packets=[],drag=null,preview=null,yaw=.05,pitch=.8,zoom=stage().zoom,lastDepth=-1;
  const cameraTarget=new T.Vector3();let focusId=null,shelfFocus=null,shelfModel=null,overview=null,cameraFrame=0,transitioning=false,lastTap=null;
@@ -377,6 +381,10 @@ try{
    const {feature,content,product}=ex.activation,input=ex.inputs[0],output=ex.output,x=input[1][feature],y=output[1][feature];
    const next=content?`<p class="card-silu-use">${I18n.t("把这个 S 与对应的内容特征相乘：")}</p><div class="card-gate-result"><span data-role="content"><small>${I18n.t("内容 U")}</small><b>${fmt(content[feature])}</b></span><i>×</i><span data-role="scale"><small>${I18n.t("SiLU 输出 S")}</small><b>${fmt(y)}</b></span><i>≈</i><span data-role="result"><small>${I18n.t("相乘结果")}</small><b>${fmt(product[feature])}</b></span></div>`:'';
    $('#card-example-values').innerHTML=`<div class="card-silu-example">${vectorRow(input,false,feature,I18n.t("SiLU 的输入"))}<div class="card-silu-link"><b>SiLU</b><span>${input[1].map((_,i)=>`<i class="${i===feature?'example-focus':''}" aria-hidden="true">↓</i>`).join('')}</span></div>${vectorRow(output,true,feature,I18n.t("SiLU 的输出"))}<div class="card-silu-worked"><small>${I18n.t("把高亮的输入代入公式：")}</small><code>SiLU(${formulaNumber(x)}) = ${formulaNumber(x)} / (1 + e<sup>${formulaNumber(-x)}</sup>) ≈ ${fmt(y)}</code></div>${next}</div>`;
+  }else if(ex.addition){
+   const {feature}=ex.addition,[base,update]=ex.inputs,result=ex.output,roles={[base[0]]:I18n.t("原有特征"),F:I18n.t("修改量"),Y:I18n.t("更新结果")};
+   const a=base[1][feature],b=update[1][feature],y=result[1][feature],signed=v=>v<0?'('+fmt(v)+')':fmt(v),equal=[a,b,y].some(v=>Math.abs(v-Number(v.toFixed(2)))>1e-9)?'≈':'=';
+   $('#card-example-values').innerHTML=`<div class="card-add-example">${[base,update,result].map(row=>vectorRow(row,row===result,feature,roles[row[0]])).join('')}<div class="card-add-step"><small>${I18n.t("同一位置，原值加上修改量：")}</small><code><span data-role="baseline">${signed(a)}</span> + <span data-role="update">${signed(b)}</span> ${equal} <b>${fmt(y)}</b></code></div><p class="card-add-zero">${I18n.t("如果修改量为零：")} <code>F = ${vector(update[1].map(()=>0))} → Y = ${base[0]}</code></p></div>`;
   }else if(ex.comparison){
    const {input,rows,feature}=ex.comparison,values=Object.fromEntries(rows),u=values.U[feature],g=values.G[feature],s=values.S[feature],h=values.H[feature];
    const roles={U:I18n.t("内容投影"),G:I18n.t("门投影"),S:I18n.t("SiLU 系数"),H:I18n.t("相乘结果")};
@@ -406,12 +414,12 @@ try{
   clearPackets();lastDepth=-1;const reduced=matchMedia('(prefers-reduced-motion:reduce)').matches;if(reduced)ms=70;
   let previous=animationTime(),elapsed=0;
   const seq=!!stage().sequence,readyNodes=state.nodes.filter(n=>ev.values[n.id]);
-  const pairedNode=id=>!seq&&definition(id)?.type==='multiply';
+  const pairedNode=id=>!seq&&['multiply','add'].includes(definition(id)?.type);
   const lastWave=Math.max(0,...Object.values(ev.depths)),starts=[0],ends=[0];
   // Travel is 1.5× faster than before; every operator keeps its original clock.
   const travelDuration=2/3;
   for(let depth=1;depth<=lastWave;depth++){
-   const durations=readyNodes.filter(n=>ev.depths[n.id]===depth).map(n=>!seq&&['linear','multiply'].includes(definition(n.id).type)?art.projectionFrame(0,ev.values[n.id].length).duration:1);
+   const durations=readyNodes.filter(n=>ev.depths[n.id]===depth).map(n=>!seq&&['linear','multiply','add'].includes(definition(n.id).type)?art.projectionFrame(0,ev.values[n.id].length).duration:1);
    starts[depth]=ends[depth-1]+travelDuration;ends[depth]=starts[depth]+Math.max(1,...durations);
   }
   const max=ends[lastWave]+travelDuration;
@@ -441,11 +449,12 @@ try{
    const input=ev.values[n.links[0]],output=ev.values[n.id],p=movingPacket(input,n.id,n.id,'process');
    p.el.classList.add('processing-packet');p.el.dataset.node=n.id;p.mesh.userData.processing=n.id;
    const detailed=!seq&&definition(n.id).type==='linear',paired=pairedNode(n.id),worked=detailed||paired,other=paired?ev.values[n.links[1]]:null;
+   const operation=definition(n.id).type,pairTones=paired?art.pairColorsFor(n.id):null,operator=operation==='add'?'+':'×';
    Object.assign(p,{detailed,paired,worked,other});
-   if(worked)art.prepareProjectionPacket(p.mesh,paired?()=>art.pairColors[0]:undefined);
+   if(worked)art.prepareProjectionPacket(p.mesh,paired?()=>pairTones[0]:undefined);
    if(paired){
     const otherMesh=art.packet(other,p.color);otherMesh.userData={processingSecondary:n.id,row:p.el.dataset.row};otherMesh.visible=false;scene.add(otherMesh);
-    art.prepareProjectionPacket(otherMesh,()=>art.pairColors[1]);fadeMaterials(otherMesh);p.otherMesh=otherMesh;
+    art.prepareProjectionPacket(otherMesh,()=>pairTones[1]);fadeMaterials(otherMesh);p.otherMesh=otherMesh;
    }
    const outputMesh=art.packet(output,p.color,{sequence:seq});outputMesh.userData={processingOutput:n.id,row:p.el.dataset.row};outputMesh.visible=false;scene.add(outputMesh);
    const morph=document.createElement('span');morph.className='packet-morph';p.cells.replaceWith(morph);morph.appendChild(p.cells);
@@ -459,11 +468,11 @@ try{
      const el=document.createElement('span');el.className='projection-result';el.hidden=true;el.textContent=fmt(value);el.dataset.node=n.id;el.dataset.column=String(j);el.dataset.row=p.el.dataset.row;overlay.appendChild(el);
      return {el,bar:outputMesh.children.find(o=>o.userData.feature===j)};
     });
-    const calculation=document.createElement('span');calculation.className='projection-calculation';calculation.hidden=true;calculation.dataset.node=n.id;calculation.dataset.operation=paired?'multiply':'linear';
+    const calculation=document.createElement('span');calculation.className='projection-calculation';calculation.hidden=true;calculation.dataset.node=n.id;calculation.dataset.operation=operation;
     const equation=document.createElement('span');equation.className='projection-equation';calculation.appendChild(equation);
-    const abstract=document.createElement('span');abstract.className='projection-sum-symbol';abstract.textContent=paired?'×':'∑';abstract.setAttribute('aria-hidden','true');calculation.appendChild(abstract);
+    const abstract=document.createElement('span');abstract.className='projection-sum-symbol';abstract.textContent=paired?operator:'∑';abstract.setAttribute('aria-hidden','true');calculation.appendChild(abstract);
     const factor=v=>v<0?'('+fmt(v)+')':fmt(v),terms=[];
-    (paired?[input,other]:input).forEach((_,i)=>{if(i)equation.appendChild(document.createTextNode(paired?' × ':' + '));const term=document.createElement('span');term.style.color=colorHex(paired?art.pairColors[i]:art.featureColor(i));equation.appendChild(term);terms.push(term);});
+    (paired?[input,other]:input).forEach((_,i)=>{if(i)equation.appendChild(document.createTextNode(paired?' '+operator+' ':' + '));const term=document.createElement('span');term.style.color=colorHex(paired?pairTones[i]:art.featureColor(i));equation.appendChild(term);terms.push(term);});
     const sum=document.createElement('b');sum.style.opacity='0';equation.appendChild(sum);overlay.appendChild(calculation);
     const updateEquation=column=>{
      const operands=paired?[input[column],other[column]]:[...input,...weightsFor(n.id).map(w=>w[column])];
@@ -500,9 +509,9 @@ try{
      if(p.worked){
       if(p.paired){
        p.otherMesh.visible=visible&&inputAlpha>0;
-       art.routeMultiplyPacket(p.node.id,p.mesh,tt,0);art.routeMultiplyPacket(p.node.id,p.otherMesh,tt,1);
+       art.routePairedPacket(p.node.id,p.mesh,tt,0);art.routePairedPacket(p.node.id,p.otherMesh,tt,1);
        // Once the values reach their sockets, leave only the token name above
-       // the operator. The local two-factor equation carries the arithmetic.
+       // the operator. The local paired equation carries the arithmetic.
        const entering=1-ramp(progress,.18,.35),leaving=ramp(progress,.8,.94);
        p.cells.style.opacity=String(entering);p.after.style.opacity=String(leaving);p.morph.style.width=(p.beforeWidth*entering+p.afterWidth*leaving)+'px';
       }else art.routeProjectionPacket(p.node.id,p.mesh,progress,p.p,p.path.getPoint(.12));

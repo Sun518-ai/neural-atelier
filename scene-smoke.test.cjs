@@ -176,6 +176,30 @@ test('SiLU cards connect each input to its output and carry the same example int
  }
  assert.deepEqual([...app.c.I18n.missing],[]);
 });
+test('residual cards and the lesson explain baseline plus update with the actual shared example',async()=>{
+ const app=await boot(),M=app.c.NeuralPrologue,doc=app.document,round=v=>Number(v.toFixed(2));
+ for(const language of ['zh','en']){
+  app.c.I18n.setPreference(language);
+  for(const level of ['residual','ffn']){
+   app.api.switchLevel(level);const state=M.solutions(level);app.api.setState(state);app.api.getWorld().rebuild();
+   const saved=JSON.stringify(state),ev=M.evaluate(state,[1,0]),source=level==='residual'?'X':'R';
+   app.api.getWorld().focus('add');const card=doc.querySelector('.card-add-example');assert.ok(card);
+   assert.equal(doc.querySelector('#card-formula').textContent,`Y = ${source} + F`);
+   for(const [symbol,values]of [[source,ev.values.R],['F',ev.values.down],['Y',ev.values.add]]){
+    const cells=[...card.querySelectorAll(`[data-symbol="${symbol}"] i`)];assert.deepEqual(cells.map(c=>Number(c.textContent)),Array.from(values,round));
+    assert.deepEqual(cells.flatMap((c,i)=>c.classList.contains('example-focus')?[i]:[]),[0]);
+   }
+   assert.equal(Number(card.querySelector('[data-role="baseline"]').textContent),1);assert.equal(Number(card.querySelector('[data-role="update"]').textContent),round(ev.values.down[0]));
+   assert.equal(Number(card.querySelector('.card-add-step b').textContent),round(ev.values.add[0]));assert.equal(card.querySelector('.card-add-zero code').textContent,`F = [0, 0] → Y = ${source}`);
+   const reason=doc.querySelector('#mission-reason');assert.equal(reason.hidden,level!=='residual');
+   if(level==='residual')for(const [role,values]of [['baseline',ev.values.R],['update',ev.values.down],['result',ev.values.add]])assert.deepEqual(JSON.parse(reason.querySelector(`[data-role="${role}"] code`).textContent),Array.from(values,round));
+   else assert.equal(reason.querySelector('.residual-example'),null);
+   if(language==='en'){assert.doesNotMatch(doc.querySelector('#module-card').textContent,/[\u3400-\u9fff]/);assert.doesNotMatch(reason.textContent,/[\u3400-\u9fff]/);}
+   doc.querySelector('#card-close').onclick();assert.equal(JSON.stringify(app.api.getState()),saved);
+  }
+ }
+ assert.deepEqual([...app.c.I18n.missing],[]);
+});
 test('all matrix labels switch abstraction together and a close-up preserves the board mode',async()=>{
  const app=await boot();app.api.switchLevel('residual');app.api.setState(app.c.NeuralPrologue.solutions('residual'));app.api.getWorld().rebuild();
  const faces=[];app.scenes.at(-1).traverse(o=>{if(o.userData.detailText)faces.push(o);});
@@ -404,43 +428,101 @@ test('elementwise multiplication pairs both real inputs and keeps each product u
  app.scenes.at(-1).traverse(o=>{if(o.userData.multiplyFeature!=null)assert.equal(o.visible,false);if(o.userData.node==='multiply')assert.equal(o.userData.activePair,null);assert.equal(o.userData.processingSecondary,undefined,'the extra input tray is removed at completion');});
 });
 
-test('every elementwise pair uses the same pace and obeys the speed slider',async()=>{
- let app,runIndex=0;const runs=[new Map(),new Map()],departures=[[],[]];
- app=await boot({reduced:false,frameMs:20,onFrame:({document,now})=>{
-  if(!app)return;const label=document.querySelector('.processing-packet[data-node="multiply"][data-row="2"]'),wire=document.querySelector('.packet[data-motion="wire"][data-from="multiply"][data-row="2"]');
-  if(wire&&!wire.hidden)departures[runIndex].push(now);
-  if(!label||label.hidden)return;
-  app.scenes.at(-1).traverse(o=>{if(!o.visible||o.userData.multiplyFeature==null)return;const i=o.userData.multiplyFeature;if(!runs[runIndex].has(i))runs[runIndex].set(i,[]);runs[runIndex].get(i).push(now);});
+test('residual addition joins both actual inputs, shows each sum and gathers the completed vector',async()=>{
+ let app;const sums=new Map(),cases=new Set(),arrivals=new Map(),trails=new Map(),counts=new Set();let gathering=0;
+ app=await boot({reduced:false,frameMs:50,onFrame:({document})=>{
+  if(!app)return;const label=document.querySelector('.processing-packet[data-node="add"]');if(!label)return;
+  const scene=app.scenes.at(-1),unit=scene.children.flatMap(o=>o.children).find(o=>o.userData.node==='add'),node=app.api.getState().nodes.find(n=>n.id==='add');
+  if(!unit)return;
+  const sample=label.dataset.row==='validation'?Number(document.querySelector('#pass-count').textContent.split('/')[0]):Number(label.dataset.row);
+  for(const el of document.querySelectorAll('.packet[data-motion="wire"][data-to="add"]')){
+   if(el.hidden)continue;const slot=node.links.indexOf(el.dataset.from),mesh=scene.children.find(o=>o.userData.packet&&o.userData.from===el.dataset.from&&o.userData.to==='add');
+   const port=new app.c.T.Vector3(-1.12,.68,slot?.55:-.55).add(unit.position);
+   if(mesh.position.distanceTo(port)<.2){if(!arrivals.has(sample))arrivals.set(sample,new Set());arrivals.get(sample).add(slot);}
+  }
+  if(label.hidden)return;assert.equal(arrivals.get(sample)?.size,2,'both incoming vectors reach their own ports before addition');
+  const M=app.c.NeuralPrologue,ev=M.evaluate(app.api.getState(),M.samples[sample].v),inputs=node.links.map(id=>ev.values[id]);
+  const meshes=[scene.children.find(o=>o.userData.processing==='add'),scene.children.find(o=>o.userData.processingSecondary==='add')],calc=document.querySelector('.projection-calculation[data-node="add"]'),out=scene.children.find(o=>o.userData.processingOutput==='add');
+  for(const [slot,mesh]of meshes.entries()){
+   if(!mesh.visible)continue;
+   for(const {bar}of mesh.userData.featureRoutes){
+    const i=bar.userData.feature;assert.equal(bar.userData.value,inputs[slot][i]);if(bar.material.opacity<=0)continue;
+    const pos=bar.getWorldPosition(new app.c.T.Vector3()),key=sample+':'+slot+':'+i;
+    if(!trails.has(key))trails.set(key,[]);trails.get(key).push(pos);
+    if(bar.userData.mappingProgress===1){
+     assert.ok(Math.abs(pos.z-(unit.position.z+(i-.5)*.65))<1e-9);
+     const partner=meshes[1-slot].userData.featureRoutes[i].bar;assert.notEqual(bar.material.color.getHex(),partner.material.color.getHex());
+     if(bar.userData.pairProgress>.99)assert.ok(pos.distanceTo(partner.getWorldPosition(new app.c.T.Vector3()))<.015,'matching addends meet at the same + ring');
+    }
+   }
+  }
+  unit.traverse(o=>{
+   if(o.userData.additionFeature==null||!o.visible)return;const d=o.userData,i=d.additionFeature;
+   assert.equal(d.operation,'add');assert.equal(d.inputA,inputs[0][i]);assert.equal(d.inputB,inputs[1][i]);assert.equal(d.value,d.inputA+d.inputB);
+   sums.set(sample+':'+i,d.value);if(d.inputB<0)cases.add('decrease');if(d.inputB>0)cases.add('increase');if(d.inputA===0)cases.add('zero baseline');
+  });
+  if(!calc.hidden){
+   const i=Number(calc.dataset.column),fmt=v=>Number(v.toFixed(2)).toString(),term=v=>v<0?'('+fmt(v)+')':fmt(v),values=[inputs[0][i],inputs[1][i],ev.values.add[i]],rounded=values.some(v=>Math.abs(v-Number(v.toFixed(2)))>1e-9);
+   assert.equal(calc.dataset.operation,'add');assert.equal(calc.querySelector('.projection-sum-symbol').textContent,'+');
+   assert.equal(calc.querySelector('.projection-equation').textContent,term(values[0])+' + '+term(values[1])+(rounded?' ≈ ':' = ')+fmt(values[2]));
+   assert.equal(document.querySelectorAll('.projection-result[data-node="add"]:not([hidden])').length,i);
+   if(Number(calc.style.getPropertyValue('--calculation-focus'))>.9){
+    assert.equal(unit.userData.activePair,i);
+    for(const selector of ['[data-input="add:0"]','[data-input="add:1"]','[data-output="add"]'])assert.ok(Number(document.querySelector(selector).style.opacity)<.12);
+   }
+  }
+  if(out.visible){
+   const bars=out.children.filter(o=>o.visible&&o.userData.feature!=null);counts.add(bars.length);
+   if(out.userData.gather>0){gathering++;assert.equal(bars.length,2,'both sums are ready before the outgoing vector gathers');}
+   for(const bar of bars){assert.equal(bar.userData.value,ev.values.add[bar.userData.feature]);if(out.userData.gather===0)assert.ok(Math.abs(bar.getWorldPosition(new app.c.T.Vector3()).z-(unit.position.z+(bar.userData.feature-.5)*.65))<1e-9);}
+  }
  }});
- app.api.switchLevel('gating');app.api.setState(app.c.NeuralPrologue.solutions('gating'));app.api.getWorld().rebuild();
- for(const rate of [.25,.5]){
-  const slider=app.document.querySelector('#playback-speed');slider.value=String(rate);slider.dispatchEvent(new app.window.Event('input',{bubbles:true}));await app.api.run();
-  const spans=runs[runIndex];assert.equal(spans.size,4);const widths=[...spans.values()].map(a=>a.at(-1)-a[0]);assert.ok(Math.max(...widths)-Math.min(...widths)<=20);
-  for(let i=1;i<4;i++)assert.ok(spans.get(i-1).at(-1)<spans.get(i)[0]);
-  assert.ok(departures[runIndex][0]>spans.get(3).at(-1));runIndex++;
- }
- for(let i=0;i<4;i++){const width=r=>runs[r].get(i).at(-1)-runs[r].get(i)[0];assert.ok(Math.abs(width(0)-2*width(1))<=40);}
+ app.api.switchLevel('residual');app.api.setState(app.c.NeuralPrologue.solutions('residual'));app.api.getWorld().rebuild();await app.api.run();
+ assert.equal(sums.size,10);assert.deepEqual([...cases].sort(),['decrease','increase','zero baseline']);assert.deepEqual([...counts].filter(Boolean).sort(),[1,2]);assert.ok(gathering>0);
+ for(const trail of trails.values())assert.ok(trail.every((p,i)=>!i||p.distanceTo(trail[i-1])<.4),'addends move continuously into their sockets');
+ assert.equal(app.document.querySelectorAll('#test-results .pass').length,5);assert.equal(app.document.querySelectorAll('.packet,.projection-calculation,.projection-result').length,0);
+ app.scenes.at(-1).traverse(o=>{if(o.userData.additionFeature!=null)assert.equal(o.visible,false);if(o.userData.node==='add')assert.equal(o.userData.activePair,null);assert.equal(o.userData.processingSecondary,undefined);});
 });
 
-test('paused multiplication keeps both inputs, products and formulas stable across camera and language changes',async()=>{
+for(const [stage,kind,featureKey,inputKey,count,glyph]of [['gating','multiply','multiplyFeature','multiplyInput',4,'×'],['residual','add','additionFeature','additionInput',2,'+']]){
+test(`every ${kind} pair uses the same pace and obeys the speed slider`,async()=>{
+ let app,runIndex=0;const runs=[new Map(),new Map()],departures=[[],[]];
+ app=await boot({reduced:false,frameMs:20,onFrame:({document,now})=>{
+  if(!app)return;const label=document.querySelector(`.processing-packet[data-node="${kind}"][data-row="2"]`),wire=document.querySelector(`.packet[data-motion="wire"][data-from="${kind}"][data-row="2"]`);
+  if(wire&&!wire.hidden)departures[runIndex].push(now);
+  if(!label||label.hidden)return;
+  app.scenes.at(-1).traverse(o=>{if(!o.visible||o.userData[featureKey]==null)return;const i=o.userData[featureKey];if(!runs[runIndex].has(i))runs[runIndex].set(i,[]);runs[runIndex].get(i).push(now);});
+ }});
+ app.api.switchLevel(stage);app.api.setState(app.c.NeuralPrologue.solutions(stage));app.api.getWorld().rebuild();
+ for(const rate of [.25,.5]){
+  const slider=app.document.querySelector('#playback-speed');slider.value=String(rate);slider.dispatchEvent(new app.window.Event('input',{bubbles:true}));await app.api.run();
+  const spans=runs[runIndex];assert.equal(spans.size,count);const widths=[...spans.values()].map(a=>a.at(-1)-a[0]);assert.ok(Math.max(...widths)-Math.min(...widths)<=20);
+  for(let i=1;i<count;i++)assert.ok(spans.get(i-1).at(-1)<spans.get(i)[0]);
+  assert.ok(departures[runIndex][0]>spans.get(count-1).at(-1));runIndex++;
+ }
+ for(let i=0;i<count;i++){const width=r=>runs[r].get(i).at(-1)-runs[r].get(i)[0];assert.ok(Math.abs(width(0)-2*width(1))<=40);}
+});
+
+test(`paused ${kind} keeps inputs, results and formulas stable across camera and language changes`,async()=>{
  let app,phase=0,frames=0,snapshot,restart;
- const visual=()=>{const data=[];app.scenes.at(-1).traverse(o=>{if(o.userData.multiplyFeature!=null||o.userData.multiplyInput!=null)data.push([o.visible,o.position.toArray(),o.scale.toArray(),o.material.opacity,o.material.emissiveIntensity]);});return JSON.stringify(data);};
+ const visual=()=>{const data=[];app.scenes.at(-1).traverse(o=>{if(o.userData[featureKey]!=null||o.userData[inputKey]!=null)data.push([o.visible,o.position.toArray(),o.scale.toArray(),o.material.opacity,o.material.emissiveIntensity]);});return JSON.stringify(data);};
  const wheel=deltaY=>{const e=new app.window.Event('wheel',{bubbles:true,cancelable:true});e.deltaY=deltaY;app.document.querySelector('#scene').dispatchEvent(e);};
  app=await boot({reduced:false,frameMs:40,onFrame:({document})=>{
-  if(!app)return;const calc=document.querySelector('.projection-calculation[data-node="multiply"]');if(!calc||calc.hidden)return;
+  if(!app)return;const calc=document.querySelector(`.projection-calculation[data-node="${kind}"]`);if(!calc||calc.hidden)return;
   if(!phase&&calc.dataset.column==='1'&&Number(calc.querySelector('b').style.opacity)>.1){phase=1;app.api.togglePause();snapshot=visual();return;}
   if(phase!==1)return;assert.equal(visual(),snapshot);frames++;
-  if(frames===2){const scale=Number(calc.style.getPropertyValue('--calculation-scale'));wheel(2000);assert.equal(calc.dataset.detail,'abstract');assert.ok(Number(calc.style.getPropertyValue('--calculation-scale'))<scale);assert.equal(calc.querySelector('.projection-sum-symbol').textContent,'×');}
+  if(frames===2){const scale=Number(calc.style.getPropertyValue('--calculation-scale'));wheel(2000);assert.equal(calc.dataset.detail,'abstract');assert.ok(Number(calc.style.getPropertyValue('--calculation-scale'))<scale);assert.equal(calc.querySelector('.projection-sum-symbol').textContent,glyph);}
   if(frames===3){wheel(-2000);assert.equal(calc.dataset.detail,'full');app.c.I18n.setPreference('en');assert.equal(visual(),snapshot,'language rebuild restores the same pair and product');}
   if(frames===5){
    const saved=JSON.stringify(app.api.getState());app.api.run();assert.equal(app.document.querySelectorAll('.packet,.projection-calculation,.projection-result').length,0);
-   app.scenes.at(-1).traverse(o=>{if(o.userData.multiplyFeature!=null)assert.equal(o.visible,false);assert.equal(o.userData.processingSecondary,undefined);});
+   app.scenes.at(-1).traverse(o=>{if(o.userData[featureKey]!=null)assert.equal(o.visible,false);assert.equal(o.userData.processingSecondary,undefined);});
    assert.equal(JSON.stringify(app.api.getState()),saved);phase=2;restart=app.api.run();
   }
  }});
- app.api.switchLevel('gating');app.api.setState(app.c.NeuralPrologue.solutions('gating'));app.api.getWorld().rebuild();await app.api.run();await restart;
+ app.api.switchLevel(stage);app.api.setState(app.c.NeuralPrologue.solutions(stage));app.api.getWorld().rebuild();await app.api.run();await restart;
  assert.equal(phase,2);assert.equal(app.document.querySelectorAll('#test-results .pass').length,5);
 });
+}
 
 test('duplicated multiplication modules animate their actual wiring even in an incorrect circuit',async()=>{
  let app;const seen=new Set();
@@ -460,6 +542,27 @@ test('duplicated multiplication modules animate their actual wiring even in an i
  app.api.setState(s);app.api.getWorld().rebuild();await app.api.run();assert.deepEqual([...seen],['multiply','multiply-2']);assert.equal(app.document.querySelectorAll('#test-results .fail').length,1);
 });
 
+test('duplicate additions show their actual addends and a visible zero sum in an incorrect circuit',async()=>{
+ let app;const seen=new Set(),zeros=new Set();
+ app=await boot({reduced:false,frameMs:80,onFrame:({document})=>{
+  if(!app)return;const M=app.c.NeuralPrologue,state=app.api.getState();
+  for(const id of ['add','add-2']){
+   const label=document.querySelector(`.processing-packet[data-node="${id}"]`);if(!label||label.hidden)continue;
+   const node=state.nodes.find(n=>n.id===id),ev=M.evaluate(state,M.samples[0].v),calc=document.querySelector(`.projection-calculation[data-node="${id}"]`);
+   assert.equal(calc.dataset.operation,'add');
+   app.scenes.at(-1).children.flatMap(o=>o.children).find(o=>o.userData.node===id).traverse(o=>{
+    if(o.userData.additionFeature==null||!o.visible)return;const d=o.userData,i=d.additionFeature;
+    assert.equal(d.inputA,ev.values[node.links[0]][i]);assert.equal(d.inputB,ev.values[node.links[1]][i]);assert.equal(d.value,ev.values[id][i]);seen.add(id);
+    if(d.value===0){assert.ok(o.material.wireframe);assert.ok(o.scale.x>=.6);zeros.add(id);}
+   });
+  }
+ }});
+ app.api.switchLevel('ffn');const M=app.c.NeuralPrologue,state=M.initial('ffn');
+ assert.ok(M.addNode(state,'add',-4.7,-2));assert.ok(M.addNode(state,'add',-1.4,-2));
+ for(const edge of [['R','add',0],['Z','add',1],['add','add-2',0],['R','add-2',1],['add-2','sink',0]])assert.equal(M.connect(state,...edge),null);
+ app.api.setState(state);app.api.getWorld().rebuild();await app.api.run();
+ assert.deepEqual([...seen],['add','add-2']);assert.deepEqual([...zeros],['add','add-2']);assert.equal(app.document.querySelectorAll('#test-results .fail').length,1);
+});
 test('stopping and immediately restarting during processing clears effects without cancelling the new run',async()=>{
  let app,restarted=false,restart;
  app=await boot({reduced:false,frameMs:20,onFrame:({document})=>{
