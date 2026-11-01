@@ -2,11 +2,36 @@ const test=require('node:test'),assert=require('node:assert/strict'),vm=require(
 const ctx={console,navigator:{languages:['zh-CN']}};ctx.window=ctx;vm.createContext(ctx);for(const f of ['locales/en.js','i18n.js','music.js','shell.js','model.js','campaign.js','engine-model.js'])vm.runInContext(fs.readFileSync(__dirname+'/'+f,'utf8'),ctx,{filename:f});
 const M=ctx.NeuralPrologue;
 const close=(a,b,tol=1e-9)=>a.length===b.length&&a.every((x,i)=>Number.isFinite(x)&&Math.abs(x-b[i])<=tol);
+test('random arrangements fit the table, keep modules apart, and do not change the circuit',()=>{
+ const rng=seed=>()=>((seed=(seed*1664525+1013904223)>>>0)/4294967296);
+ for(const id of Object.keys(M.levels)){
+  const s=M.solutions(id),links=JSON.stringify(s.nodes.map(n=>n.links)),a=JSON.stringify(M.arrange(s,rng(2)).nodes.map(n=>[n.x,n.z]));
+  M.arrange(s,rng(71));if(s.nodes.length)assert.notEqual(JSON.stringify(s.nodes.map(n=>[n.x,n.z])),a);
+  assert.equal(JSON.stringify(s.nodes.map(n=>n.links)),links);const b=M.bounds(M.levels[id]);
+  for(const n of s.nodes){assert.ok(n.x>=b.left&&n.x<=b.right&&n.z>=b.back&&n.z<=b.front);for(const m of s.nodes)if(n!==m)assert.ok(Math.abs(n.x-m.x)>=2.65||Math.abs(n.z-m.z)>=2.9,id+' overlaps');}
+ }
+});
+test('disconnect removes one selected branch and reconnect restores the computation',()=>{
+ const s=M.solutions('gating');assert.ok(M.disconnect(s,'multiply',0));assert.deepEqual(Array.from(s.nodes.find(n=>n.id==='multiply').links),[null,'up']);assert.equal(s.sink,'multiply');assert.equal(M.disconnect(s,'multiply',0),false);
+ assert.equal(M.connect(s,'silu','multiply',0),null);assert.ok(close(M.evaluate(s,[1,1]).output,M.reference([1,1],'gating')));
+ assert.ok(M.disconnect(s,'sink',0));assert.equal(s.sink,null);assert.equal(s.nodes.find(n=>n.id==='multiply').links[0],'silu');
+});
+test('construction levels can be built from the shelf, reject invalid placement, and remove dependent wires',()=>{
+ for(const id of ['ffn','attention','block']){
+  const s=M.initial(id),solution=M.solutions(id);assert.equal(s.nodes.length,0);assert.equal(s.sink,null);
+  const first=solution.nodes[0];assert.equal(M.addNode(s,first.id,999,0),false);assert.equal(M.addNode(s,'unknown',0,0),false);
+  for(const n of solution.nodes)assert.equal(M.addNode(s,n.id,n.x,n.z),true);assert.equal(M.addNode(s,first.id,0,0),false);
+  for(const n of solution.nodes)for(const [port,from]of n.links.entries())assert.equal(M.connect(s,from,n.id,port),null);
+  assert.equal(M.connect(s,solution.sink,'sink',0),null);const input=M.samplesFor(id)[0].v;assert.ok(close(M.evaluate(s,input).output,M.reference(input,id)));
+  assert.ok(M.removeNode(s,solution.sink));assert.equal(s.sink,null);assert.ok(s.nodes.every(n=>!n.links.includes(solution.sink)));
+  const removed=solution.nodes.find(n=>n.id===solution.sink);assert.equal(M.addNode(s,removed.id,first.x,first.z),false,'overlap must be rejected');assert.equal(M.addNode(s,removed.id,removed.x,removed.z),true);
+ }
+});
 for(const id of Object.keys(M.levels))test(id+' reference circuit matches three / five inputs',()=>{
  const s=M.solutions(id);if(M.levels[id].engine)s.settings.precision=16;
  for(const t of M.samplesFor(id).slice(0,M.levels[id].sampleCount)){const e=M.evaluate(s,t.v);assert.equal(e.error,null);assert.ok(close(e.output,M.reference(t.v,id)),id+': '+e.output+' ≠ '+M.reference(t.v,id));}
 });
-test('every level reachable once through next, with no dangling links',()=>{let id='wire',ids=[];while(id){assert.ok(!ids.includes(id));ids.push(id);id=M.levels[id].next;}assert.equal(ids.length,Object.keys(M.levels).length);for(const id of ids){const s=M.initial(id),allowed=new Set([...M.levels[id].nodes,...M.levels[id].sources]);for(const n of s.nodes)for(const link of n.links)assert.ok(link===null||allowed.has(link));}});
+test('main and bonus tracks are separate, complete and have no dangling links',()=>{const visited=[];for(const [track,route]of Object.entries(M.routes)){let id=route.ids[0],ids=[];while(id){assert.ok(!visited.includes(id));assert.equal(M.levels[id].track,track);visited.push(id);ids.push(id);id=M.levels[id].next;}assert.deepEqual(ids,Array.from(route.ids));}assert.equal(visited.length,Object.keys(M.levels).length);assert.equal(M.levels.autoregressive.next,null);assert.equal(M.routes.main.ids.length,16);assert.equal(M.routes.engine.ids.length,9);for(const id of visited){const s=M.initial(id),allowed=new Set([...s.nodes.map(n=>n.id),...M.levels[id].sources]);for(const n of s.nodes)for(const link of n.links)assert.ok(link===null||allowed.has(link));}});
 test('causal attention cannot read future V',()=>{const s=M.solutions('attention'),a=M.evaluate(s,[1,0,0,1,1,1]),b=M.evaluate(s,[1,0,0,1,-8,3]);assert.ok(close(a.output.slice(0,4),b.output.slice(0,4)));const weights=a.values.softmax;for(let i=0;i<3;i++){assert.ok(Math.abs(weights.slice(i*3,i*3+3).reduce((a,b)=>a+b,0)-1)<1e-12);for(let j=i+1;j<3;j++)assert.equal(weights[i*3+j],0);}});
 test('RoPE preserves each vector norm and position zero',()=>{const x=[2,3,4,5,-1,2],r=M.math.rotate(x);assert.deepEqual(Array.from(r.slice(0,2)),[2,3]);for(let i=0;i<3;i++)assert.ok(Math.abs(r[2*i]**2+r[2*i+1]**2-x[2*i]**2-x[2*i+1]**2)<1e-12);});
 test('same dimensions but wrong activation branch fails',()=>{const s=M.solutions('gating');s.nodes.find(n=>n.id==='silu').links=['up'];s.nodes.find(n=>n.id==='multiply').links=['silu','gate'];assert.ok(M.samples.some(t=>!close(M.evaluate(s,t.v).output,M.reference(t.v,'gating'))));});

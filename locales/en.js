@@ -1,5 +1,6 @@
 // English copy. Chinese source phrases are stable lookup keys.
 globalThis.AtelierEnglish = {
+  "番外": "Bonus",
   "返回首页": "Back to home",
   "线性投影": "Linear projection",
   "每一列权重生成一个新特征：一个输入向量中的 2 个数，组合成 4 个数。": "Each weight column produces one output feature: combine the 2 input numbers into 4 output numbers.",
@@ -531,5 +532,30 @@ globalThis.AtelierEnglish = {
   "序章": "Prologue",
   "正式关卡": "Main chapter",
   "网络": "Network",
-  "引擎": "Engine"
+  "引擎": "Engine",
+  "主线 · Transformer": "Main · Transformer",
+  "番外 · 端侧推理": "Bonus · On-device inference",
+  "从向量与矩阵开始，亲手搭出 Attention、FFN 和逐词生成。": "Build attention, an FFN, and token-by-token generation, starting with vectors and matrices.",
+  "以 Qwen 27B、Kapitsa 与 Apple ANE 为背景的独立挑战，使用教学成本模型。": "Independent challenges inspired by Qwen 27B, Kapitsa, and Apple ANE, using a teaching cost model.",
+  "自行放置组件": "Place your own modules",
+  "组件架": "Module shelf",
+  "打乱摆放": "Shuffle layout",
+  "收回组件": "Return module",
+  "关卡路线": "Level tracks",
+  "删除连线": "Delete wire",
+  "已删除连线。": "Wire deleted.",
+  "关闭": "Close",
+  "，选择连线": ", select wire",
+  "点台面放置组件；Esc 取消。": "Click the workbench to place the module. Esc cancels.",
+  "这里放不下，换一处空位。": "Choose an empty spot with enough room.",
+  "组件已放置。": "Module placed.",
+  "组件已收回，相关连线已移除。": "Module returned; its wires were removed.",
+  "已打乱摆放，连线保持不变。": "Layout shuffled. Your wiring is preserved.",
+  "拖模块摆放 · 点连线删除 · 双击查看模块卡": "Drag modules · Click a wire to delete · Double-click a module for its card",
+  "主线包含 16 关：从向量、投影、激活、门控和残差开始，搭出 Attention、词表预测与逐词生成。端侧推理是独立的 9 关番外，探索 Qwen 27B、Kapitsa 与 Apple ANE 相关的调度、缓存和量化。这里使用固定手工权重、单头和缩小的向量。": "The 16-level main track starts with vectors, projections, activation, gating, and residuals, then builds attention, vocabulary prediction, and token-by-token generation. A separate 9-level bonus track explores scheduling, caching, and quantization inspired by Qwen 27B, Kapitsa, and Apple ANE. All calculations use fixed hand-written weights, one head, and small vectors.",
+  "<div class=\"campaign-complete\"><span>主线完成</span><h3>从向量，到逐词生成</h3><p>所有主线关卡都可以重玩。端侧推理的独立挑战在关卡菜单的番外中。</p></div>": "<div class=\"campaign-complete\"><span>Main track complete</span><h3>From vectors to token-by-token generation</h3><p>Replay any main level. The independent on-device inference challenges are in the bonus track of the level menu.</p></div>",
+  "番外 / ": "Bonus / ",
+  "搭出一段 FFN": "Build an FFN",
+  "从组件架选取模块，自行安排台面和线路。Z 已做归一化，R 是原输入；让出口匹配目标结果。": "Take modules from the shelf and arrange your own workbench and wiring. Z is normalized and R is the original input. Match the target output.",
+  "<div class=\"campaign-complete\"><span>番外完成</span><h3>从一个向量，到可运行的端侧引擎</h3><p>你已经完成数值计算、注意力、逐词生成，以及正确性、内存和速度的联合验收。所有关卡仍可重玩，继续比较不同调度方案。</p></div>": "<div class=\"campaign-complete\"><span>Bonus track complete</span><h3>Build an on-device inference engine</h3><p>Your circuit passed the numerical, memory, and speed checks. Replay the bonus challenges to try other scheduling strategies.</p></div>"
 };

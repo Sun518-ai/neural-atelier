@@ -2,6 +2,8 @@
 
 This prototype has 25 playable levels, using the existing Three.js tabletop, ports, wiring, module cards and runtime packets. The source is deliberately independent of real model weights and device APIs.
 
+The 16-level Transformer main track and 9-level on-device bonus track have separate navigation chains. The main finale never advances into hardware-specific exercises. Starting arrangements are randomized independently of the reference circuit; saved arrangements remain intact. FFN, full attention, and block assembly support partial inventories and player placement. Removing a module removes its incident wires, and undo restores both. SiLU's animated carriers interpolate from each real input to its computed output, with gate size driven by sigmoid(input); the interpolation is a visual transition, not additional model steps.
+
 ## Reference boundary
 
 Design reference inspected locally: Kapitsa checkout `kapitsa-perf-swiglu`, commit `fa1ea30fb1a88bba2977827441084bb836204baf`, with its README and `docs/numerical-history.md`. Those sources describe GPU/ANE collaboration for prefill and the distinction between prefill, decode, cached state and numerical tolerances. No measured performance values are copied into the game. This is a conceptual curriculum, not a reproduction of Kapitsa or Qwen3.8-27B.

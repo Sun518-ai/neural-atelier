@@ -24,7 +24,7 @@ The circuit you build determines the result. Run it to see data move through the
 
 ## From the first wire to an inference engine
 
-Each stage adds to the previous one:
+The **16-level main track** covers Transformer fundamentals. A separate **9-level bonus track** explores on-device inference inspired by Qwen 27B, Kapitsa, and Apple ANE. Finishing the main track does not send you into the bonus track; choose either from the level menu.
 
 | Stage | What you build and explore |
 | --- | --- |
@@ -39,7 +39,10 @@ The later puzzles add memory and execution-cost constraints to the numerical goa
 | Action | Control |
 | --- | --- |
 | Connect modules | Click a **round output port**, then a **square input port**, or drag between them. |
+| Delete a wire | Click the wire (or its connected input port), then **Delete wire**. **Delete / Backspace** also removes the selected wire. |
 | Arrange the workbench | Drag a module to move it. |
+| Try a different arrangement | **Shuffle layout** moves the modules without changing their wires. New starting layouts are randomized. |
+| Build from the shelf | In the FFN, full-attention, and Transformer-block challenges, drag modules from the **Module shelf**, or select one and click a free spot. **Return module** removes it and its wires. |
 | Explore the scene | Drag empty space to rotate; scroll to zoom. |
 | Inspect a module | Double-click it to open its card. |
 | Test your circuit | Click **Run my network** and watch the vectors move. |
@@ -49,6 +52,8 @@ The later puzzles add memory and execution-cost constraints to the numerical goa
 **Settings** brings together language, animation speed, music, and volume. Language follows your browser preference unless you choose one manually. Runs start at **0.25×** by default so the computation is easy to follow; your chosen speed is remembered.
 
 The animated title screen introduces the workbench. Music starts after you enter and pauses while the tab is in the background. You can mute it or replay the introduction from Settings.
+
+SiLU has its own activation animation: values travel along curved channels and shrink according to their sigmoid gates. Matrix projections retain their weighted-contribution animation. Existing saves keep your placed modules and wiring; use **Shuffle layout** to rearrange them or **Reset** to start the level again.
 
 Progress and circuits are saved in this browser's `localStorage`. Links such as `#wire` or `#projection` select a level; they do not share your circuit or progress. The game requires a desktop browser with WebGL 2. Mobile layouts are not supported.
 

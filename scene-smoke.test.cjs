@@ -11,7 +11,7 @@ async function boot({reduced=true,frameMs=1000,onFrame=()=>{},languages=['zh-CN'
  for(const f of ['locales/en.js','i18n.js','music.js','shell.js','model.js','campaign.js','engine-model.js'])vm.runInContext(fs.readFileSync(__dirname+'/'+f,'utf8'),c,{filename:f});
  for(const f of ['module-cards.js','level-progress.js','scene-art.js'])vm.runInContext(fs.readFileSync(__dirname+'/'+f,'utf8').replaceAll('export ',''),c,{filename:f});
  let src=fs.readFileSync(__dirname+'/game.js','utf8').replace(/^import .*\n/gm,'').replace("const T=await import('./vendor/three.module.js');",'const T=window.T;').replace(/const \{createSceneArt\}=await import\('\.\/scene-art\.js\?v=[^']+'\);/,'');
- src+='\nwindow.testAPI={switchLevel,run,refresh,select,assignDevice,chooseOutput,chooseInput,getState:()=>state,setState:s=>state=s,getWorld:()=>world,getFault:()=>fault};';
+ src+='\nwindow.testAPI={switchLevel,run,refresh,select,assignDevice,chooseOutput,chooseInput,chooseModule,placeModule,getState:()=>state,setState:s=>state=s,getWorld:()=>world,getFault:()=>fault};';
  await vm.runInContext('(async()=>{'+src+'})()',c);
  assert.ok(c.testAPI.getWorld(),'3D boot failed');return {c,document,window,api:c.testAPI,scenes,time:()=>now};
 }
@@ -26,6 +26,34 @@ test('construct every 3D level, run its data through scene updates, open and clo
 });
 test('3D fault bubble and pin dismiss without losing recorded failure',async()=>{
  const app=await boot();app.api.switchLevel('vocabulary');await app.api.run();assert.ok(app.api.getFault());const b=app.document.querySelector('[data-dismiss-result]');assert.ok(b);b.dispatchEvent(new app.window.Event('click',{bubbles:true}));assert.equal(app.api.getFault(),null);assert.equal(app.document.querySelectorAll('.local-fault,.fault-pin').length,0);assert.ok(app.document.querySelector('#test-results .fail'));await app.api.run();assert.ok(app.document.querySelector('[data-dismiss-result]'));
+});
+
+test('select a cable, delete it with the visible action or keyboard, and undo it',async()=>{
+ const app=await boot();app.document.querySelector('#welcome').close();app.api.switchLevel('gating');app.api.setState(app.c.NeuralPrologue.solutions('gating'));app.api.getWorld().rebuild();
+ const selectedPath=()=>app.document.querySelector('.wire-targets path[data-wire-to="multiply"][data-wire-port="0"]');
+ selectedPath().dispatchEvent(new app.window.Event('click',{bubbles:true}));assert.ok(app.document.querySelector('[data-delete-wire]'));assert.equal(app.api.getState().nodes.find(n=>n.id==='multiply').links[0],'silu');
+ app.document.querySelector('[data-delete-wire]').dispatchEvent(new app.window.Event('click',{bubbles:true}));assert.equal(selectedPath(),null);assert.equal(app.document.querySelector('.wire-actions'),null);assert.equal(app.api.getState().nodes.find(n=>n.id==='multiply').links[1],'up');
+ app.document.querySelector('#undo').onclick();selectedPath().dispatchEvent(new app.window.Event('click',{bubbles:true}));const event=new app.window.Event('keydown',{bubbles:true});event.key='Delete';app.document.dispatchEvent(event);assert.equal(selectedPath(),null);
+});
+test('completed and cancelled wiring clear the dashed drag preview',async()=>{
+ const app=await boot();app.document.querySelector('#welcome').close();app.api.switchLevel('projection');app.document.querySelector('#scene').getBoundingClientRect=()=>({left:0,top:0,width:1400,height:760,right:1400,bottom:760});
+ const previews=()=>app.scenes.at(-1).children.filter(o=>o.material?.type==='LineDashedMaterial');
+ app.api.chooseOutput('R');app.api.getWorld().previewAt(650,340);assert.equal(previews().length,1);app.api.chooseInput('project',0);assert.equal(previews().length,0);
+ app.api.chooseOutput('project');app.api.getWorld().previewAt(800,380);assert.equal(previews().length,1);const event=new app.window.Event('keydown',{bubbles:true});event.key='Escape';app.document.dispatchEvent(event);assert.equal(previews().length,0);
+});
+test('SiLU carriers follow curved channels and shrink by the actual sigmoid gate',async()=>{
+ let app;const observed=new Map();let snapshots=0;
+ app=await boot({reduced:false,frameMs:20,onFrame:({document})=>{
+  const label=document.querySelector('.processing-packet[data-node="silu"]');if(!label||label.hidden)return;
+  const key=label.dataset.row;app.scenes.at(-1).traverse(o=>{
+   if(o.userData.activationFeature==null||!o.visible)return;const d=o.userData,id=key+':'+d.activationFeature;if(!observed.has(id))observed.set(id,[]);
+   assert.ok(Math.abs(d.outputValue-d.inputValue*d.sigmoid)<1e-12);assert.ok(Math.abs(d.value)<=Math.abs(d.inputValue)+1e-12);if(d.inputValue<0)assert.ok(d.value<0,'SiLU must not zero or flip negative inputs');
+   observed.get(id).push({scale:o.scale.x,x:o.position.x,y:o.position.y,phase:d.phase});snapshots++;
+  });
+ }});
+ app.api.switchLevel('activation');app.api.setState(app.c.NeuralPrologue.solutions('activation'));app.api.getWorld().rebuild();await app.api.run();assert.ok(snapshots>30);
+ const negative=observed.get('1:3');assert.ok(negative.length>4);assert.ok(negative.at(-1).scale<negative[0].scale*.6);assert.ok(negative.at(-1).x>negative[0].x);assert.ok(negative.at(-1).y>negative[0].y+.3);
+ app.scenes.at(-1).traverse(o=>{if(o.userData.activationFeature!=null)assert.equal(o.visible,false,'no lingering activation effect');});assert.equal(app.document.querySelectorAll('#test-results .pass').length,3);
 });
 
 test('first-level dashed guide demonstrates the connection without creating one and hides once used',async()=>{

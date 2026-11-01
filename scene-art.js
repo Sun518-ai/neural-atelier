@@ -72,7 +72,7 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   slab(g,2.05,2.4,.26,0,.07,0,color);slab(g,1.91,2.26,.08,0,.36,0,0xf4f5e9);
   const glow=box(g,1.6,.035,.055,0,.41,1.13,color,{emissive:color,emissiveIntensity:.18});
   const border=new T.Group();g.add(border);[[[-.96,.49,-1.12],[-.96,.49,-.78]],[[-.96,.49,-1.12],[-.62,.49,-1.12]],[[.96,.49,1.12],[.96,.49,.78]],[[.96,.49,1.12],[.62,.49,1.12]]].forEach(points=>tube(border,points,color,.018));
-  let outputs=[],inputs=[],connections=[],weightCells=[];
+  let outputs=[],inputs=[],connections=[],weightCells=[],activationChannels=[];
   if(d.type==='linear'){
    const w=weights[n.id],a=w.length,b=w[0].length,cw=1.5/b,ch=1.5/a;
    for(let i=0;i<a;i++)for(let j=0;j<b;j++){const x=(j-(b-1)/2)*cw,z=(i-(a-1)/2)*ch,c=w[i][j]<0?0xc89d70:w[i][j]===0?0xd7dfd4:color;const tile=box(g,cw*.84,.055+Math.abs(w[i][j])*.065,ch*.82,x,.49,z,c);const face=textTile(g,String(w[i][j]),cw*.8,ch*.76,x,.53+Math.abs(w[i][j])*.065,z,{bg:w[i][j]<0?'#d7b68b':w[i][j]===0?'#dfe5d9':'#d2dfcc',color:'#456052',size:63});weightCells.push({tile,face:face.mesh,i,weight:w[i][j]});}
@@ -85,7 +85,14 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
    }
   }else if(d.type==='activation'){
    const panel=box(g,1.5,.025,1.7,0,.57,0,0xe4cc9d,{transparent:true,opacity:.34,depthWrite:false});
-   for(let i=0;i<4;i++){const z=(i-1.5)*.42;neuron(g,-.65,.82,z,0xb6ab83);outputs.push(neuron(g,.65,1.12,z,color));const pts=[];for(let p=0;p<=20;p++){const x=-2+p*.2;pts.push([x*.31,.88+.16*(x/(1+Math.exp(-x))),z]);}tube(g,pts,0xb38649,.023);}
+   for(let i=0;i<4;i++){
+    const z=(i-1.5)*.42,pts=Array.from({length:33},(_,j)=>{const x=-3+j*6/32;return [x*.22,.92+.22*x/(1+Math.exp(-x)),z];});
+    inputs.push(neuron(g,...pts[0],0xb6ab83));outputs.push(neuron(g,...pts[32],color));
+    const channel=tube(g,pts,0xb38649,.026),gate=ring(g,.19,0,.92,z,color,.025);
+    const spark=new T.Mesh(sharedSphere,mat(color,{emissive:color,emissiveIntensity:1.6,transparent:true,depthWrite:false}));spark.visible=false;spark.userData={activationFeature:i};g.add(spark);
+    activationChannels.push({channel,gate,spark,i});
+   }
+   textTile(g,'x · σ(x)',1.2,.22,0,.64,1.02,{size:67,color:'#8b6739',bg:'#f0e7c8'});
   }else if(d.type==='multiply'){
    for(let i=0;i<4;i++){const z=(i-1.5)*.43;neuron(g,-.65,.84,z,0xaa94bd);neuron(g,-.22,1.22,z,0x79b5a8);outputs.push(neuron(g,.68,1.05,z,color));tube(g,[[-.65,.84,z],[.12,.96,z],[.68,1.05,z]],0xa894bb,.018);tube(g,[[-.22,1.22,z],[.12,.96,z],[.68,1.05,z]],color,.018);ring(g,.13,.12,.96,z,color,.02);}
   }else if(['score','mask','softmax','mix','attention'].includes(d.type)){
@@ -106,7 +113,7 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   }
   d.ins.forEach((dim,i)=>{const z=d.ins.length===2?(i?.55:-.55):0;box(g,.21,.17,.27,-1.08,.58,z,0x6e887c);for(let j=0;j<Math.min(dim,4);j++)box(g,.12,.02,.035,-1.08,.68,z+(j-(Math.min(dim,4)-1)/2)*.055,0xc6d7c3);});
   const sock=new T.Mesh(new T.CylinderGeometry(.15,.15,.18,20),mat(color));sock.rotation.z=Math.PI/2;sock.position.set(1.05,.68,0);g.add(sock);
-  units.set(n.id,{g,glow,outputs,inputs,connections,weightCells,links:n.links,color});return g;
+  units.set(n.id,{g,glow,outputs,inputs,connections,weightCells,activationChannels,links:n.links,color});return g;
  }
  function sync(values,depths,depth,selected,activeSample,results,busy,layout={},output=null){
   if(!busy)clearProcessing();
@@ -148,9 +155,17 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
    if(spark.visible){const tone=contribution<0?0xd6a578:color;spark.material.color.set(tone);spark.material.emissive.set(tone);spark.material.opacity=ramp(p,.2,.26)*(1-ramp(p,.7,.76));spark.scale.setScalar(.48+Math.min(2,Math.abs(contribution))*.15);spark.position.copy(mesh.geometry.parameters.path.getPoint(ramp(p,.2,.76)));}
   }
   for(const {tile,face,i,weight} of u.weightCells){const contribution=sequence?weight:input[i]*weight,lit=active&&Math.abs(contribution)>1e-9;tile.material.emissive.set(lit?color:0);tile.material.emissiveIntensity=lit?pulse*.8:0;face.material.color.set(0xffffff);if(lit)face.material.color.lerp(new T.Color(color),pulse*.22);}
+  for(const {channel,gate,spark,i} of u.activationChannels){
+   const from=input[i],to=output[i],sigmoid=1/(1+Math.exp(-from)),travel=ramp(p,.16,.84),transform=ramp(p,.35,.7),value=from+(to-from)*transform,tone=from<0?0xd6a578:color;
+   gate.scale.setScalar(1-(1-(.22+.78*sigmoid))*pulse);gate.material.emissive.set(tone);gate.material.emissiveIntensity=active?pulse*.85:0;
+   channel.material.emissive.set(tone);channel.material.emissiveIntensity=active?pulse*.9:0;
+   spark.visible=active&&p>=.16&&p<.86&&Math.abs(from)>1e-9;
+   Object.assign(spark.userData,{inputValue:from,outputValue:to,value,sigmoid,phase:transform});
+   if(spark.visible){spark.position.copy(channel.geometry.parameters.path.getPoint(travel));spark.scale.setScalar(.3+Math.min(3,Math.abs(value))*.5);spark.material.color.set(tone);spark.material.emissive.set(tone);spark.material.opacity=ramp(p,.16,.23)*(1-ramp(p,.78,.86));}
+  }
   u.outputs.forEach((o,i)=>{const v=sequence?1:output[i],size=Number.isFinite(v)?Math.abs(v)<1e-9?.55:1+Math.min(2,Math.abs(v))*.18:1;o.scale.setScalar(1+(size-1)*gathering);o.material.color.set(v<0?0xc79868:u.color);o.material.emissiveIntensity=.08+(active?1.3*gathering*(1-ramp(p,.9,1)):progress>=1?.35:0);});
  }
- function clearProcessing(){for(const u of units.values()){u.g.userData.processing=false;u.connections.forEach(c=>c.spark.visible=false);u.weightCells.forEach(({tile,face})=>{tile.material.emissiveIntensity=0;face.material.color.set(0xffffff);});}}
+ function clearProcessing(){for(const u of units.values()){u.g.userData.processing=false;u.connections.forEach(c=>c.spark.visible=false);u.activationChannels.forEach(({spark,gate,channel})=>{spark.visible=false;gate.scale.setScalar(1);gate.material.emissiveIntensity=0;channel.material.emissiveIntensity=0;});u.weightCells.forEach(({tile,face})=>{tile.material.emissiveIntensity=0;face.material.color.set(0xffffff);});}}
  // A single colour pulse identifies the departing row without moving its tray.
  function pulseSource(progress=1){
   const pulse=Math.pow(1-Math.min(1,Math.max(0,progress)/.65),2);

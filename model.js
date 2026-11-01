@@ -33,12 +33,27 @@ const levels={
   mission:I18n.t("让出口同时保留原值与变化"),description:I18n.t("桌上的变换已把 2 维展开成 4 维，再压回 2 维。目标是把这次变化加到原输入上；找出需要保留的那条路。"),summary:I18n.t("新增降维与残差相加。形状回到原宽度，才能把输入加回来。"),concept:I18n.t("降维与残差"),sourceTitle:I18n.t("输入 X"),sourceNote:'',outputTitle:I18n.t("残差特征 Y"),boardText:'RESIDUAL / 05',shape:'2 → 4 → 2 + 2',next:'ffn',
   hints:[I18n.t("一个圆形输出口可以连接多条线，不会消耗原来的向量。"),I18n.t("相加的两份向量需要同样长度；一份是原输入，一份是刚算出的变化。")]},
  ffn:{id:'ffn',chapter:I18n.t("正式关卡 / 01"),title:I18n.t("让一层醒来"),nodes:['gate','up','silu','multiply','down','add'],sources:['Z','R'],sinkDim:2,sampleCount:5,sourceX:-8.55,sinkX:9,zoom:1,
-  mission:I18n.t("修复断开的 FFN"),description:I18n.t("把前面练过的投影、激活、门控、降维与残差接成一段完整计算。Z 已做归一化，R 是需要保留的原输入。"),summary:I18n.t("把序章中的组件组合成完整 SwiGLU FFN。"),concept:I18n.t("完整 SwiGLU FFN"),sourceTitle:I18n.t("层输入 R"),sourceNote:I18n.t("上游 Attention 的输出特征"),outputTitle:I18n.t("本层特征 Y"),boardText:'FFN / SWIGLU',shape:'2 → 4 → 2',next:null,
+  mission:I18n.t("搭出一段 FFN"),description:I18n.t("从组件架选取模块，自行安排台面和线路。Z 已做归一化，R 是原输入；让出口匹配目标结果。"),summary:I18n.t("把序章中的组件组合成完整 SwiGLU FFN。"),concept:I18n.t("完整 SwiGLU FFN"),sourceTitle:I18n.t("层输入 R"),sourceNote:I18n.t("上游 Attention 的输出特征"),outputTitle:I18n.t("本层特征 Y"),boardText:'FFN / SWIGLU',shape:'2 → 4 → 2',next:null,
   initialLinks:{gate:['Z'],up:['Z']},
   hints:[I18n.t("圆口是输出，方口是输入；输入可以分叉给多个模块。"),I18n.t("SiLU 把门投影的数变成门值；门值和内容投影的数逐元素相乘。"),I18n.t("降维后的变换 F，需要加回进入 FFN 前的原始 R。")]}
 };
 function levelFor(state){return levels[state.levelId]||levels.ffn;}
-function initial(levelId='ffn'){const level=levels[levelId]||levels.ffn;return {version:1,levelId:level.id,...(level.engine?{settings:{...api.engineDefaults,...level.settings}}:{}),nodes:level.nodes.map(id=>{const d=definitions[id],p=level.positions?.[id];return {id,x:p?.[0]??d.x,z:p?.[1]??d.z,...(level.engine?{device:level.devices?.[id]||'gpu'}:{}),links:level.initialLinks?.[id]?[...level.initialLinks[id]]:d.ins.map(()=>null)};}),sink:level.initialSink||null};}
+function bounds(level){return {left:level.sourceX+2.8,right:level.sinkX-2.8,back:-(level.boardDepth||(level.id==='ffn'?11:7))/2+1.6,front:(level.boardDepth||(level.id==='ffn'?11:7))/2-1.6};}
+function shuffled(items,random=Math.random){const list=[...items];for(let i=list.length-1;i>0;i--){const j=Math.floor(random()*(i+1));[list[i],list[j]]=[list[j],list[i]];}return list;}
+function arrange(state,random=Math.random){
+ const b=bounds(levelFor(state)),count=state.nodes.length;if(!count)return state;
+ const maxCols=Math.max(1,Math.floor((b.right-b.left)/3.25)+1),cols=Math.min(maxCols,Math.ceil(Math.sqrt(count*1.5))),rows=Math.ceil(count/cols);
+ const dx=cols>1?Math.min(3.8,(b.right-b.left)/(cols-1)):0,dz=rows>1?Math.min(3.5,(b.front-b.back)/(rows-1)):0;
+ const slots=shuffled(Array.from({length:cols*rows},(_,i)=>[(b.left+b.right)/2+(i%cols-(cols-1)/2)*dx,(Math.floor(i/cols)-(rows-1)/2)*dz]),random);
+ state.nodes.forEach((n,i)=>{n.x=Math.max(b.left,Math.min(b.right,slots[i][0]+(random()-.5)*.24));n.z=Math.max(b.back,Math.min(b.front,slots[i][1]+(random()-.5)*.24));});return state;
+}
+function initial(levelId='ffn',{complete=false,random=Math.random}={}){const level=levels[levelId]||levels.ffn,empty=level.buildable&&!complete;
+ const state={version:1,levelId:level.id,palette:shuffled(level.nodes,random),...(level.engine?{settings:{...api.engineDefaults,...level.settings}}:{}),nodes:(empty?[]:level.nodes).map(id=>{const d=definitions[id];return {id,x:d.x??0,z:d.z??0,...(level.engine?{device:level.devices?.[id]||'gpu'}:{}),links:level.initialLinks?.[id]?[...level.initialLinks[id]]:d.ins.map(()=>null)};}),sink:empty?null:level.initialSink||null};return arrange(state,random);
+}
+function placement(state,id,x,z){const level=levelFor(state),b=bounds(level);if(!level.buildable||!level.nodes.includes(id)||state.nodes.some(n=>n.id===id))return null;if(!Number.isFinite(x)||!Number.isFinite(z)||x<b.left||x>b.right||z<b.back||z>b.front)return null;if(state.nodes.some(n=>Math.abs(n.x-x)<2.65&&Math.abs(n.z-z)<2.9))return null;return {id,x,z,links:definitions[id].ins.map(()=>null)};}
+function addNode(state,id,x,z){const n=placement(state,id,x,z);if(!n)return false;state.nodes.push(n);return true;}
+function removeNode(state,id){if(!levelFor(state).buildable||!state.nodes.some(n=>n.id===id))return false;state.nodes=state.nodes.filter(n=>n.id!==id);state.nodes.forEach(n=>n.links=n.links.map(k=>k===id?null:k));if(state.sink===id)state.sink=null;return true;}
+function disconnect(state,to,port){if(to==='sink'){if(!state.sink)return false;state.sink=null;return true;}const n=state.nodes.find(n=>n.id===to);if(!n?.links[port])return false;n.links[port]=null;return true;}
 const samples=[{word:I18n.t("我"),v:[1,0]},{word:I18n.t("爱"),v:[0,1]},{word:I18n.t("猫"),v:[1,1]},{word:I18n.t("新输入 A"),v:[-1,2]},{word:I18n.t("新输入 B"),v:[2,-.5]}];
 function reference(v,levelId='ffn'){
  if(levelId==='wire')return [...v];
@@ -63,5 +78,5 @@ function evaluate(state,v){const level=levelFor(state),context={state,level,inpu
  for(const node of state.nodes){visiting.clear();try{run(node.id);}catch{}}
  return {output,values,depths,order,error,bad};}
 function connect(state,from,to,port){const level=levelFor(state);if(!level.sources.includes(from)&&!state.nodes.some(n=>n.id===from))return I18n.t("没有找到这个端口");if(to!=='sink'&&!state.nodes.some(n=>n.id===to))return I18n.t("没有找到这个端口");const out=from==='R'||from==='Z'?(level.sourceDim||2):definitions[from]?.out,dim=to==='sink'?level.sinkDim:definitions[to]?.ins[port];if(!out||!dim)return I18n.t("没有找到这个端口");if(from===to)return I18n.t("不能把输出接回自己");if(out!==dim)return `${I18n.t("维度接不上：输出 ")}${out}${I18n.t(" 维，入口需要 ")}${dim}${I18n.t(" 维。")}`;if(to==='sink')state.sink=from;else state.nodes.find(n=>n.id===to).links[port]=from;return null;}
-const api={weights,norm,linear,silu,definitions,levels,levelFor,initial,samples,reference,evaluate,connect};if(typeof module!=='undefined'&&module.exports)module.exports=api;else scope.NeuralPrologue=api;
+const api={weights,norm,linear,silu,definitions,levels,levelFor,initial,samples,reference,evaluate,connect,disconnect,bounds,arrange,placement,addNode,removeNode};if(typeof module!=='undefined'&&module.exports)module.exports=api;else scope.NeuralPrologue=api;
 })(globalThis);
