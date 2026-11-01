@@ -1,5 +1,5 @@
-import {cardFor,exampleFor} from './module-cards.js?v=module-workshop-1';
-import {createProgress} from './level-progress.js?v=module-workshop-1';
+import {cardFor,exampleFor} from './module-cards.js?v=equal-projection-1';
+import {createProgress} from './level-progress.js?v=equal-projection-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -163,7 +163,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=module-workshop-1');
+ const {createSceneArt}=await import('./scene-art.js?v=equal-projection-1');
  const art=createSceneArt(T,scene,colors,{anisotropy:renderer.capabilities.getMaxAnisotropy()});art.surroundings(samples(),stage());
  const assembly=new T.Group(),wires=new T.Group();scene.add(assembly,wires);const neuronGeo=new T.SphereGeometry(.115,16,12);let elements=[],curves=[],packets=[],drag=null,preview=null,yaw=.05,pitch=.8,zoom=stage().zoom,lastDepth=-1;
  const cameraTarget=new T.Vector3();let focusId=null,overview=null,cameraFrame=0,transitioning=false,lastTap=null;
@@ -277,9 +277,15 @@ try{
  function worldPoint(x,y){const r=host.getBoundingClientRect();cursor.set((x-r.left)/r.width*2-1,-((y-r.top)/r.height*2-1));ray.setFromCamera(cursor,camera);const p=new T.Vector3();return ray.ray.intersectPlane(plane,p)?p:null;}
  function clearPackets(){packets.forEach(p=>{p.el.remove();p.calculation?.remove();for(const mesh of [p.mesh,p.outputMesh].filter(Boolean)){scene.remove(mesh);mesh.traverse(o=>{o.geometry?.dispose();o.material?.map?.dispose();o.material?.dispose();});}});packets=[];art.clearProcessing();render();}
  function animate(ev,ms,id){
-  clearPackets();lastDepth=-1;const max=2*Math.max(0,...Object.values(ev.depths))+1,reduced=matchMedia('(prefers-reduced-motion:reduce)').matches;if(reduced)ms=70;
+  clearPackets();lastDepth=-1;const reduced=matchMedia('(prefers-reduced-motion:reduce)').matches;if(reduced)ms=70;
   let previous=animationTime(),elapsed=0;
   const seq=!!stage().sequence,readyNodes=state.nodes.filter(n=>ev.values[n.id]);
+  const lastWave=Math.max(0,...Object.values(ev.depths)),starts=[0],ends=[0];
+  for(let depth=1;depth<=lastWave;depth++){
+   const durations=readyNodes.filter(n=>ev.depths[n.id]===depth).map(n=>!seq&&definition(n.id).type==='linear'?art.projectionFrame(0,ev.values[n.id].length).duration:1);
+   starts[depth]=ends[depth-1]+1;ends[depth]=starts[depth]+Math.max(1,...durations);
+  }
+  const max=ends[lastWave]+1;
   const clamp=x=>Math.max(0,Math.min(1,x)),ramp=(x,a,b)=>{const v=clamp((x-a)/(b-a));return v*v*(3-2*v);};
   function fadeMaterials(mesh){const materials=[];mesh.traverse(o=>{if(o.material){o.material.transparent=true;o.material.depthWrite=false;o.castShadow=false;materials.push(o.material);}});return materials;}
   function movingPacket(values,from,to,motion){
@@ -292,13 +298,13 @@ try{
    const mesh=art.packet(values,color,{sequence:seq});Object.assign(mesh.userData,{packet:motion==='wire',row:el.dataset.row,from,to});mesh.visible=false;scene.add(mesh);
    return {el,cells,mesh,color,materials:fadeMaterials(mesh),p:new T.Vector3(),motion};
   }
-  // Each depth now has a travel slot followed by a processing slot. A join
-  // waits for its last input before processing; only then may its result leave.
+  // Give every depth enough processing time for all output columns. Shorter
+  // operations hold their result; joins still wait for the final incoming branch.
   const processPaths=new Map(readyNodes.map(n=>[n.id,new T.CubicBezierCurve3(point(n.id,'in',0),new T.Vector3(n.x-.7,1.15,n.z),new T.Vector3(n.x+.7,1.15,n.z),point(n.id))]));
   curves.filter(c=>ev.values[c.from]).forEach(edge=>{
    const p=movingPacket(ev.values[edge.from],edge.from,edge.to,'wire');
    const perRow=!seq&&sample<3,departure=perRow&&['R','Z'].includes(edge.from)?new T.LineCurve3(rowEndpoint('source'),edge.curve.getPoint(0)):null,arrival=perRow&&edge.to==='sink'?new T.LineCurve3(edge.curve.getPoint(1),rowEndpoint('sink')):null;
-   const start=2*(ev.depths[edge.from]||0),processStart=processPaths.has(edge.to)?2*ev.depths[edge.to]-1:null;
+   const start=ends[ev.depths[edge.from]||0],processStart=processPaths.has(edge.to)?starts[ev.depths[edge.to]]:null;
    Object.assign(p,{edge,departure,arrival,start,processStart,end:processStart==null?start+1:processStart+(edge.index>0?.25:0)});
    p.p=departure?.getPoint(0)||edge.curve.getPoint(0);p.mesh.position.copy(p.p);packets.push(p);
   });
@@ -314,12 +320,12 @@ try{
    p.el.hidden=true;p.el.style.visibility='';morph.style.width=beforeWidth+'px';
    if(detailed){
     const calculation=document.createElement('span');calculation.className='projection-calculation';calculation.hidden=true;calculation.dataset.node=n.id;
-    const factor=v=>v<0?'('+fmt(v)+')':fmt(v);
-    input.forEach((value,i)=>{if(i)calculation.appendChild(document.createTextNode(' + '));const term=document.createElement('span');term.style.color=colorHex(art.featureColor(i));term.textContent=factor(value)+' × '+factor(weightsFor(n.id)[i][0]);calculation.appendChild(term);});
+    const factor=v=>v<0?'('+fmt(v)+')':fmt(v),terms=[];
+    input.forEach((value,i)=>{if(i)calculation.appendChild(document.createTextNode(' + '));const term=document.createElement('span');term.style.color=colorHex(art.featureColor(i));term.textContent=factor(value)+' × '+factor(weightsFor(n.id)[i][0]);calculation.appendChild(term);terms.push(term);});
     const sum=document.createElement('b'),rounded=[...input,...weightsFor(n.id).map(w=>w[0]),output[0]].some(v=>Math.abs(v-Number(v.toFixed(2)))>1e-9);
-    sum.textContent=(rounded?' ≈ ':' = ')+fmt(output[0]);sum.style.opacity='0';calculation.appendChild(sum);overlay.appendChild(calculation);Object.assign(p,{calculation,sum});
+    sum.textContent=(rounded?' ≈ ':' = ')+fmt(output[0]);sum.style.opacity='0';calculation.appendChild(sum);overlay.appendChild(calculation);Object.assign(p,{calculation,sum,terms,factor,column:0});
    }
-   Object.assign(p,{node:n,input,output,outputMesh,outputMaterials:fadeMaterials(outputMesh),morph,after,beforeWidth,afterWidth,start:2*ev.depths[n.id]-1,path:processPaths.get(n.id)});
+   Object.assign(p,{node:n,input,output,outputMesh,outputMaterials:fadeMaterials(outputMesh),morph,after,beforeWidth,afterWidth,start:starts[ev.depths[n.id]],end:ends[ev.depths[n.id]],path:processPaths.get(n.id)});
    p.p=p.path.getPoint(0);p.mesh.position.copy(p.p);p.outputMesh.position.copy(p.p);packets.push(p);
   });
   art.pulseSource(reduced?1:0);
@@ -330,15 +336,15 @@ try{
    const clock=animationTime(now);
    if(paused){previous=clock;requestAnimationFrame(tick);return;}
    elapsed+=Math.max(0,clock-previous)*playbackSpeed;previous=clock;
-   const t=Math.min(max,elapsed/ms);level=Math.floor(t/2);
+   const t=Math.min(max,elapsed/ms);level=0;while(level<lastWave&&t>=ends[level+1])level++;
    if(t>=max){clearPackets();labels();inspect();resolve();return;}
    if(level!==lastDepth){lastDepth=level;labels();inspect();}
    art.pulseSource(reduced?1:t);
    packets.forEach(p=>{
-    const tt=t-p.start,progress=clamp(tt);
+    const tt=t-p.start,timing=p.detailed?art.projectionFrame(tt,p.output.length):null,progress=timing?timing.phase:clamp(tt);
     if(p.motion==='process'){
      p.progress=tt;
-     const visible=tt>=0&&tt<1&&(!focusId||focusId===p.node.id),blend=ramp(progress,p.detailed?.76:.55,p.detailed?.9:.83);
+     const visible=tt>=0&&t<p.end&&(!focusId||focusId===p.node.id),blend=ramp(progress,p.detailed?.76:.55,p.detailed?.9:.83);
      p.el.hidden=!visible;p.el.dataset.phase=progress<.23?'enter':progress<.65?'compute':'gather';p.p=p.path.getPoint(progress);
      p.cells.style.opacity=String(1-blend);p.after.style.opacity=String(blend);p.morph.style.width=(p.beforeWidth+(p.afterWidth-p.beforeWidth)*blend)+'px';
      const inputAlpha=1-ramp(progress,p.detailed?.72:.2,p.detailed?.86:.42),outputAlpha=ramp(progress,p.detailed?.8:.65,p.detailed?.96:.9);
@@ -346,7 +352,13 @@ try{
      p.materials.forEach(m=>m.opacity=inputAlpha);p.outputMaterials.forEach(m=>m.opacity=outputAlpha);p.outputMesh.position.copy(p.p);
      if(p.detailed){
       art.routeProjectionPacket(p.node.id,p.mesh,progress,p.p,p.path.getPoint(.12));
-      p.calculation.hidden=!visible||progress<.38||progress>=.85;p.calculation.style.opacity=String(ramp(progress,.38,.43)*(1-ramp(progress,.8,.85)));p.sum.style.opacity=String(ramp(progress,.61,.67));
+      p.calculation.hidden=!visible||progress<.38||progress>=.85;p.calculation.style.opacity=String(ramp(progress,.38,.43)*(1-ramp(progress,.8,.85)));p.sum.style.opacity=String(ramp(tt,.61+timing.offset,.67+timing.offset));
+      p.calculation.dataset.column=String(timing.column);
+      if(p.column!==timing.column){
+       p.column=timing.column;p.terms.forEach((term,i)=>term.textContent=p.factor(p.input[i])+' × '+p.factor(weightsFor(p.node.id)[i][p.column]));
+       const rounded=[...p.input,...weightsFor(p.node.id).map(w=>w[p.column]),p.output[p.column]].some(v=>Math.abs(v-Number(v.toFixed(2)))>1e-9);
+       p.sum.textContent=(rounded?' ≈ ':' = ')+fmt(p.output[p.column]);
+      }
      }
      art.processing(p.node.id,tt,p.input,p.output,p.color,{sequence:seq,detailed:p.detailed});
     }else{

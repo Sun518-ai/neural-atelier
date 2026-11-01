@@ -55,7 +55,7 @@ The first five lessons provide fixed modules. **[Take a module](https://hacking.
 
 The animated title screen introduces the workbench. Music starts after you enter and pauses while the tab is in the background. You can mute it or replay the introduction from Settings.
 
-SiLU has its own activation animation: values travel along curved channels and shrink according to their sigmoid gates. For vector projections, individual components leave the horizontal tray and align with their weight rows. Matching colors and one worked sum explain the first output; the remaining outputs follow in a quicker pass. Existing saves keep your placed modules and wiring; drag modules to rearrange them or use **Reset** to start the level again.
+SiLU has its own activation animation: values travel along curved channels and shrink according to their sigmoid gates. For vector projections, individual components leave the horizontal tray and align with their weight rows. Matching colors and a worked sum follow each output in turn, all at the same pace. Use the speed setting to speed up the whole animation. Existing saves keep your placed modules and wiring; drag modules to rearrange them or use **Reset** to start the level again.
 
 Moving vectors share a small tray with features arranged left to right, matching the input and output racks. A sequence keeps its token rows separate. You can rotate and zoom during execution; wiring and module placement stay locked until the run stops.
 

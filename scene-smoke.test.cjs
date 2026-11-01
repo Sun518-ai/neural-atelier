@@ -240,8 +240,8 @@ test('English scene labels and module cards work, and live language switching ke
  assert.ok(changed);assert.deepEqual([...app.c.I18n.missing],[]);assert.equal(app.document.querySelectorAll('.packet').length,0);
 });
 
-test('down projection routes four feature blocks to matching weight rows and explains one output',async()=>{
- let app;const rows=new Set(),intervals=new Map(),trails=new Map();let formula=false;
+test('down projection routes four feature blocks to matching weight rows and explains each output',async()=>{
+ let app;const rows=new Set(),intervals=new Map(),trails=new Map(),formulas=new Set();
  app=await boot({reduced:false,frameMs:40,onFrame:({document,now})=>{
   if(!app)return;const label=document.querySelector('.processing-packet[data-node="down"]');if(!label||label.hidden)return;
   const scene=app.scenes.at(-1),mesh=scene.children.find(o=>o.userData.processing==='down'),unit=scene.children.flatMap(o=>o.children).find(o=>o.userData.node==='down');
@@ -259,7 +259,7 @@ test('down projection routes four feature blocks to matching weight rows and exp
   }
   if(row!=='0')return;
   const calc=document.querySelector('.projection-calculation[data-node="down"]');
-  if(calc&&!calc.hidden){assert.equal(calc.textContent,'1 × 0.4 + 0 × 0 + 1 × 0.2 + 0.5 × (-0.1) = 0.55');formula=true;}
+  if(calc&&!calc.hidden){const column=Number(calc.dataset.column);assert.equal(calc.textContent,['1 × 0.4 + 0 × 0 + 1 × 0.2 + 0.5 × (-0.1) = 0.55','1 × 0 + 0 × 0.3 + 1 × 0.2 + 0.5 × 0.3 = 0.35'][column]);formulas.add(column);}
   unit.traverse(o=>{if(!o.userData.contribution||!o.visible)return;const d=o.userData;
    assert.equal(d.value,[1,0,1,.5][d.input]*app.c.NeuralPrologue.weights.down[d.input][d.output]);
    assert.notEqual(d.value,0,'zero values still align but do not send a nonzero contribution');
@@ -267,10 +267,10 @@ test('down projection routes four feature blocks to matching weight rows and exp
   });
  }});
  app.api.switchLevel('residual');app.api.setState(app.c.NeuralPrologue.solutions('residual'));app.api.getWorld().rebuild();await app.api.run();
- assert.ok(formula);assert.equal(rows.size,4,'includes three named samples and the extra validation samples');
+ assert.equal(formulas.size,2);assert.equal(rows.size,4,'includes three named samples and the extra validation samples');
  for(const points of trails.values())assert.ok(points.every((p,i)=>!i||p.distanceTo(points[i-1])<.35),'components fan out without teleporting');
  assert.ok(Math.max(...intervals.get(0))<Math.min(...intervals.get(1)),'first output is explained before the others');
- assert.ok(intervals.get(0).length>intervals.get(1).length,'other outputs use a quicker pass');
+ const duration=i=>Math.max(...intervals.get(i))-Math.min(...intervals.get(i));assert.ok(Math.abs(duration(0)-duration(1))<=40,'both outputs use the same travel time');
  assert.equal(app.document.querySelectorAll('.projection-calculation,.packet').length,0);
  assert.equal(app.document.querySelectorAll('#test-results .pass').length,5);
 });
@@ -341,4 +341,29 @@ test('duplicate modules render cards, distinct processing and correctly sized we
  app.api.setState(s);app.api.getWorld().rebuild();app.api.refresh();
  for(const id of ['project-2','down-2','add-2']){app.api.getWorld().focus(id);assert.ok(app.document.querySelector('#card-name').textContent.endsWith(' · 2'));app.document.querySelector('#card-close').onclick();}
  await app.api.run();assert.equal(app.document.querySelector('#loading').hidden,true);for(const id of s.nodes.map(n=>n.id))assert.ok(seen.has(id),id+' has an independent processing event');assert.equal(app.document.querySelectorAll('#test-results .fail').length,1,'a freely built incorrect circuit still receives real numerical validation');
+});
+
+test('all projection outputs get equal travel time and only the speed slider changes their pace',async()=>{
+ let app,runIndex=0;const runs=[new Map(),new Map()],departures=[[],[]];
+ app=await boot({reduced:false,frameMs:20,onFrame:({document,now})=>{
+  const proc=document.querySelector('.processing-packet[data-node="project"][data-row="2"]');
+  if(!app)return;
+  const wire=document.querySelector('.packet[data-motion="wire"][data-from="project"][data-row="2"]');
+  if(wire&&!wire.hidden)departures[runIndex].push(now);
+  if(!proc||proc.hidden)return;
+  app.scenes.at(-1).traverse(o=>{if(!o.visible||!o.userData.contribution)return;const d=o.userData;
+   if(!runs[runIndex].has(d.output))runs[runIndex].set(d.output,[]);runs[runIndex].get(d.output).push(now);
+  });
+ }});
+ app.api.switchLevel('projection');app.api.setState(app.c.NeuralPrologue.solutions('projection'));app.api.getWorld().rebuild();
+ for(const rate of [.25,.5]){
+  const slider=app.document.querySelector('#playback-speed');slider.value=String(rate);slider.dispatchEvent(new app.window.Event('input',{bubbles:true}));
+  await app.api.run();const spans=runs[runIndex];assert.equal(spans.size,4);
+  const widths=[...spans.values()].map(times=>Math.max(...times)-Math.min(...times));
+  assert.ok(Math.max(...widths)-Math.min(...widths)<=20,'no later output is compressed into a short flash');
+  for(let j=1;j<4;j++)assert.ok(Math.max(...spans.get(j-1))<Math.min(...spans.get(j)),'outputs are shown one at a time');
+  assert.ok(Math.min(...departures[runIndex])>Math.max(...spans.get(3)),'the outgoing vector waits for the last output');
+  assert.equal(app.document.querySelectorAll('#test-results .pass').length,3);runIndex++;
+ }
+ for(let j=0;j<4;j++){const width=i=>Math.max(...runs[i].get(j))-Math.min(...runs[i].get(j));assert.ok(Math.abs(width(0)-2*width(1))<=40,'the speed slider scales every output equally');}
 });

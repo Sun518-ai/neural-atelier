@@ -142,9 +142,17 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
 
  }
  const ramp=(x,a,b)=>{const t=Math.max(0,Math.min(1,(x-a)/(b-a)));return t*t*(3-2*t);};
+ // Every output gets the same travel and reading time; only the speed setting
+ // scales the clock. Compress the repeated middle section for tray morphing.
+ function projectionFrame(time,columns){
+  const step=.4,extra=Math.max(0,columns-1)*step,duration=1+extra;
+  const phase=time<.4?time:time<.67+extra?.4+(time-.4)*.27/(.27+extra):time-extra;
+  const column=Math.max(0,Math.min(columns-1,Math.floor((time-.4)/step)));
+  return {duration,phase:Math.max(0,Math.min(1,phase)),column,offset:column*step,step};
+ }
  function processing(id,progress,input,output,color,{sequence=false,detailed=false}={}){
   const u=units.get(id);if(!u)return;
-  const active=progress>=0&&progress<1,p=Math.max(0,Math.min(1,progress));u.g.userData.processing=active;
+  const timing=detailed?projectionFrame(progress,output.length):null,active=progress>=0&&progress<(timing?.duration||1),p=timing?timing.phase:Math.max(0,Math.min(1,progress));u.g.userData.processing=active;
   const entering=ramp(p,0,.23),gathering=ramp(p,.6,.9),pulse=active?Math.sin(Math.PI*p):0;
   u.glow.material.emissiveIntensity=.12+1.5*pulse;
   u.inputs.forEach((o,i)=>{const v=sequence?1:input[i],size=Math.abs(v)<1e-9?.55:1+Math.min(2,Math.abs(v))*.3;o.scale.setScalar(1+(size-1)*entering);if(u.connections.length){o.material.color.set(detailed&&active?featureColor(i):0x6c9eb1);o.material.emissive.set(detailed?featureColor(i):0x6c9eb1);}o.material.emissiveIntensity=.08+(active&&Math.abs(v)>1e-9?entering*(1-ramp(p,.65,1)):0);});
@@ -152,12 +160,12 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
    const contribution=sequence?weight:input[i]*weight,lit=Number.isFinite(contribution)&&Math.abs(contribution)>1e-9;
    mesh.material.opacity=active?(lit?.35+.6*pulse:.08):(weight===0?.2:.8);
    mesh.material.emissive.set(lit?color:0);mesh.material.emissiveIntensity=active&&lit?pulse*.7:0;
-   const start=detailed?(j===0?.4:.69):.2,end=detailed?(j===0?.67:.8):.76;
-   spark.visible=active&&lit&&p>=start&&p<=end;
+   const start=detailed?.4+j*timing.step:.2,end=detailed?.67+j*timing.step:.76,clock=detailed?progress:p;
+   spark.visible=active&&lit&&clock>=start&&clock<=end;
    spark.userData.value=contribution;
-   if(spark.visible){const tone=detailed?featureColor(i):contribution<0?0xd6a578:color;spark.material.color.set(tone);spark.material.emissive.set(tone);spark.material.opacity=ramp(p,start,start+.025)*(1-ramp(p,end-.025,end));spark.scale.setScalar(.48+Math.min(2,Math.abs(contribution))*.15);spark.position.copy(mesh.geometry.parameters.path.getPoint(ramp(p,start,end)));}
+   if(spark.visible){const tone=detailed?featureColor(i):contribution<0?0xd6a578:color;spark.material.color.set(tone);spark.material.emissive.set(tone);spark.material.opacity=ramp(clock,start,start+.025)*(1-ramp(clock,end-.025,end));spark.scale.setScalar(.48+Math.min(2,Math.abs(contribution))*.15);spark.position.copy(mesh.geometry.parameters.path.getPoint(ramp(clock,start,end)));}
   }
-  for(const {tile,face,i,j,weight} of u.weightCells){const contribution=sequence?weight:input[i]*weight,lit=active&&(detailed||Math.abs(contribution)>1e-9),highlight=detailed?ramp(p,.16,.38)*(1-ramp(p,j===0?.65:.76,j===0?.7:.84)):pulse,tone=detailed?featureColor(i):color;tile.material.emissive.set(lit?tone:0);tile.material.emissiveIntensity=lit?highlight*(detailed&&j===0?1.4:.5):0;face.material.color.set(0xffffff);if(lit)face.material.color.lerp(new T.Color(tone),highlight*.32);}
+  for(const {tile,face,i,j,weight} of u.weightCells){const contribution=sequence?weight:input[i]*weight,lit=active&&(detailed||Math.abs(contribution)>1e-9),highlight=detailed?ramp(progress,j===0?.16:.26+j*timing.step,.38+j*timing.step)*(1-ramp(progress,.69+j*timing.step,.79+j*timing.step)):pulse,tone=detailed?featureColor(i):color;tile.material.emissive.set(lit?tone:0);tile.material.emissiveIntensity=lit?highlight*(detailed?1.4:.5):0;face.material.color.set(0xffffff);if(lit)face.material.color.lerp(new T.Color(tone),highlight*.32);}
   for(const {channel,gate,spark,i} of u.activationChannels){
    const from=input[i],to=output[i],sigmoid=1/(1+Math.exp(-from)),travel=ramp(p,.16,.84),transform=ramp(p,.35,.7),value=from+(to-from)*transform,tone=from<0?0xd6a578:color;
    gate.scale.setScalar(1-(1-(.22+.78*sigmoid))*pulse);gate.material.emissive.set(tone);gate.material.emissiveIntensity=active?pulse*.85:0;
@@ -166,7 +174,7 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
    Object.assign(spark.userData,{inputValue:from,outputValue:to,value,sigmoid,phase:transform});
    if(spark.visible){spark.position.copy(channel.geometry.parameters.path.getPoint(travel));spark.scale.setScalar(.3+Math.min(3,Math.abs(value))*.5);spark.material.color.set(tone);spark.material.emissive.set(tone);spark.material.opacity=ramp(p,.16,.23)*(1-ramp(p,.78,.86));}
   }
-  u.outputs.forEach((o,i)=>{const v=sequence?1:output[i],size=Number.isFinite(v)?Math.abs(v)<1e-9?.55:1+Math.min(2,Math.abs(v))*.18:1,gather=detailed?ramp(p,i===0?.59:.76,i===0?.68:.9):gathering;o.scale.setScalar(1+(size-1)*gather);o.material.color.set(v<0?0xc79868:u.color);o.material.emissiveIntensity=.08+(active?1.3*gather*(1-ramp(p,.9,1)):progress>=1?.35:0);});
+  u.outputs.forEach((o,i)=>{const v=sequence?1:output[i],size=Number.isFinite(v)?Math.abs(v)<1e-9?.55:1+Math.min(2,Math.abs(v))*.18:1,gather=detailed?ramp(progress,.59+i*timing.step,.68+i*timing.step):gathering;o.scale.setScalar(1+(size-1)*gather);o.material.color.set(v<0?0xc79868:u.color);o.material.emissiveIntensity=.08+(active?1.3*gather*(1-ramp(p,.9,1)):progress>=1?.35:0);});
  }
  function clearProcessing(){for(const u of units.values()){u.g.userData.processing=false;if(u.connections.length)u.inputs.forEach(o=>{o.material.color.set(0x6c9eb1);o.material.emissive.set(0x6c9eb1);o.material.emissiveIntensity=.08;});u.connections.forEach(c=>c.spark.visible=false);u.activationChannels.forEach(({spark,gate,channel})=>{spark.visible=false;gate.scale.setScalar(1);gate.material.emissiveIntensity=0;channel.material.emissiveIntensity=0;});u.weightCells.forEach(({tile,face})=>{tile.material.emissiveIntensity=0;face.material.color.set(0xffffff);});}}
  // A single colour pulse identifies the departing row without moving its tray.
@@ -211,5 +219,5 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   }
  }
  function resetUnits(){units.clear();}
- return {surroundings,module,sync,pulseSource,processing,clearProcessing,packet,prepareProjectionPacket,routeProjectionPacket,featureColor,rowColor,rowZ,resetUnits,focus(active){context.visible=!active;floor.visible=!active;}};
+ return {surroundings,module,sync,pulseSource,projectionFrame,processing,clearProcessing,packet,prepareProjectionPacket,routeProjectionPacket,featureColor,rowColor,rowZ,resetUnits,focus(active){context.visible=!active;floor.visible=!active;}};
 }
