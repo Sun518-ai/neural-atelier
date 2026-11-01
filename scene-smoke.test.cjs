@@ -1,0 +1,175 @@
+const fs=require('node:fs'),vm=require('node:vm'),test=require('node:test'),assert=require('node:assert/strict');
+const {parseHTML}=require('linkedom');
+async function boot({reduced=true,frameMs=1000,onFrame=()=>{},languages=['zh-CN']}={}){
+ const Three=await import('./vendor/three.module.js');
+ const {document,window}=parseHTML(fs.readFileSync(__dirname+'/index.html','utf8'));const native=document.createElement.bind(document);
+ document.createElement=function(name){const el=native(name);if(name==='canvas')el.getContext=()=>({fillRect(){},fillText(){},measureText(t){return {width:String(t).length*60}}});return el;};
+ for(const el of document.querySelectorAll('dialog')){el.showModal=function(){this.open=true};el.close=function(){this.open=false};}
+ for(const el of document.querySelectorAll('*')){Object.defineProperty(el,'clientWidth',{get:()=>el.id==='scene'?1400:100});Object.defineProperty(el,'clientHeight',{get:()=>el.id==='scene'?760:60});el.focus=()=>{};el.scrollIntoView=()=>{};}
+ const scenes=[];class Renderer{constructor(){this.domElement=native('canvas');this.shadowMap={};this.capabilities={getMaxAnisotropy:()=>8};}setPixelRatio(){}setClearColor(){}setSize(){}render(scene,camera){scenes.push(scene);scene.updateMatrixWorld();camera.updateMatrixWorld();scene.traverse(o=>{if(o.isMesh)assert.ok(o.matrixWorld.elements.every(Number.isFinite),'nonfinite transform '+o.type);});}}
+ const storage=new Map();let now=0;const c={document,console,navigator:{languages},T:{...Three,WebGLRenderer:Renderer},devicePixelRatio:2,ResizeObserver:class{observe(){}},requestAnimationFrame:cb=>setImmediate(()=>{now+=frameMs;onFrame({now,document,window});cb(now);}),cancelAnimationFrame:clearImmediate,performance:{now:()=>now},matchMedia:()=>({matches:reduced}),setTimeout,localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)}};c.window=c;vm.createContext(c);
+ for(const f of ['locales/en.js','i18n.js','music.js','shell.js','model.js','campaign.js','engine-model.js'])vm.runInContext(fs.readFileSync(__dirname+'/'+f,'utf8'),c,{filename:f});
+ for(const f of ['module-cards.js','level-progress.js','scene-art.js'])vm.runInContext(fs.readFileSync(__dirname+'/'+f,'utf8').replaceAll('export ',''),c,{filename:f});
+ let src=fs.readFileSync(__dirname+'/game.js','utf8').replace(/^import .*\n/gm,'').replace("const T=await import('./vendor/three.module.js');",'const T=window.T;').replace(/const \{createSceneArt\}=await import\('\.\/scene-art\.js\?v=[^']+'\);/,'');
+ src+='\nwindow.testAPI={switchLevel,run,refresh,select,assignDevice,chooseOutput,chooseInput,getState:()=>state,setState:s=>state=s,getWorld:()=>world,getFault:()=>fault};';
+ await vm.runInContext('(async()=>{'+src+'})()',c);
+ assert.ok(c.testAPI.getWorld(),'3D boot failed');return {c,document,window,api:c.testAPI,scenes,time:()=>now};
+}
+test('construct every 3D level, run its data through scene updates, open and close every module card',async()=>{
+ const app=await boot(),M=app.c.NeuralPrologue;
+ for(const id of Object.keys(M.levels)){
+  app.api.switchLevel(id);const s=M.solutions(id);if(M.levels[id].engine)s.settings.precision=16;app.api.setState(s);app.api.getWorld().rebuild();app.api.refresh();
+  await app.api.run();assert.equal(app.document.querySelector('#loading').hidden,true);assert.equal(app.document.querySelectorAll('.node-value').length,0,'completed runs clear transient vector labels');
+  assert.equal(app.document.querySelectorAll('[data-node]').length,M.levels[id].nodes.length);
+  for(const n of s.nodes){app.api.getWorld().focus(n.id);assert.equal(app.document.querySelector('#module-card').open,true);assert.ok(app.document.querySelector('#card-name').textContent);app.document.querySelector('#card-close').onclick();assert.equal(app.document.querySelector('#module-card').open,false);assert.ok(app.document.querySelector('.arena > #scene'));}
+ }
+});
+test('3D fault bubble and pin dismiss without losing recorded failure',async()=>{
+ const app=await boot();app.api.switchLevel('vocabulary');await app.api.run();assert.ok(app.api.getFault());const b=app.document.querySelector('[data-dismiss-result]');assert.ok(b);b.dispatchEvent(new app.window.Event('click',{bubbles:true}));assert.equal(app.api.getFault(),null);assert.equal(app.document.querySelectorAll('.local-fault,.fault-pin').length,0);assert.ok(app.document.querySelector('#test-results .fail'));await app.api.run();assert.ok(app.document.querySelector('[data-dismiss-result]'));
+});
+
+test('first-level dashed guide demonstrates the connection without creating one and hides once used',async()=>{
+ const app=await boot(),visible=()=>{const g=app.document.querySelector('.connection-guide');return !!g&&!g.hasAttribute('hidden');};
+ assert.ok(visible());assert.equal(app.api.getState().sink,null);
+ assert.match(app.document.querySelector('.connection-guide path').getAttribute('d'),/^M/);
+ // Exercise the port actions directly: LinkeDOM caches dataset before later setAttribute calls.
+ app.api.chooseOutput('R');assert.equal(visible(),false);assert.equal(app.api.getState().sink,null);
+ app.api.chooseInput('sink',0);assert.equal(app.api.getState().sink,'R');assert.equal(visible(),false);
+ await app.api.run();assert.equal(visible(),false);assert.equal(app.document.querySelectorAll('#test-results .pass').length,3);
+ app.document.querySelector('#reset').onclick();assert.ok(visible());app.api.switchLevel('projection');assert.equal(visible(),false);
+});
+
+test('real packet timeline gives every row equal duration and scales with the slider',async()=>{
+ const app=await boot({reduced:false,frameMs:50}),world=app.api.getWorld(),original=world.animate,slider=app.document.querySelector('#playback-speed'),totals=[];
+ app.api.setState(app.c.NeuralPrologue.solutions('wire'));world.rebuild();
+ for(const rate of [.5,1,2]){
+  slider.value=String(rate);slider.dispatchEvent(new app.window.Event('input',{bubbles:true}));const durations=[];
+  world.animate=async(...args)=>{const start=app.time();await original(...args);durations.push(app.time()-start);};
+  await app.api.run();assert.equal(durations.length,3);assert.ok(durations.every(ms=>ms===durations[0]));assert.equal(app.document.querySelectorAll('#test-results .pass').length,3);totals.push(durations[0]);
+ }
+ assert.ok(Math.abs(totals[0]-2*totals[1])<=50);assert.ok(Math.abs(totals[1]-2*totals[2])<=50);
+});
+test('changing speed mid-flight keeps packets moving forward and still completes',async()=>{
+ let changed=false,firstPacket=null,positions=[];
+ const app=await boot({reduced:false,frameMs:50,onFrame:({now,document,window})=>{
+  const packet=document.querySelector('.packet');if(!firstPacket&&packet)firstPacket=packet;
+  if(packet===firstPacket&&packet){const left=parseFloat(packet.style.left);if(Number.isFinite(left))positions.push(left);}
+  if(now>=200&&!changed&&packet){changed=true;const slider=document.querySelector('#playback-speed');slider.value='.25';slider.dispatchEvent(new window.Event('input',{bubbles:true}));}
+ }});
+ app.api.setState(app.c.NeuralPrologue.solutions('wire'));app.api.getWorld().rebuild();await app.api.run();
+ assert.ok(changed);assert.ok(positions.length>10);assert.ok(positions.every((x,i)=>i===0||x>=positions[i-1]));assert.equal(app.document.querySelectorAll('#test-results .pass').length,3);
+});
+
+test('stationary rows pulse while labelled vectors follow invisible departure and arrival paths',async()=>{
+ let app,tubeCount;const seen=new Map(),arrivals=new Map(),projected=new Map(),rowTones=new Map();
+ const tubes=scene=>{let count=0;scene.traverse(o=>{if(o.geometry?.type==='TubeGeometry')count++;});return count;};
+ app=await boot({reduced:false,frameMs:10,onFrame:({document})=>{
+  const scene=app.scenes.at(-1);if(!scene)return;
+  assert.equal(tubes(scene),tubeCount,'running must not draw extra wires inside either rack');
+  scene.traverse(o=>{if(o.userData.sourceRow!=null){assert.equal(o.position.y,.65,'input trays stay still');if(o.userData.active){const i=o.userData.sourceRow;if(!rowTones.has(i))rowTones.set(i,new Set());rowTones.get(i).add(o.children[0].material.color.getHex());}}if(o.userData.sinkRow!=null)assert.equal(o.position.y,.66,'output trays stay still');});
+  for(const el of document.querySelectorAll('.packet[data-motion="wire"]')){
+   const row=Number(el.dataset.row),mesh=scene.children.find(o=>o.userData.packet&&o.userData.from===el.dataset.from);
+   if(el.dataset.from==='R'&&!seen.has(row)){
+    assert.equal(el.querySelector('.packet-title').textContent,['我','爱','猫'][row]);
+    assert.equal(mesh.position.z,-1.05+row*.96);
+    const active=[];scene.traverse(o=>{if(o.userData.sourceRow!=null&&o.userData.active)active.push(o.userData.sourceRow);});assert.deepEqual(active,[row]);
+    const features=mesh.children.filter(o=>o.userData.feature!=null);
+    seen.set(row,{tone:el.style.getPropertyValue('--row-color'),heights:features.map(o=>o.geometry.parameters.height)});
+   }
+   if(el.dataset.from==='project'&&!el.hidden){
+    projected.set(row,JSON.parse(el.querySelector('.packet-values').textContent));
+    arrivals.set(row,Math.min(arrivals.get(row)??Infinity,Math.abs(mesh.position.z-(-1.05+row*.96))));
+   }
+  }
+ }});
+ app.api.switchLevel('projection');app.api.setState(app.c.NeuralPrologue.solutions('projection'));app.api.getWorld().rebuild();tubeCount=tubes(app.scenes.at(-1));await app.api.run();
+ assert.equal(seen.size,3);assert.equal(new Set([...seen.values()].map(r=>r.tone)).size,3);
+ assert.ok(seen.get(0).heights[0]>4*seen.get(0).heights[1]);assert.ok(seen.get(1).heights[1]>4*seen.get(1).heights[0]);assert.equal(seen.get(2).heights[0],seen.get(2).heights[1]);
+ assert.deepEqual([...projected.values()],[[1,0,1,.5],[0,1,.5,-1],[1,1,1.5,-.5]]);
+ assert.ok([...rowTones.values()].every(tones=>tones.size>1),'each active row has a visible colour pulse');
+ assert.ok([...arrivals.values()].every(d=>d<.15));assert.equal(app.document.querySelectorAll('.packet,.row-marker').length,0);
+});
+
+test('sequence packets represent all three rows, and extra validation samples are not a fourth or fifth token row',async()=>{
+ let app,mode='sequence',sequenceFrames=0,validationFrames=0;
+ app=await boot({reduced:false,frameMs:200,onFrame:({document})=>{
+  const el=document.querySelector('.packet');if(!el)return;
+  if(mode==='sequence'){
+   sequenceFrames++;assert.equal(el.dataset.row,'sequence');assert.match(el.textContent,/整段输入/);assert.equal(document.querySelector('.row-marker'),null);
+   const active=[];app.scenes.at(-1).traverse(o=>{if(o.userData.sourceRow!=null&&o.userData.active)active.push(o.userData.sourceRow);});assert.deepEqual(active,[0,1,2]);
+  }else if(el.dataset.row==='validation'){
+   validationFrames++;assert.match(el.querySelector('.packet-title').textContent,/^新输入 [AB]$/);
+   app.scenes.at(-1).traverse(o=>{if(o.userData.sourceRow!=null)assert.equal(o.userData.active,false);});
+  }
+ }});
+ for(const id of ['attention','gating']){mode=id==='attention'?'sequence':'row';app.api.switchLevel(id);app.api.setState(app.c.NeuralPrologue.solutions(id));app.api.getWorld().rebuild();await app.api.run();}
+ assert.ok(sequenceFrames>0);assert.ok(validationFrames>0);
+});
+
+test('projection travels continuously through the matrix and animates only nonzero weighted contributions',async()=>{
+ let app;const paths=new Map(),phases=new Set(),contributions=new Map();
+ app=await boot({reduced:false,frameMs:10,onFrame:({document})=>{
+  const scene=app.scenes.at(-1);
+  for(const row of ['0','1','2']){
+   const candidates=Array.from(document.querySelectorAll(`.packet[data-row="${row}"]`));if(!candidates.length)continue;
+   const visible=candidates.filter(el=>!el.hidden);
+   if(!visible.length){assert.ok(!paths.has(row),'no blank frame between input, processing and output');continue;}
+   assert.equal(visible.length,1,'one continuous label for this projection');
+   const el=visible[0],inside=el.dataset.motion==='process',mesh=scene.children.find(o=>inside?o.userData.processing==='project':o.userData.packet&&o.userData.from===el.dataset.from);
+   if(!paths.has(row))paths.set(row,[]);paths.get(row).push(mesh.position.clone());
+   if(inside){phases.add(el.dataset.phase);assert.equal(document.querySelector('.node-value[data-owner="project"]'),null,'result appears only after processing');}
+   if(!contributions.has(row))contributions.set(row,new Set());
+   scene.traverse(o=>{if(o.userData.contribution&&o.visible)contributions.get(row).add(`${o.userData.input}:${o.userData.output}`);});
+  }
+ }});
+ app.api.switchLevel('projection');app.api.setState(app.c.NeuralPrologue.solutions('projection'));app.api.getWorld().rebuild();await app.api.run();
+ assert.deepEqual([...phases],['enter','compute','gather']);
+ for(const positions of paths.values())assert.ok(positions.every((p,i)=>!i||p.distanceTo(positions[i-1])<.5),'no jump across the module');
+ assert.deepEqual([...contributions.get('0')].sort(),['0:0','0:2','0:3']);
+ assert.deepEqual([...contributions.get('1')].sort(),['1:1','1:2','1:3']);
+ assert.equal(contributions.get('2').size,6);
+});
+
+test('two-input processing waits for both branches to reach its ports',async()=>{
+ let app,arrived=new Set(),waiting=0,processed=0,lastRow;
+ app=await boot({reduced:false,frameMs:10,onFrame:({document})=>{
+  const proc=document.querySelector('.processing-packet[data-node="multiply"]');if(!proc)return;
+  if(proc.dataset.row!==lastRow){lastRow=proc.dataset.row;arrived=new Set();}
+  const n=app.api.getState().nodes.find(n=>n.id==='multiply'),scene=app.scenes.at(-1);
+  for(const el of document.querySelectorAll('.packet[data-motion="wire"][data-to="multiply"]')){
+   if(el.hidden)continue;const mesh=scene.children.find(o=>o.userData.packet&&o.userData.from===el.dataset.from&&o.userData.to==='multiply'),index=n.links.indexOf(el.dataset.from);
+   if(Math.hypot(mesh.position.x-(n.x-1.12),mesh.position.z-(n.z+(index? .55:-.55)))<.2){arrived.add(el.dataset.from);if(proc.hidden)waiting++;}
+  }
+  if(!proc.hidden){processed++;assert.equal(arrived.size,2,'both inputs arrive before processing');}
+ }});
+ app.api.switchLevel('gating');app.api.setState(app.c.NeuralPrologue.solutions('gating'));app.api.getWorld().rebuild();await app.api.run();
+ assert.ok(waiting>10);assert.ok(processed>0);
+});
+
+test('stopping and immediately restarting during processing clears effects without cancelling the new run',async()=>{
+ let app,restarted=false,restart;
+ app=await boot({reduced:false,frameMs:20,onFrame:({document})=>{
+  const proc=document.querySelector('.processing-packet');
+  if(!restarted&&proc&&!proc.hidden&&proc.dataset.phase==='compute'){
+   restarted=true;app.api.run();assert.equal(document.querySelectorAll('.packet').length,0);
+   app.scenes.at(-1).traverse(o=>{if(o.userData.contribution)assert.equal(o.visible,false);});
+   restart=app.api.run();
+  }
+ }});
+ app.api.switchLevel('projection');app.api.setState(app.c.NeuralPrologue.solutions('projection'));app.api.getWorld().rebuild();await app.api.run();await restart;
+ assert.ok(restarted);assert.equal(app.document.querySelectorAll('#test-results .pass').length,3);assert.equal(app.document.querySelectorAll('.packet').length,0);
+});
+
+test('English scene labels and module cards work, and live language switching keeps a moving run valid',async()=>{
+ let app,changed=false;
+ app=await boot({reduced:false,frameMs:80,languages:['en-US'],onFrame:({document})=>{
+  if(app&&!changed&&document.querySelector('.packet')){changed=true;app.c.I18n.setPreference('zh');app.c.I18n.setPreference('en');}
+ }});
+ const M=app.c.NeuralPrologue;
+ for(const id of Object.keys(M.levels)){
+  app.api.switchLevel(id);const s=M.solutions(id);if(M.levels[id].engine)s.settings.precision=16;app.api.setState(s);app.api.getWorld().rebuild();await app.api.run();
+  for(const n of s.nodes){app.api.getWorld().focus(n.id);assert.doesNotMatch(app.document.querySelector('#card-meaning').textContent,/[\u3400-\u9fff]/);app.document.querySelector('#card-close').onclick();}
+  assert.doesNotMatch(app.document.querySelector('#labels').textContent,/[\u3400-\u9fff]/);
+ }
+ assert.ok(changed);assert.deepEqual([...app.c.I18n.missing],[]);assert.equal(app.document.querySelectorAll('.packet').length,0);
+});

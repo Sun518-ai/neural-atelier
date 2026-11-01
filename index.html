@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>神经工坊</title><link rel="stylesheet" href="style.css?v=game-shell-1"></head>
+<body><div id="game">
+<header class="topbar"><a class="brand" id="home-open" href="./" aria-label="返回首页" title="返回首页"><span class="brand-mark">N</span><div><h1>神经工坊</h1><span>NEURAL ATELIER</span></div></a><div class="chapter"><span>正式关卡 / 01</span><strong>让一层醒来</strong></div><button id="levels-open">关卡</button><button id="settings-open" aria-haspopup="dialog"><span aria-hidden="true">⚙</span> 设置</button><button id="about-open">这是什么？</button></header>
+<div class="route"><span>输入 token</span><i>→</i><span>Attention · 上游已就绪</span><i>→</i><strong>FFN · 待修复</strong><i>→</i><span>本层输出</span><span class="route-tail">教学缩尺 2 → 4 → 2</span></div>
+<main><section class="arena" aria-label="神经网络搭建空间"><div id="scene" aria-label="拖动空白转动视角，拖动模块重新摆放"></div><div id="labels"></div><div id="device-docks" hidden><button data-device="cpu"><b>CPU</b><span>控制 / 通用计算</span></button><button data-device="gpu"><b>GPU</b><span>并行张量计算</span></button><button data-device="ane"><b>ANE</b><span>本关：投影 / FFN</span></button></div><div class="scene-top"><div class="scene-identity"><span class="chip">自由接线</span><span class="scene-legend"><i></i> 特征向量 <i class="warm"></i> 负权重 / 负值</span></div><span>输入 <b id="sample-name">我</b><span id="sample-value">[1, 0]</span></span></div><div class="scene-bottom"><span id="scene-help">拖模块摆放 · 双击查看模块卡 · 圆口出，方口进</span><div class="scene-controls"><button id="scene-expand" aria-pressed="false">放大场景</button><button id="camera-reset">复位视角</button></div></div><div id="loading"><span class="loader"></span><strong>正在唤醒网络…</strong></div></section>
+<aside><div class="mission"><div class="eyebrow">本关目标</div><h2>修复断开的 FFN</h2><p>让一份内容受另一份门值控制，压回原来的维度，再把输入加回来。</p><div id="mission-limits"></div><div class="mission-progress"><span id="pass-count">0 / 5</span><span>输入验证通过</span></div></div>
+<div class="inspector"><div class="eyebrow">模块观察窗</div><h3 id="inspect-name">点一个模块，看看里面</h3><p id="inspect-desc">这里的每条线传递一个完整向量。你接的线路会决定真实计算结果。</p><button id="inspect-focus" class="inspect-focus" disabled>查看模块卡 ↗</button><div id="inspect-visual"></div><div id="inspect-values"></div></div>
+<div id="engine-controls" hidden></div><div id="test-results"></div><div class="side-actions"><button id="hint">给个提示</button><button id="undo" disabled>撤销</button><button id="reset">重新搭建</button></div></aside></main>
+<footer class="run-toolbar"><button class="run" id="run" disabled><span>▶</span> 试跑我的网络</button><div class="feedback" id="feedback" role="status" aria-live="polite">先点一个圆形输出口，再点方形输入口。也可以直接拖线。</div><section id="run-report" hidden role="region" aria-label="本次运行" aria-live="polite"></section><button id="next-level" hidden>下一关 →</button></footer>
+<dialog id="about"><button class="close" id="about-close" aria-label="关闭说明">×</button><div class="eyebrow">从搭建开始</div><h2>从一条线，到一层网络</h2><p>先进入模型内部，亲手接好一小段神经网络。以后再在这套计算上面对苹果 GPU / ANE 的执行、内存与数据搬运问题。</p><p>25 个关卡分为基础搭建、网络计算与引擎调度。先练向量、投影、激活、门控和残差；再构建 Attention 与词表预测；最后处理芯片分工、布局、缓存、量化、内存与速度。这里使用固定手工权重、单头和缩小的向量。</p><p>模型内部的特征对应输入位置，不是生成的新词。只有词表投影与选择后才得到文字。“错误的注意力”指与本关目标计算不同，不意味着能直接解释真实模型的全部语言理解。</p><p>后半段的时间、容量和 ANE 工作占比属于教学成本模型，不是 Apple 硬件实测。ANE 支持范围是本游戏约束，真实运行还取决于设备、编译器、模型与算子实现。</p><p>序章会验证三个输入位置；正式关卡另外加入两组新输入。每关的线路分别保存，可以随时切换。运行时只在终点比较结果。</p></dialog>
+
+<dialog id="level-menu" aria-labelledby="levels-title"><button id="levels-close" class="close" aria-label="关闭关卡选择">×</button><div class="eyebrow">从简单的开始</div><h2 id="levels-title">选择关卡</h2><p class="level-menu-intro">先学会一件事，再加入一个组件。每关的搭建进度单独保存。</p><div id="level-list"></div></dialog>
+
+<dialog id="module-card" class="module-card" aria-labelledby="card-name" aria-describedby="card-meaning">
+  <div class="card-sheen" aria-hidden="true"></div>
+  <header class="card-header">
+    <div class="card-seal" id="card-seal" aria-hidden="true"></div>
+    <div class="card-heading"><div class="card-kicker"><span>神经工坊 · 模块图鉴</span><span id="card-family"></span></div><h2 id="card-name"></h2><span id="card-english"></span></div>
+    <span class="card-number" id="card-number"></span><button id="card-close" aria-label="收起模块卡">×</button>
+  </header>
+  <div class="card-body">
+    <div class="card-illustration">
+      <div id="card-portrait" aria-label="可旋转的模块立体模型"><span class="portrait-corner top" aria-hidden="true"></span><span class="portrait-corner bottom" aria-hidden="true"></span></div>
+      <div class="card-model-tools"><span>拖动旋转 · 滚轮缩放</span><button id="card-camera-reset" aria-label="复位卡片中的模型">↺ 复位</button></div>
+      <div id="card-stats" class="card-stats"></div>
+    </div>
+    <div class="card-description">
+      <div class="card-ability"><span>能力</span><h3 id="card-ability"></h3></div><p id="card-meaning"></p>
+      <div id="card-formula" class="card-formula"></div>
+      <h4>它在这一层的作用</h4><p id="card-purpose"></p>
+      <div class="card-example"><div class="card-example-title">用「猫」的向量看一次<span id="card-example-input">R = [1, 1]</span></div><div id="card-example-values"></div><small>按正确计算路径演算 · 数值四舍五入至两位</small></div>
+    </div>
+  </div>
+  <footer class="card-footer"><div class="card-path"><span>FFN 中的位置</span><div id="card-path"></div></div><button id="card-return">收起卡片，继续搭建 <span>↗</span></button></footer>
+</dialog>
+</div>
+<dialog id="settings" aria-labelledby="settings-title">
+  <button id="settings-close" class="close" aria-label="关闭设置">×</button>
+  <div class="eyebrow">NEURAL ATELIER</div><h2 id="settings-title">游戏设置</h2>
+  <section class="setting-row"><div class="setting-label"><label for="language-choice">语言</label><span id="language-current"></span></div><select id="language-choice"><option value="auto">跟随浏览器</option><option value="zh">简体中文</option><option value="en">English</option></select></section>
+  <section class="setting-row"><div class="setting-label"><span>运行速度</span></div><div class="playback-control"><label class="playback-caption" for="playback-speed">速度</label><span aria-hidden="true">慢</span><input id="playback-speed" type="range" min="0.25" max="3" step="0.25" value="0.25" aria-label="动画播放速度" aria-valuetext="0.25 倍速"><span aria-hidden="true">快</span><output id="playback-rate" for="playback-speed">0.25×</output></div></section>
+  <section class="setting-row"><div class="setting-label"><label for="music-enabled">背景音乐</label><span>轻柔的电子乐，陪你慢慢搭建。</span></div><button id="music-enabled" class="setting-switch" type="button" role="switch" aria-checked="true" aria-label="背景音乐"><span></span></button></section>
+  <section class="setting-row volume-row"><label for="music-volume">音量</label><input id="music-volume" type="range" min="0" max="100" step="5" value="35"><output id="music-volume-value" for="music-volume">35%</output></section>
+  <p id="audio-status" role="status" hidden></p>
+  <footer class="settings-footer"><button id="intro-replay">重看开场</button><button id="settings-done">完成</button></footer>
+</dialog>
+<dialog id="welcome" aria-labelledby="welcome-title">
+  <div class="welcome-grid" aria-hidden="true"></div>
+  <div class="welcome-copy"><span class="welcome-kicker">A NEURAL NETWORK PUZZLE</span><h2 id="welcome-title">神经工坊</h2><p>接好线路，让神经网络醒来。</p><div class="welcome-actions"><button id="enter-workshop">进入工坊 <span aria-hidden="true">→</span></button><button id="welcome-settings">设置</button></div><span class="welcome-note">从第一条连线开始。</span></div>
+  <div class="welcome-machine" aria-hidden="true"><div class="machine-orbit orbit-one"></div><div class="machine-orbit orbit-two"></div><div class="machine-table">
+    <svg class="machine-traces" viewBox="0 0 700 440"><path d="M 35 80 H 170 Q 205 80 205 140 V 220 H 305 M 35 220 H 305 M 35 360 H 170 Q 205 360 205 300 V 220 H 305 M 410 220 H 470 Q 500 220 500 170 V 90 H 655 M 410 220 H 655 M 410 220 H 470 Q 500 220 500 280 V 350 H 655"/></svg>
+    <div class="machine-inputs"><span>我 <b>[1, 0]</b></span><span>爱 <b>[0, 1]</b></span><span>猫 <b>[1, 1]</b></span></div>
+    <div class="machine-core"><div class="core-label">W</div><div class="core-matrix"><i style="--cell:0">1</i><i style="--cell:1">0</i><i style="--cell:2">1</i><i style="--cell:3">.5</i><i style="--cell:4">0</i><i style="--cell:5">1</i><i style="--cell:6">.5</i><i style="--cell:7">−1</i></div><div class="core-base"></div></div>
+    <div class="machine-outputs"><i></i><i></i><i></i></div><span class="machine-packet packet-a"></span><span class="machine-packet packet-b"></span><span class="machine-packet packet-c"></span>
+  </div><span class="machine-caption">INPUT → TRANSFORM → OUTPUT</span></div>
+  <span class="welcome-edition">NEURAL ATELIER · 01</span>
+</dialog>
+<script src="locales/en.js?v=game-shell-1"></script><script src="i18n.js?v=game-shell-1"></script><script src="music.js?v=game-shell-1"></script><script src="shell.js?v=game-shell-1"></script><script src="model.js?v=bare-token-1"></script><script src="campaign.js?v=token-position-1"></script><script src="engine-model.js?v=campaign-1"></script><script type="module" src="game.js?v=game-shell-1"></script></body></html>
