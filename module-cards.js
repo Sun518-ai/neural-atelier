@@ -9,16 +9,16 @@ export const moduleCards = {
   },
   gate: {
     number:'01', seal:I18n.t("门"), english:'GATE PROJECTION', family:I18n.t("投影"), color:'#75628e',
-    ability:I18n.t("生成门分支"), formula:'G = Z × Wg',
-    meaning:I18n.t("接过归一化后的向量 Z，用权重矩阵把 2 个特征组合成 4 个数。这一支接着经过 SiLU，形成调节内容的门值。"),
-    purpose:I18n.t("同一份输入产生两条支路：一条提供内容，一条决定各个内容特征如何参与计算。这里负责后者。"),
+    ability:I18n.t("为内容准备调节系数"), formula:'G = Z × Wg',
+    meaning:I18n.t("和内容投影一样，这里做的是矩阵乘法。同一份输入乘 Wg 得到 G，乘另一套权重 Wu 得到内容特征 U。"),
+    purpose:I18n.t("G 还要经过 SiLU，才得到系数 S；S 与 U 的对应位置相乘，形成 H。系数随输入变化，可以缩小、放大或改变特征的符号。"),
     input:I18n.t("归一化输入 Z"), output:I18n.t("门分支 G"), weight:'2 × 4', trait:I18n.t("线性变换"), stage:0
   },
   up: {
     number:'02', seal:I18n.t("展"), english:'UP PROJECTION', family:I18n.t("投影"), color:'#397f71',
-    ability:I18n.t("展开内容特征"), formula:'U = Z × Wu',
-    meaning:I18n.t("同样接收 Z，但使用另一套权重。2 个输入特征被重新组合为 4 个内容特征，等待与门值逐项相乘。"),
-    purpose:I18n.t("更宽的中间向量提供更多特征组合的空间。门投影与内容投影的权重分别学习，所以两支会产生不同的数。"),
+    ability:I18n.t("生成等待调节的特征"), formula:'U = Z × Wu',
+    meaning:I18n.t("本模块把输入乘 Wu，生成 4 个内容特征 U。门投影接收同一份输入，乘另一套权重 Wg，生成 G；两者的计算方式相同，权重和用途不同。"),
+    purpose:I18n.t("U 提供要使用的特征值；门分支经 SiLU 得到系数 S，再与 U 逐项相乘。推理时两套权重固定，换一个输入，特征值和调节系数都会重新计算。"),
     input:I18n.t("归一化输入 Z"), output:I18n.t("内容分支 U"), weight:'2 × 4', trait:I18n.t("线性变换"), stage:0
   },
   silu: {
@@ -56,10 +56,13 @@ I18n.prepare(moduleCards);
 export function cardFor(id,levelId){
  if(!moduleCards[id])return null;
  const card={...moduleCards[id]};
- if(levelId==='ffn')return card;
+ if(levelId==='ffn'){
+  if(id==='gate'||id==='up')card.meaning=I18n.t("输入先归一化为 Z。")+' '+card.meaning;
+  return card;
+ }
  if(id==='gate'||id==='up'){
   card.formula=card.formula.replace('Z','X');
-  card.meaning=card.meaning.replace(I18n.t("归一化后的向量 Z"),I18n.t("输入向量 X")).replace(I18n.t("接收 Z"),I18n.t("接收 X"));
+  card.input=I18n.t("输入 X");
  }
  if(id==='silu'&&levelId==='activation'){
   card.ability=I18n.t("逐个改变投影数值");card.meaning=I18n.t("把投影 P 中的每个数分别送入 SiLU。正数与负数受到不同程度的缩放，4 个数处理后仍是 4 个数。");
@@ -75,7 +78,7 @@ export function cardFor(id,levelId){
 
 export function exampleFor(M,id,levelId='ffn'){
   if(id==='project')return {inputs:[['X',[1,1]]],output:['P',M.linear([1,1],M.weights.project)]};
-  const R=[1,1],Z=levelId==='ffn'?M.norm(R):R,P=M.linear(R,M.weights.project);
+  const compare=id==='gate'||id==='up',R=compare?[1,0]:[1,1],Z=levelId==='ffn'?M.norm(R):R,P=M.linear(R,M.weights.project);
   if(levelId==='activation')return {inputs:[['P',P]],output:['S',P.map(M.silu)]};
   if(levelId==='residual'){
    const F=M.linear(P,M.weights.down);
@@ -83,5 +86,5 @@ export function exampleFor(M,id,levelId='ffn'){
   }
   const G=M.linear(Z,M.weights.gate),U=M.linear(Z,M.weights.up),S=G.map(M.silu),H=S.map((x,i)=>x*U[i]),F=M.linear(H,M.weights.down),Y=R.map((x,i)=>x+F[i]),source=levelId==='ffn'?'Z':'X';
   const paths={gate:[[[source,Z]],['G',G]],up:[[[source,Z]],['U',U]],silu:[[['G',G]],['S',S]],multiply:[[['S',S],['U',U]],['H',H]],down:[[['H',H]],['F',F]],add:[[['R',R],['F',F]],['Y',Y]]};
-  return {inputs:paths[id][0],output:paths[id][1]};
+  return {inputs:paths[id][0],output:paths[id][1],...(compare?{comparison:{input:[source,Z],rows:[['U',U],['G',G],['S',S],['H',H]],feature:2}}:{})};
 }

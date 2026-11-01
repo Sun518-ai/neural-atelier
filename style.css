@@ -33,6 +33,16 @@ body{min-width:1080px}#game{max-width:1920px;padding:18px 24px}main{grid-templat
 @media(prefers-reduced-motion:reduce){.module-card[open],.card-sheen:after{animation:none}.card-sheen{display:none}}
 
 .module-card .card-vector>b{width:92px;flex-shrink:0;font-size:10px;white-space:nowrap}
+.card-comparison .card-vector{--branch:#397f71}
+.card-comparison .card-vector[data-symbol="G"],.card-comparison .card-vector[data-symbol="S"]{--branch:#75628e}
+.module-card .card-comparison .card-vector>b{width:106px;white-space:normal;color:var(--branch);line-height:1.4}
+.card-comparison .card-vector i.example-focus{border-color:var(--branch);background:color-mix(in srgb,var(--branch) 15%,#fff9e8);box-shadow:0 0 0 1px var(--branch);font-weight:700;color:var(--branch)}
+.module-card .card-example-focus{font-size:10px;color:#857756;margin:8px 0 6px}
+.card-gate-step{margin:8px 0 5px;color:#75628e;font:11px/1.6 ui-monospace,monospace}
+.card-gate-result{display:flex;align-items:center;justify-content:center;gap:13px;border-radius:6px;padding:7px 10px;background:#ffffff70;border:1px solid #d7cfb8}
+.card-gate-result>span{text-align:center;color:#397f71}.card-gate-result>span[data-role="scale"]{color:#75628e}
+.card-gate-result small{margin:0 0 3px;color:inherit;font-size:10px}.card-gate-result b{font:600 15px/1.3 ui-monospace,monospace}
+.card-gate-result>i{font:14px ui-monospace,monospace;color:#8b826c}
 
 /* Compare results only at the final outlet, after the run has completed. */
 .fault-pin{position:absolute;transform:translate(-50%,-50%);display:grid;place-items:center;width:24px;height:24px;border:2px solid #fff8ec;border-radius:50%;background:#b65b48;color:#fff8ec;box-shadow:0 0 0 4px #b65b4828;font:bold 13px ui-monospace,monospace;z-index:5;pointer-events:none}

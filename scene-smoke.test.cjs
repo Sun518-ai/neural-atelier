@@ -114,6 +114,35 @@ test('small matrices keep their blocks while numbers return when zoomed in',asyn
  app.document.querySelector('#card-close').onclick();assert.ok(faces.every(o=>!o.visible),'returning to the distant view restores abstraction immediately');
  assert.equal(JSON.stringify(app.api.getState()),state);
 });
+
+test('gate and content cards compare the same input with a worked feature in both languages and levels',async()=>{
+ const app=await boot(),M=app.c.NeuralPrologue,doc=app.document,round=v=>Number(v.toFixed(2));
+ for(const language of ['zh','en']){
+  app.c.I18n.setPreference(language);
+  for(const level of ['gating','ffn']){
+   app.api.switchLevel(level);const state=M.solutions(level);app.api.setState(state);app.api.getWorld().rebuild();
+   const saved=JSON.stringify(state),ev=M.evaluate(state,[1,0]),expected={U:ev.values.up,G:ev.values.gate,S:ev.values.silu,H:ev.values.multiply};let previous=null;
+   for(const kind of ['gate','up']){
+    app.api.getWorld().focus(kind);assert.equal(doc.querySelector('#module-card').open,true);
+    const comparison=doc.querySelector('.card-comparison');assert.ok(comparison);
+    assert.match(doc.querySelector('#card-meaning').textContent,/Wg/);assert.match(doc.querySelector('#card-meaning').textContent,/Wu/);
+    assert.match(doc.querySelector('#card-purpose').textContent,/SiLU/);
+    assert.equal(doc.querySelector('#card-formula').textContent,(kind==='gate'?'G':'U')+' = '+(level==='ffn'?'Z':'X')+' × W'+(kind==='gate'?'g':'u'));
+    assert.equal(doc.querySelector('#card-example-input').textContent,(level==='ffn'?'Z = [1.41, 0]':'X = [1, 0]'));
+    for(const [symbol,values]of Object.entries(expected)){
+     const cells=[...comparison.querySelectorAll(`[data-symbol="${symbol}"] i`)];assert.deepEqual(cells.map(c=>Number(c.textContent)),Array.from(values,round));
+     assert.deepEqual(cells.map((c,i)=>c.classList.contains('example-focus')?i:-1).filter(i=>i>=0),[2],'the same feature is highlighted at every stage');
+    }
+    for(const [role,symbol]of [['content','U'],['scale','S'],['result','H']])assert.equal(Number(comparison.querySelector(`[data-role="${role}"] b`).textContent),round(expected[symbol][2]));
+    assert.equal(comparison.querySelector('.card-gate-step').textContent,`SiLU(${round(expected.G[2])}) ≈ ${round(expected.S[2])}`);
+    if(previous)assert.equal(comparison.textContent,previous,'switching branches keeps one comparable example');previous=comparison.textContent;
+    if(language==='en')assert.doesNotMatch(doc.querySelector('#module-card').textContent,/[\u3400-\u9fff]/);
+    doc.querySelector('#card-close').onclick();assert.equal(JSON.stringify(app.api.getState()),saved);
+   }
+  }
+ }
+ assert.deepEqual([...app.c.I18n.missing],[]);
+});
 test('all matrix labels switch abstraction together and a close-up preserves the board mode',async()=>{
  const app=await boot();app.api.switchLevel('residual');app.api.setState(app.c.NeuralPrologue.solutions('residual'));app.api.getWorld().rebuild();
  const faces=[];app.scenes.at(-1).traverse(o=>{if(o.userData.detailText)faces.push(o);});

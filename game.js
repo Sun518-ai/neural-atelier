@@ -1,5 +1,5 @@
-import {cardFor,exampleFor} from './module-cards.js?v=multiply-flow-1';
-import {createProgress} from './level-progress.js?v=multiply-flow-1';
+import {cardFor,exampleFor} from './module-cards.js?v=gate-cards-1';
+import {createProgress} from './level-progress.js?v=gate-cards-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -195,7 +195,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=multiply-flow-1');
+ const {createSceneArt}=await import('./scene-art.js?v=gate-cards-1');
  const art=createSceneArt(T,scene,colors,{anisotropy:renderer.capabilities.getMaxAnisotropy()});art.surroundings(samples(),stage());
  const assembly=new T.Group(),wires=new T.Group();scene.add(assembly,wires);const neuronGeo=new T.SphereGeometry(.115,16,12);let elements=[],curves=[],packets=[],drag=null,preview=null,yaw=.05,pitch=.8,zoom=stage().zoom,lastDepth=-1;
  const cameraTarget=new T.Vector3();let focusId=null,shelfFocus=null,shelfModel=null,overview=null,cameraFrame=0,transitioning=false,lastTap=null;
@@ -364,8 +364,13 @@ try{
   $('#card-stats').innerHTML=`${I18n.t("<div><span>向量维度</span><b>")}${d.ins.map(shape).join(' / ')} → ${shape(d.out)}${I18n.t("</b></div><div><span>权重矩阵</span><b>")}${c.weight}${I18n.t("</b></div><div><span>计算方式</span><b>")}${c.trait}</b></div>`;
   $('#card-example-input').textContent=stageId==='ffn'?'R = [1, 1]':stage().sequence?I18n.t("三个位置的特征 · 教学缩尺"):'X = [1, 1]';
   const names={Q:I18n.t("查询"),K:I18n.t("键"),V:I18n.t("内容"),A:I18n.t("注意力"),L:I18n.t("词表分数"),T:I18n.t("选出的词"),B:I18n.t("计算结果"),X:I18n.t("输入向量"),P:I18n.t("投影结果"),R:I18n.t("原始输入"),Z:I18n.t("归一化输入"),G:I18n.t("门分支"),U:I18n.t("内容分支"),S:I18n.t("激活门值"),H:I18n.t("门控结果"),F:I18n.t("本次变换"),Y:I18n.t("本层输出")};
-  const ex=M.extraExample?.(kind,stageId)||exampleFor(M,kind,stageId),vectorRow=([name,values],output=false)=>`<div class="card-vector ${output?'result':''}"><b>${name} · ${names[name]||name}</b><span>${values.map(v=>`<i class="${v<0?'negative':''}">${fmt(v)}</i>`).join('')}</span></div>`;
-  $('#card-example-values').innerHTML=ex.inputs.map(v=>vectorRow(v)).join('')+vectorRow(ex.output,true);
+  const ex=M.extraExample?.(kind,stageId)||exampleFor(M,kind,stageId),vectorRow=([name,values],output=false,focus=-1,label=names[name]||name)=>`<div class="card-vector ${output?'result':''}" data-symbol="${name}"><b>${name} · ${label}</b><span>${values.map((v,i)=>`<i class="${v<0?'negative':''} ${i===focus?'example-focus':''}">${fmt(v)}</i>`).join('')}</span></div>`;
+  if(ex.comparison){
+   const {input,rows,feature}=ex.comparison,values=Object.fromEntries(rows),u=values.U[feature],g=values.G[feature],s=values.S[feature],h=values.H[feature];
+   const roles={U:I18n.t("内容投影"),G:I18n.t("门投影"),S:I18n.t("SiLU 系数"),H:I18n.t("相乘结果")};
+   $('.card-example-title').firstChild.textContent=I18n.t("用“我”的向量比较两条支路");$('#card-example-input').textContent=input[0]+' = '+vector(input[1]);
+   $('#card-example-values').innerHTML=`<div class="card-comparison"><p class="card-example-focus">${I18n.t("只看高亮的这一项：")}</p>${rows.map(row=>vectorRow(row,row[0]==='H',feature,roles[row[0]])).join('')}<div class="card-gate-step">SiLU(${fmt(g)}) ≈ ${fmt(s)}</div><div class="card-gate-result"><span data-role="content"><small>${I18n.t("内容")}</small><b>${fmt(u)}</b></span><i>×</i><span data-role="scale"><small>${I18n.t("调节系数")}</small><b>${fmt(s)}</b></span><i>≈</i><span data-role="result"><small>${I18n.t("相乘结果")}</small><b>${fmt(h)}</b></span></div></div>`;
+  }else $('#card-example-values').innerHTML=ex.inputs.map(v=>vectorRow(v)).join('')+vectorRow(ex.output,true);
   $('.card-path>span').textContent=stage().title;
   $('#card-path').innerHTML=(stageId==='ffn'?[I18n.t("双路投影"),'SiLU',I18n.t("门控"),I18n.t("降维"),I18n.t("残差")]:stage().nodes.map(k=>M.definitions[k].name)).map((label,i)=>`${i?'<i>›</i>':''}<span class="${(stageId==='ffn'?i===c.stage:stage().nodes[i]===kind)?'active':''}">${label}</span>`).join('');
   host.setAttribute('aria-label',I18n.t("拖动旋转模块，滚轮缩放"));$('#card-portrait').append(host,overlay);if(!card.open)card.showModal();
