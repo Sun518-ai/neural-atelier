@@ -158,7 +158,7 @@ html[lang=en] .stock-name{font-size:10px;line-height:12px}
 .projection-result[hidden]{display:none}
 .projection-calculation[hidden]{display:none}
 .projection-calculation b{color:#294b3e;font-weight:700}
-.projection-calculation{border-color:var(--calculation-color,#b77724);box-shadow:0 0 0 calc(2px * var(--calculation-focus,0)) #b7772433,0 2px 8px #344c3b12}
+.projection-calculation{border-color:var(--calculation-color,#b77724);box-shadow:0 0 0 calc(2px * var(--calculation-focus,0)) var(--calculation-halo,#b7772433),0 2px 8px #344c3b12}
 .projection-calculation[data-side="left"]{transform:translate(-100%,-50%) scale(var(--calculation-scale,1));transform-origin:right center}
 .projection-calculation::before{content:"";position:absolute;left:-7px;top:calc(50% - 5px);width:10px;height:10px;background:#fffdf0;border-left:1px solid var(--calculation-color,#b77724);border-bottom:1px solid var(--calculation-color,#b77724);transform:rotate(45deg)}
 .projection-calculation[data-side="left"]::before{left:auto;right:-7px;transform:rotate(225deg)}

@@ -283,6 +283,121 @@ test('two-input processing waits for both branches to reach its ports',async()=>
  assert.ok(waiting>10);assert.ok(processed>0);
 });
 
+test('elementwise multiplication pairs both real inputs and keeps each product until the output vector gathers',async()=>{
+ let app;const products=new Map(),trails=new Map(),counts=new Set(),cases=new Set();let gathering=0;
+ app=await boot({reduced:false,frameMs:40,onFrame:({document})=>{
+  if(!app)return;const label=document.querySelector('.processing-packet[data-node="multiply"]');if(!label||label.hidden)return;
+  const sample=Number.parseInt(document.querySelector('#pass-count').textContent),M=app.c.NeuralPrologue,ev=M.evaluate(app.api.getState(),M.samples[sample].v);
+  const scene=app.scenes.at(-1),unit=scene.children.flatMap(o=>o.children).find(o=>o.userData.node==='multiply'),meshes=[scene.children.find(o=>o.userData.processing==='multiply'),scene.children.find(o=>o.userData.processingSecondary==='multiply')];
+  const inputs=[ev.values.silu,ev.values.up],calc=document.querySelector('.projection-calculation[data-node="multiply"]'),out=scene.children.find(o=>o.userData.processingOutput==='multiply');
+  for(const [slot,mesh]of meshes.entries()){
+   if(!mesh.visible)continue;
+   for(const {bar}of mesh.userData.featureRoutes){
+    const i=bar.userData.feature;assert.equal(bar.userData.value,inputs[slot][i],'each colored input carries the value from its own wire');
+    if(bar.material.opacity<=0)continue;
+    const pos=bar.getWorldPosition(new app.c.T.Vector3()),key=sample+':'+slot+':'+i;
+    if(!trails.has(key))trails.set(key,[]);trails.get(key).push(pos);
+    if(bar.userData.mappingProgress===1){
+     assert.ok(Math.abs(pos.z-(unit.position.z+(i-1.5)*.43))<1e-9,'same-index inputs share one channel');
+     assert.equal(bar.userData.mappedInput,i);
+     const partner=meshes[1-slot].userData.featureRoutes[i].bar;
+     assert.notEqual(bar.material.color.getHex(),partner.material.color.getHex(),'the two inputs retain distinct colors');
+     if(bar.userData.pairProgress>.99)assert.ok(pos.distanceTo(partner.getWorldPosition(new app.c.T.Vector3()))<.015,'the two factors meet at the same multiplication ring');
+    }
+   }
+  }
+  unit.traverse(o=>{
+   if(o.userData.multiplyFeature==null||!o.visible)return;const d=o.userData,i=d.multiplyFeature;
+   assert.equal(d.inputA,inputs[0][i]);assert.equal(d.inputB,inputs[1][i]);assert.equal(d.value,d.inputA*d.inputB);
+   products.set(sample+':'+i,d.value);
+   if(d.value===0){cases.add('zero');assert.ok(o.material.wireframe);assert.ok(o.scale.x>=.6,'a zero still has a visible hollow carrier');}
+   if(d.value<0)cases.add('negative');if(d.inputA<0&&d.inputB<0){cases.add('negative times negative');assert.ok(d.value>0);}
+   if(Math.abs(d.inputA)>1||Math.abs(d.inputB)>1)cases.add('not binary');
+  });
+  if(!calc.hidden){
+   const i=Number(calc.dataset.column),fmt=v=>Number(v.toFixed(2)).toString(),factor=v=>v<0?'('+fmt(v)+')':fmt(v),values=[inputs[0][i],inputs[1][i],ev.values.multiply[i]];
+   const rounded=values.some(v=>Math.abs(v-Number(v.toFixed(2)))>1e-9);
+   assert.equal(calc.querySelector('.projection-equation').textContent,factor(values[0])+' × '+factor(values[1])+(rounded?' ≈ ':' = ')+fmt(values[2]));
+   assert.equal(calc.querySelector('.projection-sum-symbol').textContent,'×');
+   assert.equal(document.querySelectorAll('.projection-result[data-node="multiply"]:not([hidden])').length,i,'only already-computed products remain visible');
+   if(Number(calc.style.getPropertyValue('--calculation-focus'))>.9){
+    assert.equal(unit.userData.activePair,i);
+    const sockets=unit.children.filter(o=>o.geometry?.type==='SphereGeometry'&&o.position.x===.68&&o.userData.multiplyFeature==null);
+    assert.ok(sockets[i].material.emissiveIntensity>.8);assert.ok(sockets.filter((_,j)=>i!==j).every(o=>o.material.emissiveIntensity<.1));
+    for(const selector of ['[data-input="multiply:0"]','[data-input="multiply:1"]','[data-output="multiply"]'])assert.ok(Number(document.querySelector(selector).style.opacity)<.12,'dimension badges do not cover the calculation');
+   }
+  }
+  if(out.visible){
+   const bars=out.children.filter(o=>o.visible&&o.userData.feature!=null);counts.add(bars.length);
+   if(out.userData.gather>0){gathering++;assert.equal(bars.length,4,'wait for all products before transporting the vector');}
+   for(const bar of bars){const i=bar.userData.feature;assert.equal(bar.userData.value,ev.values.multiply[i]);if(out.userData.gather===0)assert.ok(Math.abs(bar.getWorldPosition(new app.c.T.Vector3()).z-(unit.position.z+(i-1.5)*.43))<1e-9);}
+  }
+ }});
+ app.api.switchLevel('gating');app.api.setState(app.c.NeuralPrologue.solutions('gating'));app.api.getWorld().rebuild();await app.api.run();
+ assert.equal(products.size,20);for(const kind of ['zero','negative','negative times negative','not binary'])assert.ok(cases.has(kind),kind);
+ assert.deepEqual([...counts].filter(Boolean).sort(),[1,2,3,4]);assert.ok(gathering>0);
+ for(const trail of trails.values())assert.ok(trail.every((p,i)=>!i||p.distanceTo(trail[i-1])<.3),'factor carriers never teleport between sockets');
+ assert.equal(app.document.querySelectorAll('#test-results .pass').length,5);
+ assert.equal(app.document.querySelectorAll('.packet,.projection-calculation,.projection-result').length,0);
+ app.scenes.at(-1).traverse(o=>{if(o.userData.multiplyFeature!=null)assert.equal(o.visible,false);if(o.userData.node==='multiply')assert.equal(o.userData.activePair,null);assert.equal(o.userData.processingSecondary,undefined,'the extra input tray is removed at completion');});
+});
+
+test('every elementwise pair uses the same pace and obeys the speed slider',async()=>{
+ let app,runIndex=0;const runs=[new Map(),new Map()],departures=[[],[]];
+ app=await boot({reduced:false,frameMs:20,onFrame:({document,now})=>{
+  if(!app)return;const label=document.querySelector('.processing-packet[data-node="multiply"][data-row="2"]'),wire=document.querySelector('.packet[data-motion="wire"][data-from="multiply"][data-row="2"]');
+  if(wire&&!wire.hidden)departures[runIndex].push(now);
+  if(!label||label.hidden)return;
+  app.scenes.at(-1).traverse(o=>{if(!o.visible||o.userData.multiplyFeature==null)return;const i=o.userData.multiplyFeature;if(!runs[runIndex].has(i))runs[runIndex].set(i,[]);runs[runIndex].get(i).push(now);});
+ }});
+ app.api.switchLevel('gating');app.api.setState(app.c.NeuralPrologue.solutions('gating'));app.api.getWorld().rebuild();
+ for(const rate of [.25,.5]){
+  const slider=app.document.querySelector('#playback-speed');slider.value=String(rate);slider.dispatchEvent(new app.window.Event('input',{bubbles:true}));await app.api.run();
+  const spans=runs[runIndex];assert.equal(spans.size,4);const widths=[...spans.values()].map(a=>a.at(-1)-a[0]);assert.ok(Math.max(...widths)-Math.min(...widths)<=20);
+  for(let i=1;i<4;i++)assert.ok(spans.get(i-1).at(-1)<spans.get(i)[0]);
+  assert.ok(departures[runIndex][0]>spans.get(3).at(-1));runIndex++;
+ }
+ for(let i=0;i<4;i++){const width=r=>runs[r].get(i).at(-1)-runs[r].get(i)[0];assert.ok(Math.abs(width(0)-2*width(1))<=40);}
+});
+
+test('paused multiplication keeps both inputs, products and formulas stable across camera and language changes',async()=>{
+ let app,phase=0,frames=0,snapshot,restart;
+ const visual=()=>{const data=[];app.scenes.at(-1).traverse(o=>{if(o.userData.multiplyFeature!=null||o.userData.multiplyInput!=null)data.push([o.visible,o.position.toArray(),o.scale.toArray(),o.material.opacity,o.material.emissiveIntensity]);});return JSON.stringify(data);};
+ const wheel=deltaY=>{const e=new app.window.Event('wheel',{bubbles:true,cancelable:true});e.deltaY=deltaY;app.document.querySelector('#scene').dispatchEvent(e);};
+ app=await boot({reduced:false,frameMs:40,onFrame:({document})=>{
+  if(!app)return;const calc=document.querySelector('.projection-calculation[data-node="multiply"]');if(!calc||calc.hidden)return;
+  if(!phase&&calc.dataset.column==='1'&&Number(calc.querySelector('b').style.opacity)>.1){phase=1;app.api.togglePause();snapshot=visual();return;}
+  if(phase!==1)return;assert.equal(visual(),snapshot);frames++;
+  if(frames===2){const scale=Number(calc.style.getPropertyValue('--calculation-scale'));wheel(2000);assert.equal(calc.dataset.detail,'abstract');assert.ok(Number(calc.style.getPropertyValue('--calculation-scale'))<scale);assert.equal(calc.querySelector('.projection-sum-symbol').textContent,'×');}
+  if(frames===3){wheel(-2000);assert.equal(calc.dataset.detail,'full');app.c.I18n.setPreference('en');assert.equal(visual(),snapshot,'language rebuild restores the same pair and product');}
+  if(frames===5){
+   const saved=JSON.stringify(app.api.getState());app.api.run();assert.equal(app.document.querySelectorAll('.packet,.projection-calculation,.projection-result').length,0);
+   app.scenes.at(-1).traverse(o=>{if(o.userData.multiplyFeature!=null)assert.equal(o.visible,false);assert.equal(o.userData.processingSecondary,undefined);});
+   assert.equal(JSON.stringify(app.api.getState()),saved);phase=2;restart=app.api.run();
+  }
+ }});
+ app.api.switchLevel('gating');app.api.setState(app.c.NeuralPrologue.solutions('gating'));app.api.getWorld().rebuild();await app.api.run();await restart;
+ assert.equal(phase,2);assert.equal(app.document.querySelectorAll('#test-results .pass').length,5);
+});
+
+test('duplicated multiplication modules animate their actual wiring even in an incorrect circuit',async()=>{
+ let app;const seen=new Set();
+ app=await boot({reduced:false,frameMs:80,onFrame:({document})=>{
+  if(!app)return;
+  for(const id of ['multiply','multiply-2']){
+   const label=document.querySelector(`.processing-packet[data-node="${id}"]`);if(!label||label.hidden)continue;
+   const M=app.c.NeuralPrologue,state=app.api.getState(),node=state.nodes.find(n=>n.id===id),ev=M.evaluate(state,M.samples[0].v),calc=document.querySelector(`.projection-calculation[data-node="${id}"]`);
+   assert.ok(calc,'each operator instance has its own two-factor equation');
+   app.scenes.at(-1).children.flatMap(o=>o.children).find(o=>o.userData.node===id).traverse(o=>{if(o.userData.multiplyFeature==null||!o.visible)return;const i=o.userData.multiplyFeature;assert.equal(o.userData.inputA,ev.values[node.links[0]][i]);assert.equal(o.userData.inputB,ev.values[node.links[1]][i]);assert.equal(o.userData.value,ev.values[id][i]);seen.add(id);});
+  }
+ }});
+ app.api.switchLevel('ffn');const M=app.c.NeuralPrologue,s=M.initial('ffn');
+ const coords=[[-4.7,-2],[-1.4,-2],[1.9,-2],[5.2,-2],[-4.7,2]];
+ ['project','gate','multiply','multiply','down'].forEach((kind,i)=>assert.ok(M.addNode(s,kind,...coords[i])));
+ for(const edge of [['R','project',0],['R','gate',0],['gate','multiply',0],['project','multiply',1],['multiply','multiply-2',0],['gate','multiply-2',1],['multiply-2','down',0],['down','sink',0]])assert.equal(M.connect(s,...edge),null);
+ app.api.setState(s);app.api.getWorld().rebuild();await app.api.run();assert.deepEqual([...seen],['multiply','multiply-2']);assert.equal(app.document.querySelectorAll('#test-results .fail').length,1);
+});
+
 test('stopping and immediately restarting during processing clears effects without cancelling the new run',async()=>{
  let app,restarted=false,restart;
  app=await boot({reduced:false,frameMs:20,onFrame:({document})=>{
