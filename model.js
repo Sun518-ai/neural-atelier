@@ -27,6 +27,7 @@ const levels={
  gating:{id:'gating',chapter:I18n.t("序章 / 04"),title:I18n.t("让两路相遇"),nodes:['gate','up','silu','multiply'],sources:['R'],sinkDim:4,sampleCount:5,sourceX:-8,sinkX:8,zoom:1,boardWidth:21,boardDepth:10,
   positions:{gate:[-4,-2],up:[-4,2],silu:[0,-2],multiply:[3.5,1.2]},initialLinks:{gate:['R'],up:['R']},
   mission:I18n.t("把两组数一一相乘"),description:I18n.t("两块投影接收同一份输入，分别算出 4 个数。用 SiLU 处理其中一组，再让两组数一一相乘。接好模块，让 5 组输入都得到目标结果。"),summary:I18n.t("新增两路分支和逐元素相乘。自己决定哪条支路经过激活。"),concept:I18n.t("两路门控"),sourceTitle:I18n.t("输入 X"),sourceNote:'',outputTitle:I18n.t("门控特征 H"),boardText:'GATING / 04',shape:'2 → 4 + 4 → 4',next:'residual',
+  rationale:{text:I18n.t("同样强度的特征，不一定对每种输入都同样有用。内容分支算出特征，门分支根据当前输入算调节系数；相乘后，就能对各个特征分别减弱或放大。"),inputs:[[1,0],[0,2]],feature:2,takeaway:I18n.t("同样的内容值，一个被减弱，另一个被放大。输入改变了系数，两套权重没有变。"),scope:I18n.t("真实模型通过训练学习怎样产生有用的特征和系数。本关用固定小矩阵演示 SwiGLU，这是 FFN 的一种设计。")},
   hints:[I18n.t("端口维度相同只说明能接上，不代表计算结果正确。"),I18n.t("逐元素相乘把两条支路对应的数相乘；激活放在哪一条支路会改变结果。")]},
  residual:{id:'residual',chapter:I18n.t("序章 / 05"),title:I18n.t("留一条回来的路"),nodes:['project','down','add'],sources:['R'],sinkDim:2,sampleCount:5,sourceX:-7.5,sinkX:7.5,zoom:.96,boardWidth:20,boardDepth:9,
   positions:{project:[-3.8,1.3],down:[0,1.3],add:[3.8,-.3]},initialLinks:{project:['R'],down:['project']},initialSink:'down',

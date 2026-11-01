@@ -134,11 +134,44 @@ test('gate and content cards compare the same input with a worked feature in bot
      assert.deepEqual(cells.map((c,i)=>c.classList.contains('example-focus')?i:-1).filter(i=>i>=0),[2],'the same feature is highlighted at every stage');
     }
     for(const [role,symbol]of [['content','U'],['scale','S'],['result','H']])assert.equal(Number(comparison.querySelector(`[data-role="${role}"] b`).textContent),round(expected[symbol][2]));
-    assert.equal(comparison.querySelector('.card-gate-step').textContent,`SiLU(${round(expected.G[2])}) ≈ ${round(expected.S[2])}`);
+    assert.equal(comparison.querySelector('.card-gate-step').textContent,`SiLU(${Number(expected.G[2].toFixed(4))}) ≈ ${round(expected.S[2])}`);
     if(previous)assert.equal(comparison.textContent,previous,'switching branches keeps one comparable example');previous=comparison.textContent;
     if(language==='en')assert.doesNotMatch(doc.querySelector('#module-card').textContent,/[\u3400-\u9fff]/);
     doc.querySelector('#card-close').onclick();assert.equal(JSON.stringify(app.api.getState()),saved);
    }
+  }
+ }
+ assert.deepEqual([...app.c.I18n.missing],[]);
+});
+test('SiLU cards connect each input to its output and carry the same example into multiplication',async()=>{
+ const app=await boot(),M=app.c.NeuralPrologue,doc=app.document,round=v=>Number(v.toFixed(2));
+ const values=(root,symbol)=>[...root.querySelectorAll(`[data-symbol="${symbol}"] i`)].map(el=>Number(el.textContent));
+ for(const language of ['zh','en']){
+  app.c.I18n.setPreference(language);
+  for(const level of ['activation','gating','ffn']){
+   app.api.switchLevel(level);const state=M.solutions(level);app.api.setState(state);app.api.getWorld().rebuild();
+   const saved=JSON.stringify(state),source=level==='activation'?[1,1]:[1,0],ev=M.evaluate(state,source),symbol=level==='activation'?'P':'G',input=ev.values[symbol==='P'?'project':'gate'],output=ev.values.silu;
+   app.api.getWorld().focus('silu');const example=doc.querySelector('.card-silu-example');assert.ok(example);
+   assert.equal(doc.querySelector('#card-formula').textContent,`S = SiLU(${symbol})`);
+   assert.deepEqual(values(example,symbol),Array.from(input,round));assert.deepEqual(values(example,'S'),Array.from(output,round));
+   for(const selector of [`[data-symbol="${symbol}"] i`,'.card-silu-link i','[data-symbol="S"] i']){
+    const cells=[...example.querySelectorAll(selector)];assert.equal(cells.length,input.length);
+    assert.deepEqual(cells.flatMap((el,i)=>el.classList.contains('example-focus')?[i]:[]),[2],'the input, SiLU arrow and output highlight one matching feature');
+   }
+   const equation=example.querySelector('.card-silu-worked code'),shownInput=Number(equation.textContent.match(/^SiLU\(([^)]+)\)/)[1]);
+   assert.equal(shownInput,Number(input[2].toFixed(4)));assert.equal(Number(equation.querySelector('sup').textContent),-shownInput);
+   assert.equal(round(M.silu(shownInput)),round(output[2]),'the displayed scalar calculation rounds to the displayed output');
+   assert.ok(output.some(v=>v<0),'negative SiLU outputs remain visible');
+   const product=example.querySelector('.card-gate-result');assert.equal(!!product,level!=='activation');
+   if(product)for(const [role,expected]of [['content',ev.values.up[2]],['scale',output[2]],['result',ev.values.multiply[2]]])assert.equal(Number(product.querySelector(`[data-role="${role}"] b`).textContent),round(expected));
+   if(language==='en')assert.doesNotMatch(doc.querySelector('#module-card').textContent,/[\u3400-\u9fff]/);
+   doc.querySelector('#card-close').onclick();
+   if(level!=='activation'){
+    app.api.getWorld().focus('multiply');assert.equal(doc.querySelector('.card-silu-example'),null);
+    assert.deepEqual(values(doc.querySelector('#card-example-values'),'S'),Array.from(output,round),'the next card uses the SiLU output from the same input');
+    doc.querySelector('#card-close').onclick();
+   }
+   assert.equal(JSON.stringify(app.api.getState()),saved,'inspection does not change the puzzle');
   }
  }
  assert.deepEqual([...app.c.I18n.missing],[]);

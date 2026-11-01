@@ -29,6 +29,24 @@ test('all 26 levels automatically display their report beside the run controls',
   for(const n of M.levels[id].nodes){app.eval(`select('${n}')`);assert.ok(app.document.querySelector('#inspect-name').textContent.length);const card=app.eval(`cardFor('${n}',stageId)||M.extraCard('${n}',stageId)`);assert.ok(card.meaning);const example=app.eval(`M.extraExample('${n}',stageId)||exampleFor(M,'${n}',stageId)`);assert.ok(example.output[1].every(Number.isFinite)||n==='mask');}
  }
 });
+test('gating rationale uses actual weights to show equal content receiving different scales',()=>{
+ const app=boot(),M=app.c.NeuralPrologue,doc=app.document,round=v=>Number(v.toFixed(2));
+ for(const language of ['zh','en']){
+  app.c.I18n.setPreference(language);app.eval("switchLevel('gating')");
+  const saved=app.eval('JSON.stringify(state)'),reason=doc.querySelector('#mission-reason');assert.equal(reason.hidden,false);
+  const rows=[...reason.querySelectorAll('tbody tr')],contents=[],factors=[];assert.equal(rows.length,2);
+  for(const row of rows){
+   const input=JSON.parse(row.querySelector('td').textContent),ev=M.evaluate(M.solutions('gating'),input);
+   for(const [role,key]of [['content','up'],['scale','silu'],['result','multiply']])assert.equal(Number(row.querySelector(`[data-factor="${role}"]`).textContent),round(ev.values[key][2]));
+   contents.push(ev.values.up[2]);factors.push(ev.values.silu[2]);
+  }
+  assert.equal(contents[0],contents[1]);assert.ok(factors[0]>0&&factors[0]<1);assert.ok(factors[1]>1);
+  assert.equal(app.eval('JSON.stringify(state)'),saved,'the comparison never prewires the player’s circuit');
+  if(language==='en')assert.doesNotMatch(reason.textContent,/[\u3400-\u9fff]/);
+  app.eval("switchLevel('activation')");assert.equal(reason.hidden,true);assert.equal(reason.querySelector('table'),null);
+ }
+ assert.deepEqual([...app.c.I18n.missing],[]);
+});
 test('inline report appears without clicking, stays during scene interaction, dismisses independently and returns next run',async()=>{
  const app=boot(),panel=app.document.querySelector('#run-report');app.document.querySelector('#run').focus=()=>{};
  assert.equal(panel.hidden,true);

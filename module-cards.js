@@ -23,9 +23,9 @@ export const moduleCards = {
   },
   silu: {
     number:'03', seal:I18n.t("启"), english:'SiLU ACTIVATION', family:I18n.t("激活"), color:'#a8793b',
-    ability:I18n.t("让门值连续变化"), formula:'SiLU(x) = x / (1 + e⁻ˣ)',
-    meaning:I18n.t("对门分支中的每一个数单独应用同一个函数。正负数的变化程度不同，4 个数处理后仍然是 4 个数。"),
-    purpose:I18n.t("给网络加入非线性，避免多次线性变换只相当于一次线性变换。门值是连续数值，也可以是负数。"),
+    ability:I18n.t("把输入 G 算成输出 S"), formula:'S = SiLU(G)',
+    meaning:I18n.t("SiLU 是函数名。G 是门投影算出的输入向量，S 是经过 SiLU 后的输出向量。G 中的每个数各算一次，得到 S 中对应的数。"),
+    purpose:I18n.t("SiLU 会把较大的负数压近 0，较大的正数则接近原值。输出 S 接着与内容特征 U 相乘，成为逐项调节特征的系数。S 仍可以为负，也可以超过 1。"),
     input:I18n.t("门分支 G"), output:I18n.t("激活后的门值 S"), weight:I18n.t("无"), trait:I18n.t("逐项非线性"), stage:1
   },
   multiply: {
@@ -65,7 +65,10 @@ export function cardFor(id,levelId){
   card.input=I18n.t("输入 X");
  }
  if(id==='silu'&&levelId==='activation'){
-  card.ability=I18n.t("逐个改变投影数值");card.meaning=I18n.t("把投影 P 中的每个数分别送入 SiLU。正数与负数受到不同程度的缩放，4 个数处理后仍是 4 个数。");
+  card.ability=I18n.t("把输入 P 算成输出 S");card.formula='S = SiLU(P)';
+  card.input=I18n.t("投影结果 P");card.output=I18n.t("激活特征 S");
+  card.meaning=I18n.t("SiLU 是函数名。P 是线性投影算出的输入向量，S 是经过 SiLU 后的输出向量。P 中的每个数各算一次，得到 S 中对应的数。");
+  card.purpose=I18n.t("乘一个固定比例会把所有数一起缩放；SiLU 的缩放比例随数值变化。较大的负数被压近 0，较大的正数接近原值，因此它能改变特征之间的数值关系。");
  }
  if(id==='down'&&levelId==='residual'){
   card.formula='F = P × Wd';card.meaning=I18n.t("接过投影 P 中的 4 个数，乘上 4 × 2 权重矩阵。每个输出由 4 项乘积求和，得到 2 维变换 F。");card.purpose=I18n.t("F 的长度回到与输入 X 相同，才能逐项相加。单独得到 F，还没有保留原输入。");
@@ -77,14 +80,15 @@ export function cardFor(id,levelId){
 }
 
 export function exampleFor(M,id,levelId='ffn'){
-  if(id==='project')return {inputs:[['X',[1,1]]],output:['P',M.linear([1,1],M.weights.project)]};
-  const compare=id==='gate'||id==='up',R=compare?[1,0]:[1,1],Z=levelId==='ffn'?M.norm(R):R,P=M.linear(R,M.weights.project);
-  if(levelId==='activation')return {inputs:[['P',P]],output:['S',P.map(M.silu)]};
+  const shared=levelId==='gating'||levelId==='ffn',compare=id==='gate'||id==='up',R=shared?[1,0]:[1,1],Z=levelId==='ffn'?M.norm(R):R,P=M.linear(R,M.weights.project);
+  const meta={sampleIndex:shared?0:2,exampleSource:[levelId==='ffn'?'R':'X',R]};
+  if(id==='project')return {...meta,inputs:[['X',R]],output:['P',P]};
+  if(levelId==='activation')return {...meta,inputs:[['P',P]],output:['S',P.map(M.silu)],activation:{feature:2}};
   if(levelId==='residual'){
    const F=M.linear(P,M.weights.down);
-   return id==='down'?{inputs:[['P',P]],output:['F',F]}:{inputs:[['X',R],['F',F]],output:['Y',R.map((x,i)=>x+F[i])]};
+   return id==='down'?{...meta,inputs:[['P',P]],output:['F',F]}:{...meta,inputs:[['X',R],['F',F]],output:['Y',R.map((x,i)=>x+F[i])]};
   }
   const G=M.linear(Z,M.weights.gate),U=M.linear(Z,M.weights.up),S=G.map(M.silu),H=S.map((x,i)=>x*U[i]),F=M.linear(H,M.weights.down),Y=R.map((x,i)=>x+F[i]),source=levelId==='ffn'?'Z':'X';
   const paths={gate:[[[source,Z]],['G',G]],up:[[[source,Z]],['U',U]],silu:[[['G',G]],['S',S]],multiply:[[['S',S],['U',U]],['H',H]],down:[[['H',H]],['F',F]],add:[[['R',R],['F',F]],['Y',Y]]};
-  return {inputs:paths[id][0],output:paths[id][1],...(compare?{comparison:{input:[source,Z],rows:[['U',U],['G',G],['S',S],['H',H]],feature:2}}:{})};
+  return {...meta,inputs:paths[id][0],output:paths[id][1],...(compare?{comparison:{input:[source,Z],rows:[['U',U],['G',G],['S',S],['H',H]],feature:2}}:{}),...(id==='silu'?{activation:{feature:2,content:U,product:H}}:{})};
 }
