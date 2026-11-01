@@ -1,5 +1,5 @@
-import {cardFor,exampleFor} from './module-cards.js?v=equal-projection-1';
-import {createProgress} from './level-progress.js?v=equal-projection-1';
+import {cardFor,exampleFor} from './module-cards.js?v=compact-shelf-1';
+import {createProgress} from './level-progress.js?v=compact-shelf-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -118,12 +118,16 @@ function renderShelf(){
  const shelf=$('#module-shelf');shelf.hidden=!stage().buildable;$('#remove-module').hidden=!stage().buildable||!state.nodes.some(n=>n.id===selected);$('#remove-module').disabled=busy;
  if(!stage().buildable)return;
  const cap=M.moduleLimit(stage()),available=M.inventory(stage());$('#module-count').textContent=state.nodes.length+' / '+cap;$('#module-count').setAttribute('aria-label',I18n.t('台面数量 / 上限'));
- $('#shelf-help').textContent=stage().placementTutorial?(state.nodes.length?I18n.t("接上输入和出口，再试跑。"):I18n.t("把下面这块拖到台面。")):state.nodes.length>=cap?I18n.t("台面已满，可收回组件。"):I18n.t("拖到台面 · 可重复拿取");
+ shelf.querySelector('summary').title=stage().placementTutorial?(state.nodes.length?I18n.t("接上输入和出口，再试跑。"):I18n.t("把下面这块拖到台面。")):state.nodes.length>=cap?I18n.t("台面已满，可收回组件。"):I18n.t("拖到台面 · 可重复拿取");
  $('#module-palette').innerHTML=(state.palette||Object.keys(available)).map(kind=>{
   const d=M.definitions[kind],remaining=M.stock(state,kind),disabled=busy||!M.canAdd(state,kind),w=M.weights[kind];
-  const visual=w?`<span class="stock-matrix" style="grid-template-columns:repeat(${w[0].length},1fr)">`+w.flat().slice(0,8).map(v=>`<i class="${v<0?'negative':''}"></i>`).join('')+'</span>':`<span class="stock-symbol">${d.type==='activation'?'∿':['add','residual'].includes(d.type)?'+':d.type==='multiply'?'×':'◇'}</span>`;
-  return `<div class="module-stock" role="button" tabindex="${disabled?'-1':'0'}" aria-disabled="${disabled}" data-add-module="${kind}" style="--stock-color:${({project:'#5eaa9c',down:'#90a79a',add:'#c3a26f',gate:'#a894bf',up:'#5eaa9c'})[kind]||'#8aa59a'}">${visual}<span class="stock-description"><b>${d.name}</b><small>${d.ins.map(shape).join(' + ')} → ${shape(d.out)}</small></span><span class="stock-count" aria-label="${I18n.t("可用数量")}">${remaining}<small>/ ${available[kind]}</small></span></div>`;
+  const symbols={activation:'∿',add:'+',residual:'+',multiply:'×',norm:'RMS',rope:'↻',score:'QKᵀ',mask:'◩',softmax:'σ',mix:'AV',attention:'Attn',ffn:'FFN'};
+  const visual=w?`<span class="stock-matrix" aria-hidden="true" style="grid-template-columns:repeat(${w[0].length},1fr)">`+w.flat().slice(0,8).map(v=>`<i class="${v<0?'negative':''}"></i>`).join('')+'</span>':`<span class="stock-symbol" aria-hidden="true">${symbols[d.type]||'◇'}</span>`;
+  const color=M.extraColors?.[kind]?'#'+M.extraColors[kind].toString(16).padStart(6,'0'):({project:'#5eaa9c',down:'#90a79a',add:'#c3a26f',gate:'#a894bf',up:'#5eaa9c'})[kind]||'#8aa59a';
+  const description=`${d.name} · ${d.ins.map(shape).join(' + ')} → ${shape(d.out)} · ${I18n.t("可用数量")} ${remaining} / ${available[kind]}`;
+  return `<div class="module-stock" role="button" tabindex="${disabled?'-1':'0'}" aria-disabled="${disabled}" aria-label="${description}" title="${description}" data-add-module="${kind}" style="--stock-color:${color}">${visual}<b class="stock-name">${d.name}</b><span class="stock-count" aria-hidden="true">${remaining}</span></div>`;
  }).join('');
+ world?.syncShelf?.();
 }
 function chooseModule(kind){if(busy||!M.canAdd(state,kind))return;pending=selectedWire=null;placing=kind;world?.clearPreview?.();world?.labels();say(I18n.t("拖到台面松开；也可以点空位放下。"));}
 function placeModule(x,z){if(!placing||busy)return false;const next=clone(state);if(!M.addNode(next,placing,x,z)){say(I18n.t("这里放不下，换一处空位。"),'error');return false;}checkpoint();selected=next.nodes.at(-1).id;state=next;placing=null;world?.clearPlacement?.();changed();say(I18n.t("组件已放置。"));return true;}
@@ -163,7 +167,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=equal-projection-1');
+ const {createSceneArt}=await import('./scene-art.js?v=compact-shelf-1');
  const art=createSceneArt(T,scene,colors,{anisotropy:renderer.capabilities.getMaxAnisotropy()});art.surroundings(samples(),stage());
  const assembly=new T.Group(),wires=new T.Group();scene.add(assembly,wires);const neuronGeo=new T.SphereGeometry(.115,16,12);let elements=[],curves=[],packets=[],drag=null,preview=null,yaw=.05,pitch=.8,zoom=stage().zoom,lastDepth=-1;
  const cameraTarget=new T.Vector3();let focusId=null,overview=null,cameraFrame=0,transitioning=false,lastTap=null;
@@ -227,14 +231,15 @@ try{
   guidePath.setAttribute('d',curve(point('R'),point('sink','in')).getPoints(32).map((p,i)=>{const [x,y]=project(p);return `${i?'L':'M'}${x.toFixed(1)} ${y.toFixed(1)}`;}).join(' '));
  }
  function syncPlacementGuide(w,h){
-  if(!stage().placementTutorial||state.nodes.length||busy||focusId){placementGuide.setAttribute('hidden','');return;}
+  const flag=$('#module-palette [data-add-module]');
+  if(!stage().placementTutorial||state.nodes.length||busy||focusId||!$('#module-shelf').hasAttribute('open')||!flag){placementGuide.setAttribute('hidden','');return;}
   if(placementGuide.parentNode!==overlay)overlay.prepend(placementGuide);
   placementGuide.removeAttribute('hidden');placementGuide.setAttribute('viewBox',`0 0 ${w} ${h}`);
   const [x,y]=project(new T.Vector3(0,.13,0));
   const corners=[[-1.04,-1.22],[1.04,-1.22],[1.04,1.22],[-1.04,1.22]].map(([a,b])=>project(new T.Vector3(a,.13,b)));
   placementOutline.setAttribute('d',corners.map(([a,b],i)=>`${i?'L':'M'}${a} ${b}`).join(' ')+' Z');
-  const shelf=$('#module-shelf').getBoundingClientRect(),hostRect=host.getBoundingClientRect(),sx=shelf.right-hostRect.left+8,sy=shelf.top-hostRect.top+shelf.height/2;
-  placementPath.setAttribute('d',`M${sx} ${sy} Q${(sx+x)/2} ${sy-30} ${x} ${y}`);placementPath.style.opacity=placing?'0':'.65';
+  const flagRect=flag.getBoundingClientRect(),hostRect=host.getBoundingClientRect(),sx=flagRect.left+flagRect.width/2-hostRect.left,sy=flagRect.bottom-hostRect.top+5;
+  placementPath.setAttribute('d',`M${sx} ${sy} Q${sx} ${(sy+y)/2} ${x} ${y}`);placementPath.style.opacity=placing?'0':'.65';
  }
  function render(){const w=host.clientWidth,h=host.clientHeight;if(!w||!h)return;renderer.setSize(w,h,false);const width=23*zoom,height=width*h/w;Object.assign(camera,{left:-width/2,right:width/2,top:height/2,bottom:-height/2});camera.position.set(cameraTarget.x+Math.sin(yaw)*24,cameraTarget.y+Math.sin(pitch)*24,cameraTarget.z+Math.cos(yaw)*Math.cos(pitch)*24);camera.lookAt(cameraTarget);camera.updateProjectionMatrix();renderer.render(scene,camera);syncConnectionGuide(w,h);syncPlacementGuide(w,h);syncWireTargets(w,h);elements.forEach(({el,pos})=>{el.hidden=!!focusId&&(el.dataset.owner!==focusId||el.classList.contains('node-label')||el.classList.contains('local-fault')||el.classList.contains('fault-pin'));if(el.classList.contains('port'))el.disabled=!!focusId;const [x,y]=project(pos());if(el.classList.contains('local-fault')||el.classList.contains('wire-actions')){el.style.left=Math.max(12,Math.min(w-el.offsetWidth-12,x+18))+'px';el.style.top=Math.max(12,Math.min(h-el.offsetHeight-46,y+15))+'px';}else{el.style.left=x+'px';el.style.top=y+'px';}});packets.forEach(p=>{const [x,y]=project(p.p.clone().add(new T.Vector3(0,.7,0)));p.el.style.left=x+'px';p.el.style.top=y+'px';if(p.calculation){const [cx,cy]=project(new T.Vector3(p.node.x,1.05,p.node.z+1.28));p.calculation.style.left=cx+'px';p.calculation.style.top=cy+'px';}});}
 
@@ -396,6 +401,7 @@ try{
  overlay.addEventListener('pointerdown',e=>{if(transitioning)return;if(busy){dragCamera(e);return;}const b=e.target.closest('button');if(!b)return;if(b.dataset.assign){selected=b.dataset.assign;drag={kind:'device',id:b.dataset.assign,x:e.clientX,y:e.clientY,moved:false};return;}if(b.dataset.output)drag={kind:'wire',id:b.dataset.output,el:b,x:e.clientX,y:e.clientY,moved:false};if(b.dataset.node){if(focusId){drag={kind:'camera',x:e.clientX,y:e.clientY,yaw,pitch,moved:false};return;}const n=state.nodes.find(n=>n.id===b.dataset.node),p=worldPoint(e.clientX,e.clientY);selected=n.id;drag={kind:'node',id:n.id,x:e.clientX,y:e.clientY,moved:false,old:clone(state),offset:p?[n.x-p.x,n.z-p.z]:[0,0]};inspect();}});
  host.addEventListener('pointerdown',e=>{if(transitioning)return;if(busy){dragCamera(e);return;}if(placing){const p=worldPoint(e.clientX,e.clientY);if(p)placeModule(p.x,p.z);return;}if(selectedWire){selectedWire=null;labels();}if(focusId){drag={kind:'camera',x:e.clientX,y:e.clientY,yaw,pitch,moved:false};return;}const p=worldPoint(e.clientX,e.clientY),hit=ray.intersectObjects(assembly.children,true)[0];if(hit){let object=hit.object;while(object&&!object.userData.node)object=object.parent;if(object?.userData.node){const n=state.nodes.find(n=>n.id===object.userData.node);selected=n.id;drag={kind:'node',id:n.id,x:e.clientX,y:e.clientY,moved:false,old:clone(state),offset:p?[n.x-p.x,n.z-p.z]:[0,0]};inspect();return;}}drag={kind:'camera',x:e.clientX,y:e.clientY,yaw,pitch,moved:false};if(pending){pending=null;labels();clearPreview();say(I18n.t("已取消连线。"));}});
  $('#module-palette').addEventListener('pointerdown',e=>{const b=e.target.closest('[data-add-module]');if(!b||b.getAttribute('aria-disabled')==='true'||busy)return;e.preventDefault();chooseModule(b.dataset.addModule);drag={kind:'palette',id:placing,x:e.clientX,y:e.clientY,moved:false};});
+ $('#module-shelf').addEventListener('toggle',render);
  document.addEventListener('pointermove',e=>{if(placing)previewPlacement(e.clientX,e.clientY);if(!drag||(busy&&drag.kind!=='camera'))return;if(Math.hypot(e.clientX-drag.x,e.clientY-drag.y)>5)drag.moved=true;if(!drag.moved)return;if(drag.kind==='wire'){pending=drag.id;previewAt(e.clientX,e.clientY);}if(drag.kind==='node'){const p=worldPoint(e.clientX,e.clientY),n=state.nodes.find(n=>n.id===drag.id);if(p){const b=M.bounds(stage());n.x=Math.max(b.left,Math.min(b.right,p.x+drag.offset[0]));n.z=Math.max(b.back,Math.min(b.front,p.z+drag.offset[1]));rebuild();}}if(drag.kind==='camera'){yaw=Math.max(-.65,Math.min(.65,drag.yaw-(e.clientX-drag.x)*.003));pitch=Math.max(.4,Math.min(1.35,drag.pitch+(e.clientY-drag.y)*.004));render();}});
  document.addEventListener('pointerup',e=>{if(!drag)return;const d=drag;drag=null;if(busy&&d.kind!=='camera')return;if(d.kind==='palette'){if(d.moved){suppressPaletteClick=true;setTimeout(()=>suppressPaletteClick=false,0);const rect=host.getBoundingClientRect();if(e.clientX>=rect.left&&e.clientX<=rect.right&&e.clientY>=rect.top&&e.clientY<=rect.bottom){const p=worldPoint(e.clientX,e.clientY);if(p)placeModule(p.x,p.z);}placing=null;clearPlacement();labels();}return;}if(d.kind==='device'){const target=document.elementFromPoint(e.clientX,e.clientY)?.closest('[data-device]');if(target)assignDevice(d.id,target.dataset.device);return;}if(d.kind==='wire'&&d.moved){d.el.dataset.suppress='true';setTimeout(()=>delete d.el.dataset.suppress,0);const target=document.elementFromPoint(e.clientX,e.clientY)?.closest('[data-input]');clearPreview();if(target){const [to,i]=target.dataset.input.split(':');link(d.id,to,Number(i));}else{pending=d.id;labels();say(I18n.t("继续点一个方形输入口，完成这条线。"));}}if(d.kind==='node'&&d.moved){history.push(d.old);save();refresh();labels();}if(d.kind==='node'&&!d.moved){nodeTap(d.id,e);labels();}});
  document.addEventListener('pointercancel',()=>{drag=null;pending=placing=null;clearPreview();clearPlacement();labels();});
@@ -412,5 +418,5 @@ try{
  function beforeStage(){if(focusId)leaveFocus();cancelAnimationFrame(cameraFrame);transitioning=false;host.setAttribute('aria-busy','false');drag=lastTap=null;clearPreview();clearPlacement();clearPackets();elements=[];overlay.replaceChildren();}
  function setStage(){art.surroundings(samples(),stage());yaw=.05;pitch=.8;zoom=stage().zoom;cameraTarget.set(0,0,0);rebuild();}
  function relocalize(){art.surroundings(samples(),stage());rebuild();packets.forEach(p=>{p.el.querySelector('.packet-title').textContent=flowIdentity();if(p.motion==='process'&&p.progress!=null)art.processing(p.node.id,p.progress,p.input,p.output,p.color,{sequence:!!stage().sequence,detailed:p.detailed});});render();}
- new ResizeObserver(render).observe(host);world={relocalize,labels,rebuild,animate,clearPackets,clearPreview,clearPlacement,previewAt,previewPlacement,focus,focused:()=>focusId,beforeStage,setStage};$('#loading').hidden=true;rebuild();refresh();
+ new ResizeObserver(render).observe(host);world={relocalize,labels,rebuild,animate,clearPackets,clearPreview,clearPlacement,previewAt,previewPlacement,focus,focused:()=>focusId,beforeStage,setStage,syncShelf:()=>syncPlacementGuide(host.clientWidth,host.clientHeight)};$('#loading').hidden=true;rebuild();refresh();
 }catch(e){$('#loading').innerHTML=I18n.t("<strong>3D 台面没有加载成功，请刷新重试。</strong>");say(I18n.t("页面尚未开始运行。"),'error');console.error(e);}
