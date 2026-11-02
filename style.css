@@ -18,6 +18,14 @@ body{min-width:1080px}#game{max-width:1920px;padding:18px 24px}main{grid-templat
 #level-complete #complete-detail{margin-top:20px;color:var(--teal);font-size:14px}
 #level-complete #complete-keep{margin-top:6px;font-size:12px;line-height:1.7}
 .complete-actions{display:flex;gap:10px;margin-top:24px}.complete-actions button{flex:1;padding:10px 12px;font-size:13px}#complete-next{background:var(--teal);color:var(--paper);border-color:var(--teal)}
+.repo-link{display:inline-flex;align-items:center;justify-content:center;gap:7px;flex-shrink:0;min-height:38px;padding:7px 10px;border:1px solid transparent;border-radius:8px;color:var(--muted);font-size:12px;line-height:1.4;text-decoration:none;white-space:nowrap}
+.repo-icon{display:block;flex-shrink:0}.repo-external{font:12px/1 sans-serif;opacity:.65}
+.repo-link:hover{color:var(--ink);border-color:var(--line);background:#fffdf6a6}.repo-link:focus-visible{outline:3px solid #deac66;outline-offset:3px}
+.complete-community{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:6px 10px;margin-top:22px;padding-top:17px;border-top:1px solid var(--line);color:var(--muted);font-size:12px}
+.repo-star{color:#86652f;background:#f5efdf;border-color:#ded3b7}.repo-star:hover{color:#6f5022;background:#f0e5cd;border-color:#bc9a60}
+.welcome-footer{position:absolute;z-index:2;left:9%;right:7%;bottom:5%;display:flex;align-items:center;justify-content:space-between;gap:20px}
+.welcome-footer .welcome-edition{position:static}.welcome-footer .repo-link{font-size:11px}
+@media(max-width:1200px){.welcome-footer{left:6%;right:6%}}
 #level-complete[open]{animation:complete-in .18s ease-out}@keyframes complete-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 @media(prefers-reduced-motion:reduce){#level-complete[open]{animation:none}}
 
