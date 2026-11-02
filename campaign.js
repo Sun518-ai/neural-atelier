@@ -84,6 +84,107 @@ engine('fusion',6,I18n.t("少落地一次中间结果"),I18n.t("总时间 ≤ 18
 engine('parallel',7,I18n.t("GPU 与 ANE 一起工作"),I18n.t("首词 ≤ 78 ms，ANE 工作占比 ≥ 20%"),I18n.t("调整 Prefill 中投影与 FFN 的 ANE 分担比例。过少会闲置 ANE，过多可能让 GPU 等待；同步也花时间。"),{controls:['split','batch'],settings:{batch:16,layout:'channels',precision:8,cache:true,fusion:true,resident:true,split:0},limits:{ttft:78,aneMin:20}});
 engine('session',8,I18n.t("下一轮不用从头读"),I18n.t("第二轮首词 ≤ 60 ms，内存 ≤ 24 GB"),I18n.t("两轮提示共用一段前缀。复用匹配的前缀状态，只计算新增部分；更长上下文会增加 KV 内存。"),{controls:['prefix','context','precision'],settings:{batch:16,layout:'channels',precision:8,cache:true,fusion:true,resident:true,split:40,prefix:false,context:2048},limits:{second:60,memory:24,error:.30}});
 engine('capstone',9,I18n.t("让引擎真的跑得动"),I18n.t("通过两种负载的验收"),I18n.t("长提示和多轮长上下文都要通过。检查正确性、内存、首词与解码速度；完成后可继续试更快的方案。"),{controls:['layout','batch','cache','precision','fusion','resident','split','prefix','context'],settings:{batch:1,layout:'sequence',precision:16,cache:false,fusion:false,resident:false,split:0,prefix:false,context:2048},limits:{ttft:110,tps:45,memory:24,error:.30,second:65,aneMin:15,scratch:650},workloads:[{prompt:128,context:2048},{prompt:256,context:4096}],devices:Object.fromEntries(engineNodes.map(k=>[k,'cpu']))});
+const rationales={
+ embedding:{
+  title:I18n.t("为什么编号要换成向量？"),
+  text:I18n.t("Token ID 只是查表地址，编号相邻不代表含义相近。词向量表把编号换成可参与矩阵计算的特征，后面的层才能处理这些特征之间的关系。"),
+  takeaway:I18n.t("真实词向量来自训练；这里的六个向量用于演示查表，不代表已经学会这些词的含义。")
+ },
+ normalize:{
+  title:I18n.t("为什么要整理数值尺度？"),
+  text:I18n.t("层层变换可能让向量的数值尺度差异很大，影响后续计算的稳定性。RMSNorm 按每个向量自己的均方根缩放，为后续投影提供较一致的数值尺度。"),
+  takeaway:I18n.t("例如 [3, 4] 除以 √((9 + 16) / 2)，约为 [0.85, 1.13]。特征间的比例保留，整体尺度得到调整。")
+ },
+ qkv:{
+  title:I18n.t("为什么同一份输入要分成 Q/K/V？"),
+  text:I18n.t("两个位置如何匹配，和匹配后传递哪些内容，需要不同的特征表示。Q/K 用来比较，V 则提供真正要汇入的内容；三套权重可以分别学习这两种用途。"),
+  takeaway:I18n.t("给某个位置很高的注意力权重时，汇入的是它的 V。Q/K 的数参与计算权重，不直接充当这份内容。")
+ },
+ scores:{
+  title:I18n.t("为什么先算匹配分数？"),
+  text:I18n.t("当前位置需要决定从哪些位置取信息。它的 Q 与各位置的 K 做点积，得到一组随输入变化的匹配分数，为后面的权重分配提供依据。"),
+  takeaway:I18n.t("点积再除以 √维度，控制高维点积的尺度，避免 Softmax 过度集中。分数可以为负，还不是概率。")
+ },
+ causal:{
+  title:I18n.t("为什么不能读取未来的词？"),
+  text:I18n.t("生成下一个词时，模型只有已经出现的内容。即使训练或 Prefill 一次处理整段文本，每个位置也要遵守同样的限制，否则会用到生成时尚不存在的信息。"),
+  takeaway:I18n.t("在“我 / 爱 / 猫”中，“爱”这个位置可以参考“我”和自己。未来的“猫”被遮住，经过 Softmax 后其权重为 0。")
+ },
+ rope:{
+  title:I18n.t("为什么位置会影响匹配？"),
+  text:I18n.t("单看 Q/K 的点积，分数取决于特征本身，没有直接表示两个位置相隔多远。按位置同时旋转 Q 和 K，让点积包含相对位置的信息，为注意力提供词序线索。"),
+  takeaway:I18n.t("相隔一格和两格，旋转角度差不同，匹配分数也可能不同。本关用一对特征演示；真实 RoPE 在多对特征上使用不同频率。")
+ },
+ attention:{
+  title:I18n.t("为什么算完权重还要汇合 V？"),
+  text:I18n.t("注意力权重决定各位置的信息占比，但权重本身还不是新的词特征。按这些比例加权 V，当前位置才真正得到其他位置带来的内容。"),
+  takeaway:I18n.t("例如权重 [0.2, 0.8, 0] 表示取第一份 V 的 20%、第二份的 80%。输出投影再把汇合结果转换成下一步需要的特征表示。")
+ },
+ block:{
+  title:I18n.t("为什么一层里要有两种加工？"),
+  text:I18n.t("Attention 负责位置之间的信息交流，FFN 负责加工各个位置已有的特征。两者产生的修改量通过残差累积到当前表示上，形成可以交给下一层的新特征。"),
+  takeaway:I18n.t("第二次残差以 Attention 更新后的特征为基础。如果又接回最早的输入，就会漏掉前一步已经加入的修改。")
+ },
+ vocabulary:{
+  title:I18n.t("为什么最后还要经过词表？"),
+  text:I18n.t("网络里流动的是特征向量，文字要在输出端通过词表读出。词表投影把特征换成每个候选 token 的分数，再由选词规则决定输出哪个。"),
+  takeaway:I18n.t("本关总选最高分，用来观察特征如何改变文字。真实生成也可以按概率采样，因此同一组分数不一定每次选出同一个词。")
+ },
+ autoregressive:{
+  title:I18n.t("为什么生成的词要送回来？"),
+  text:I18n.t("下一词的预测依赖当前上下文，而刚生成的词会成为下一次预测的条件。把新词追加回来，模型才能继续生成句子。"),
+  takeaway:I18n.t("首次处理提示词称为 Prefill；随后反复预测并追加一个新词，就是 Decode。本关用三词窗口和固定转移规则演示这个循环。")
+ },
+ placement:{
+  title:I18n.t("为什么不能全交给最快的芯片？"),
+  text:I18n.t("一次推理既有矩阵运算，也有取数、控制和设备交接。把某一步交给更快的单元，收益可能被派发与同步抵消，所以要比较完整链路的首词时间。"),
+  takeaway:I18n.t("本关把 CPU、GPU、ANE 的算子支持和交接成本分别计入，让你比较不同分工带来的总耗时。")
+ },
+ layout:{
+  title:I18n.t("为什么形状对了还不够？"),
+  text:I18n.t("算子会按约定的轴和内存顺序读取张量。布局不匹配时，即使元素数量相同，也可能需要重排数据、换算子或回退，增加开销。"),
+  takeaway:I18n.t("本关用 B/C/1/S 演示 ANE 投影适配。相邻算子采用兼容的布局，才有机会省去反复转换，让加速单元真正用起来。")
+ },
+ batching:{
+  title:I18n.t("为什么 Prefill 可以成批计算？"),
+  text:I18n.t("提示词的各个位置已经给定，投影可以让多个位置一起使用同一套权重。这样能复用权重、摊薄派发成本，提高矩阵单元的利用率。"),
+  takeaway:I18n.t("批次越大，同时存放的中间特征也越多。本关需要在减少派发次数和控制临时内存之间取舍。")
+ },
+ 'kv-cache':{
+  title:I18n.t("为什么过去的 K/V 可以复用？"),
+  text:I18n.t("因果注意力中，追加一个词不会改变过去位置已经算出的 K/V。把它们缓存起来，每步只补新位置，就能避免重复投影整段历史。"),
+  takeaway:I18n.t("新 Q 仍要读取历史 K/V 来取信息；缓存节省的是重复计算，同时占用内存。这是用空间换解码速度。")
+ },
+ quantization:{
+  title:I18n.t("为什么降低位数能省内存？"),
+  text:I18n.t("27B 个权重仅按 16 位存放，就约需 54 GB，还没计入 K/V 和运行空间。用更少的位数表示权重，能减少存储容量和读取它们的数据量。"),
+  takeaway:I18n.t("可表示的数值变少，就需要舍入。误差会传到后续计算，甚至改变候选词的排名，所以省内存的同时还要检查输出误差。")
+ },
+ fusion:{
+  title:I18n.t("为什么少写一次内存也能更快？"),
+  text:I18n.t("激活和门控分开执行时，前一步写出的中间结果需要被下一步重新读取。融合执行可以减少这些写回、读取和派发，即使乘加次数相近也可能更快。"),
+  takeaway:I18n.t("权重驻留则省去反复从存储加载的开销。它保留的是内存中的权重，每一步计算仍然要读取这些权重。")
+ },
+ parallel:{
+  title:I18n.t("为什么两块芯片一起做未必最快？"),
+  text:I18n.t("可拆分的投影或 FFN 工作能交给 GPU 和 ANE 并行完成。但后续步骤要等两边都结束；分配不均时，快的一边会空等，同步还会额外花时间。"),
+  takeaway:I18n.t("比较分担比例时，要看两边各自的完成时间和交接成本。ANE 工作占比变高，并不自动意味着首词更快。")
+ },
+ session:{
+  title:I18n.t("为什么新一轮能接着上次算？"),
+  text:I18n.t("多轮提示常有相同的开头。模型、token 前缀和位置一致时，已有的前缀 K/V 可以继续使用，新一轮就能省去这部分 Prefill。"),
+  takeaway:I18n.t("这把生成过程中的 K/V 复用延伸到多轮请求。保留更长前缀需要更多 K/V 内存，第二轮更快也必须装得下。")
+ },
+ capstone:{
+  title:I18n.t("为什么要用两种负载验收？"),
+  text:I18n.t("长提示更考验 Prefill，多轮长上下文更考验 K/V 容量和复用。只在一种输入上表现好的配置，换一种负载就可能变慢或超出内存。"),
+  takeaway:I18n.t("首词时间、逐词速度、内存和误差需要一起检查。每项优化都有代价，完整引擎要让这些约束在两种负载下同时成立。")
+ }
+};
+for(const [id,rationale]of Object.entries(rationales)){
+ if(extra[id].engine)rationale.scope=I18n.t("耗时、内存和芯片支持范围采用教学模型，用于比较方案，不是设备实测。");
+ extra[id].rationale=rationale;
+}
 Object.assign(M.levels,extra);
 for(const [id,maxModules]of [['ffn',8],['attention',12],['block',7]]){
  const level=M.levels[id];level.buildable=true;level.maxModules=maxModules;

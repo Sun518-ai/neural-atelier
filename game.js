@@ -1,5 +1,5 @@
-import {cardFor,exampleFor} from './module-cards.js?v=residual-flow-1';
-import {createProgress} from './level-progress.js?v=residual-flow-1';
+import {cardFor,exampleFor} from './module-cards.js?v=level-purpose-1';
+import {createProgress} from './level-progress.js?v=level-purpose-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -95,14 +95,17 @@ function stageChrome(){
  $('.mission h2').textContent=c.mission;$('.mission p').textContent=c.description;$('#mission-limits').innerHTML=c.engine?Object.entries(c.limits).map(([key,value])=>{const [name,unit]=M.metricLabels[key];return `<span>${name} ${key==='tps'||key==='aneMin'?'≥':'≤'} ${value} ${unit}</span>`;}).join(''):'';
  const reason=c.rationale;$('#mission-reason').hidden=!reason;
  $('#mission-reason-title').textContent=reason?.title||I18n.t("为什么要这样算");
- for(const field of ['text','takeaway','scope'])$('#mission-reason-'+field).textContent=reason?.[field]||'';
+ for(const field of ['text','takeaway','scope']){
+  const el=$('#mission-reason-'+field);el.textContent=reason?.[field]||'';el.hidden=!reason?.[field];
+ }
  if(reason?.kind==='residual'){
   const x=reason.input,f=M.linear(M.linear(x,M.weights.project),M.weights.down),y=x.map((v,i)=>v+f[i]);
   $('#mission-reason-example').innerHTML=`<div class="residual-example">${[['baseline',I18n.t("原有特征 X"),x],['update',I18n.t("修改量 F"),f],['result',I18n.t("更新结果 Y"),y]].map(([role,label,values])=>`<div data-role="${role}"><span>${label}</span><code>${vector(values)}</code></div>`).join('')}<small>Y = X + F</small></div>`;
- }else $('#mission-reason-example').innerHTML=reason?`<table><caption>${I18n.t("比较两种输入的第 3 个特征")}</caption><thead><tr><th>${I18n.t("输入")}</th><th>${I18n.t("内容 × 系数 ≈ 结果")}</th></tr></thead><tbody>${reason.inputs.map(input=>{
+ }else $('#mission-reason-example').innerHTML=reason?.inputs?`<table><caption>${I18n.t("比较两种输入的第 3 个特征")}</caption><thead><tr><th>${I18n.t("输入")}</th><th>${I18n.t("内容 × 系数 ≈ 结果")}</th></tr></thead><tbody>${reason.inputs.map(input=>{
   const i=reason.feature,u=M.linear(input,M.weights.up)[i],g=M.linear(input,M.weights.gate)[i],s=M.silu(g);
   return `<tr><td>${vector(input)}</td><td><span data-factor="content">${fmt(u)}</span> × <span data-factor="scale">${fmt(s)}</span> ≈ <strong data-factor="result">${fmt(u*s)}</strong></td></tr>`;
  }).join('')}</tbody></table>`:'';
+ $('#mission-reason-example').hidden=!$('#mission-reason-example').hasChildNodes();
  $('.route').innerHTML=`${I18n.t("<span>输入 token</span><i>→</i>")}${c.id==='ffn'?I18n.t("<span>Attention · 上游已就绪</span><i>→</i>"):''}<strong>${c.concept}</strong><i>→</i><span>${c.outputTitle}${I18n.t("</span><span class=\"route-tail\">教学缩尺 ")}${c.shape}</span>`;
 }
 function renderLevelMenu(){
@@ -205,7 +208,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=residual-flow-1');
+ const {createSceneArt}=await import('./scene-art.js?v=level-purpose-1');
  const art=createSceneArt(T,scene,colors,{anisotropy:renderer.capabilities.getMaxAnisotropy()});art.surroundings(samples(),stage());
  const assembly=new T.Group(),wires=new T.Group();scene.add(assembly,wires);const neuronGeo=new T.SphereGeometry(.115,16,12);let elements=[],curves=[],packets=[],drag=null,preview=null,yaw=.05,pitch=.8,zoom=stage().zoom,lastDepth=-1;
  const cameraTarget=new T.Vector3();let focusId=null,shelfFocus=null,shelfModel=null,overview=null,cameraFrame=0,transitioning=false,lastTap=null;

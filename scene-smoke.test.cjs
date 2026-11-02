@@ -191,7 +191,7 @@ test('residual cards and the lesson explain baseline plus update with the actual
    }
    assert.equal(Number(card.querySelector('[data-role="baseline"]').textContent),1);assert.equal(Number(card.querySelector('[data-role="update"]').textContent),round(ev.values.down[0]));
    assert.equal(Number(card.querySelector('.card-add-step b').textContent),round(ev.values.add[0]));assert.equal(card.querySelector('.card-add-zero code').textContent,`F = [0, 0] → Y = ${source}`);
-   const reason=doc.querySelector('#mission-reason');assert.equal(reason.hidden,level!=='residual');
+   const reason=doc.querySelector('#mission-reason');assert.equal(reason.hidden,false);
    if(level==='residual')for(const [role,values]of [['baseline',ev.values.R],['update',ev.values.down],['result',ev.values.add]])assert.deepEqual(JSON.parse(reason.querySelector(`[data-role="${role}"] code`).textContent),Array.from(values,round));
    else assert.equal(reason.querySelector('.residual-example'),null);
    if(language==='en'){assert.doesNotMatch(doc.querySelector('#module-card').textContent,/[\u3400-\u9fff]/);assert.doesNotMatch(reason.textContent,/[\u3400-\u9fff]/);}

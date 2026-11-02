@@ -16,13 +16,16 @@ const definitions={
 const levels={
  wire:{id:'wire',chapter:I18n.t("序章 / 01"),title:I18n.t("让信号抵达"),nodes:[],sources:['R'],sinkDim:2,sampleCount:3,sourceX:-3.5,sinkX:3.5,zoom:.65,
   mission:I18n.t("把输入原样送到出口"),description:I18n.t("让每个输入位置的两个数完整抵达右边。先接一条线，再试跑三个位置。"),summary:I18n.t("只有输入和出口，先熟悉接线与试跑。"),concept:I18n.t("向量与连线"),sourceTitle:I18n.t("输入 X"),sourceNote:'',outputTitle:I18n.t("输出特征 Y"),boardText:'SIGNAL / 01',shape:'2 → 2',next:'projection',
+  rationale:{title:I18n.t("为什么先传一份向量？"),text:I18n.t("计算模块接收的是表示 token 的一组数。连线决定下一个模块从哪里取数；先让向量原样抵达，才能看清后续变化来自哪一步计算。"),takeaway:I18n.t("[1, 0] 和 [0, 1] 是不同的特征。传递时保留数值和顺序，后面的权重才能作用到对应的特征上。")},
   hints:[I18n.t("圆口发送数据，方口接收数据。点两个端口，或从圆口直接拖线。")]},
  projection:{id:'projection',chapter:I18n.t("序章 / 02"),title:I18n.t("经过一次投影"),nodes:['project'],sources:['R'],sinkDim:4,sampleCount:3,sourceX:-5,sinkX:5.2,zoom:.75,
   mission:I18n.t("把 2 个特征变成 4 个"),description:I18n.t("用桌上的权重矩阵处理每个输入向量，让出口得到 4 个特征。三个输入位置共用同一套权重。"),summary:I18n.t("加入一块投影模块，观察矩阵如何改变向量。"),concept:I18n.t("一次矩阵乘法"),sourceTitle:I18n.t("输入 X"),sourceNote:'',outputTitle:I18n.t("投影特征 P"),boardText:'PROJECTION / 02',shape:'2 → 4',next:'activation',
+  rationale:{title:I18n.t("为什么要重新组合特征？"),text:I18n.t("后续计算需要从输入中提取不同的组合。矩阵的每一列用一组权重组合原有特征，得到一种新的表示；真实模型会通过训练学习这些权重。"),takeaway:I18n.t("本关把 2 个数展开成 4 个，为后面的非线性变换提供更多组合。数变多了，信息仍来自同一份输入。")},
   hints:[I18n.t("端口上的数字是向量维度。双击模块，可以查看它的权重和输入输出。")]},
  activation:{id:'activation',chapter:I18n.t("序章 / 03"),title:I18n.t("让数值有弯曲"),nodes:['project','silu'],sources:['R'],sinkDim:4,sampleCount:3,sourceX:-6,sinkX:6,zoom:.83,boardWidth:17,boardDepth:7,
   positions:{project:[-2,0],silu:[2,0]},initialLinks:{project:['R']},initialSink:'project',
   mission:I18n.t("改变数值，保留四个特征"),description:I18n.t("投影已经能抵达出口，但目标是每个投影数经过 SiLU 后的结果。改动线路，让三个输入位置都匹配。"),summary:I18n.t("新增 SiLU。维度相同的两份向量，数值不一定相同。"),concept:I18n.t("投影与非线性"),sourceTitle:I18n.t("输入 X"),sourceNote:'',outputTitle:I18n.t("激活特征 S"),boardText:'ACTIVATION / 03',shape:'2 → 4 → 4',next:'gating',
+  rationale:{title:I18n.t("为什么矩阵后面还要有 SiLU？"),text:I18n.t("如果只是连续做矩阵乘法，多次计算仍能合并成一次矩阵乘法。SiLU 按每个数值改变缩放比例，让后续投影能够表达单纯线性组合做不到的关系。"),takeaway:I18n.t("例如 1 经过 SiLU 约为 0.73，−1 约为 −0.27；两者没有被同一个固定比例缩放。这就是这里的非线性。")},
   hints:[I18n.t("可以先试跑现有线路，比较出口的实际值与预期值。"),I18n.t("SiLU 对每个数单独计算，不改变向量长度；双击卡片可查看函数。")]},
  gating:{id:'gating',chapter:I18n.t("序章 / 04"),title:I18n.t("让两路相遇"),nodes:['gate','up','silu','multiply'],sources:['R'],sinkDim:4,sampleCount:5,sourceX:-8,sinkX:8,zoom:1,boardWidth:21,boardDepth:10,
   positions:{gate:[-4,-2],up:[-4,2],silu:[0,-2],multiply:[3.5,1.2]},initialLinks:{gate:['R'],up:['R']},
@@ -36,10 +39,12 @@ const levels={
   hints:[I18n.t("一个圆形输出口可以连接多条线，不会消耗原来的向量。"),I18n.t("相加的两份向量需要同样长度；一份是原输入，一份是刚算出的变化。")]},
  workshop:{id:'workshop',chapter:I18n.t("序章 / 06"),title:I18n.t("从架上拿一块"),nodes:['project'],inventory:{project:1},maxModules:1,buildable:true,placementTutorial:true,sources:['R'],sinkDim:4,sampleCount:3,sourceX:-5.5,sinkX:5.5,zoom:.8,boardWidth:16,boardDepth:7,
   mission:I18n.t("拖进一块投影，再接上线"),description:I18n.t("台面上少了一块熟悉的投影。从组件架拖一块进来，连接输入和出口，然后试跑。"),summary:I18n.t("只学一个新操作：从组件架拖入模块。"),concept:I18n.t("自己放置组件"),sourceTitle:I18n.t("输入 X"),sourceNote:'',outputTitle:I18n.t("投影特征 P"),boardText:'WORKSHOP / 06',shape:'2 → 4',next:'ffn',
+  rationale:{title:I18n.t("为什么开始自己拿组件？"),text:I18n.t("后面的完整网络会有分支和合流，需要你决定使用哪些模块、各放几块以及如何取数。本关先用熟悉的投影练习放置，为独立搭建计算图做准备。"),takeaway:I18n.t("台面上的摆放位置方便你组织线路；真正决定计算结果的是模块的运算、权重和接线。")},
   hints:[I18n.t("按住组件架上的卡片，拖到台面松开。再把输入、投影、出口连起来。") ]},
  ffn:{id:'ffn',chapter:I18n.t("正式关卡 / 01"),title:I18n.t("让一层醒来"),nodes:['gate','up','silu','multiply','down','add'],sources:['Z','R'],sinkDim:2,sampleCount:5,sourceX:-8.55,sinkX:9,zoom:1,
   mission:I18n.t("搭出一段 FFN"),description:I18n.t("从组件架选取模块，自行安排台面和线路。Z 已做归一化，R 是原输入；让出口匹配目标结果。"),summary:I18n.t("把序章中的组件组合成完整 SwiGLU FFN。"),concept:I18n.t("完整 SwiGLU FFN"),sourceTitle:I18n.t("层输入 R"),sourceNote:I18n.t("上游 Attention 的输出特征"),outputTitle:I18n.t("本层特征 Y"),boardText:'FFN / SWIGLU',shape:'2 → 4 → 2',next:null,
   initialLinks:{gate:['Z'],up:['Z']},
+  rationale:{title:I18n.t("为什么还需要一段 FFN？"),text:I18n.t("Attention 从其他位置汇入信息后，每个位置还需要加工自己的特征。FFN 根据当前向量产生修改量，再通过残差更新这个位置的表示。"),takeaway:I18n.t("同一套 FFN 权重分别处理各个位置，不在这里混合不同 token。本关采用 SwiGLU，让修改量随输入中的特征组合而变化。")},
   hints:[I18n.t("圆口是输出，方口是输入；输入可以分叉给多个模块。"),I18n.t("SiLU 把门投影的数变成门值；门值和内容投影的数逐元素相乘。"),I18n.t("降维后的变换 F，需要加回进入 FFN 前的原始 R。")]}
 };
 function levelFor(state){return levels[state.levelId]||levels.ffn;}

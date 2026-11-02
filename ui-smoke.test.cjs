@@ -19,6 +19,11 @@ test('all 26 levels automatically display their report beside the run controls',
  for(const id of Object.keys(M.levels)){
   app.eval(`switchLevel('${id}');state=M.solutions(stageId);if(stage().engine)state.settings.precision=16;`);
   assert.ok(app.document.querySelector('.mission h2').textContent.length);
+  const reason=app.document.querySelector('#mission-reason'),example=app.document.querySelector('#mission-reason-example'),hasExample=['gating','residual'].includes(id);
+  assert.equal(reason.hidden,false,id+' explains its purpose');
+  for(const field of ['title','text','takeaway'])assert.ok(app.document.querySelector('#mission-reason-'+field).textContent.trim(),id+' '+field);
+  assert.equal(example.hidden,!hasExample);assert.equal(example.hasChildNodes(),hasExample,'text-only lessons clear earlier worked examples');
+  const scope=app.document.querySelector('#mission-reason-scope');assert.equal(scope.hidden,!M.levels[id].rationale.scope);
   assert.equal(app.document.querySelectorAll('[data-setting]').length,M.levels[id].controls?.length||0);
   await app.eval('run()');assert.equal(app.eval('busy'),false);
   const panel=app.document.querySelector('#run-report');
@@ -43,7 +48,7 @@ test('gating rationale uses actual weights to show equal content receiving diffe
   assert.equal(contents[0],contents[1]);assert.ok(factors[0]>0&&factors[0]<1);assert.ok(factors[1]>1);
   assert.equal(app.eval('JSON.stringify(state)'),saved,'the comparison never prewires the player’s circuit');
   if(language==='en')assert.doesNotMatch(reason.textContent,/[\u3400-\u9fff]/);
-  app.eval("switchLevel('activation')");assert.equal(reason.hidden,true);assert.equal(reason.querySelector('table'),null);
+  app.eval("switchLevel('activation')");assert.equal(reason.hidden,false);assert.equal(reason.querySelector('table'),null);assert.equal(doc.querySelector('#mission-reason-example').hidden,true);assert.equal(doc.querySelector('#mission-reason-scope').hidden,true);
  }
  assert.deepEqual([...app.c.I18n.missing],[]);
 });
