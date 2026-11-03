@@ -105,7 +105,8 @@ function reference(v,levelId='ffn'){
  if(levelId==='gating')return h;
  const f=linear(h,weights.down);return levelId==='swiglu'?f:v.map((x,i)=>x+f[i]);
 }
-function evaluate(state,v){const level=levelFor(state),context={state,level,input:v},values=Object.fromEntries(level.sources.map(id=>[id,id==='Z'?norm(v):v])),depths=Object.fromEntries(level.sources.map(id=>[id,0])),visiting=new Set(),order=[];let error=null,bad=null;
+const sourceValues=(state,v)=>Object.fromEntries(levelFor(state).sources.map(id=>[id,id==='Z'?norm(v):v]));
+function evaluate(state,v){const level=levelFor(state),context={state,level,input:v},values=api.sourceValues(state,v),depths=Object.fromEntries(level.sources.map(id=>[id,0])),visiting=new Set(),order=[];let error=null,bad=null;
  function run(id){if(id==null)throw {message:I18n.t("有一个输入口还没有接线。")};if(values[id])return values[id];const node=state.nodes.find(n=>n.id===id),kind=nodeKind(node),d=definitions[kind];if(!node||!d)throw {message:I18n.t("线路指向了不存在的模块。")};if(visiting.has(id))throw {message:I18n.t("线路绕成了环，数值走不出来。"),node:id};visiting.add(id);
  const inputs=d.ins.map((dim,i)=>{if(!node.links[i])throw {message:`「${d.name}${I18n.t("」的输入 ")}${i+1}${I18n.t(" 还没接上。")}`,node:id,port:i};const a=run(node.links[i]);if(a.length!==dim)throw {message:`「${d.name}${I18n.t("」需要 ")}${dim}${I18n.t(" 维，收到 ")}${a.length}${I18n.t(" 维。")}`,node:id,port:i};return a;});
  let out;if(api.operations?.[kind])out=api.operations[kind](inputs,context);else if(weights[kind])out=linear(inputs[0],weights[kind]);else if(kind==='silu')out=inputs[0].map(silu);else out=inputs[0].map((x,i)=>kind==='multiply'?x*inputs[1][i]:x+inputs[1][i]);
@@ -123,5 +124,5 @@ function valueForKind(state,ev,kind){
  return null;
 }
 function connect(state,from,to,port){const level=levelFor(state);if(!level.sources.includes(from)&&!state.nodes.some(n=>n.id===from))return I18n.t("没有找到这个端口");if(to!=='sink'&&!state.nodes.some(n=>n.id===to))return I18n.t("没有找到这个端口");const out=from==='R'||from==='Z'?(level.sourceDim||2):definitionFor(state,from)?.out,dim=to==='sink'?level.sinkDim:definitionFor(state,to)?.ins[port];if(!out||!dim)return I18n.t("没有找到这个端口");if(from===to)return I18n.t("不能把输出接回自己");if(out!==dim)return `${I18n.t("维度接不上：输出 ")}${out}${I18n.t(" 维，入口需要 ")}${dim}${I18n.t(" 维。")}`;if(to==='sink')state.sink=from;else state.nodes.find(n=>n.id===to).links[port]=from;return null;}
-const api={valueForKind,nodeKind,kindOf,definitionFor,inventory,moduleLimit,stock,canAdd,validNodeId,nodeName,weights,norm,linear,silu,definitions,levels,levelFor,initial,samples,reference,evaluate,connect,disconnect,bounds,arrange,placement,addNode,removeNode};if(typeof module!=='undefined'&&module.exports)module.exports=api;else scope.NeuralPrologue=api;
+const api={sourceValues,valueForKind,nodeKind,kindOf,definitionFor,inventory,moduleLimit,stock,canAdd,validNodeId,nodeName,weights,norm,linear,silu,definitions,levels,levelFor,initial,samples,reference,evaluate,connect,disconnect,bounds,arrange,placement,addNode,removeNode};if(typeof module!=='undefined'&&module.exports)module.exports=api;else scope.NeuralPrologue=api;
 })(globalThis);

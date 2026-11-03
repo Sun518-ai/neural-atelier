@@ -1,5 +1,7 @@
 // English copy. Chinese source phrases are stable lookup keys.
 globalThis.AtelierEnglish = {
+  "原版基础共 27 关：从 ReLU FFN、残差和 LayerNorm 开始，逐步接出正弦位置编码、单头与多头注意力、编码器和解码器。13 关现代扩展再比较 SiLU、SwiGLU、RMSNorm、Pre-LN 和 RoPE。9 关端侧推理独立探索 Qwen 27B、Kapitsa 与 Apple ANE。": "The 27-level original track starts with ReLU FFNs, residuals and LayerNorm, then builds sinusoidal positions, single-head and multi-head attention, and the encoder–decoder. Thirteen modern extensions compare SiLU, SwiGLU, RMSNorm, Pre-LN and RoPE. Nine independent on-device challenges explore Qwen 27B, Kapitsa and Apple ANE.",
+  "原版结构使用固定手工权重做缩尺推理：基础算子两维，完整层四维、两个头，编码器和解码器各一层。LayerNorm 的缩放为 1、偏移为 0，FFN 偏置为 0；不包含训练和翻译能力。生成循环关单独使用固定转移表解释控制流程。": "The original structure uses fixed teaching weights: two features for basic operators, four features and two heads in full layers, with one encoder and one decoder layer. LayerNorm scale is 1 and shift is 0; FFN biases are zero. It does not train or translate. The generation-loop lesson separately uses a fixed transition table to explain control flow.",
   "对每个数做 x / (1 + exp(−x))，改变数值关系，不改变向量维度。": "Apply x / (1 + exp(−x)) to each value, changing numerical relationships without changing the vector's dimensions.",
   "两个 4 维向量对应位置相乘，得到四个乘积；不把这些乘积相加。": "Multiply matching entries of two four-dimensional vectors to get four products, without adding them together.",
   "4 维向量乘 4 × 2 权重矩阵 Wd，把四个特征组合成两个。": "Multiply a four-dimensional vector by the 4 × 2 weight matrix Wd to combine four features into two.",

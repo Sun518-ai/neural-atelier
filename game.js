@@ -1,5 +1,5 @@
-import {cardFor,exampleFor} from './module-cards.js?v=practice-start-1';
-import {createProgress} from './level-progress.js?v=practice-start-1';
+import {cardFor,exampleFor} from './module-cards.js?v=original-foundation-1';
+import {createProgress} from './level-progress.js?v=original-foundation-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -29,7 +29,7 @@ function setShelfSize(value,persist=true){
 try{const saved=localStorage.getItem(shelfSizeKey);setShelfSize(saved===null?0:saved,false);}catch{setShelfSize(0,false);}
 $('#shelf-smaller').onclick=()=>setShelfSize(shelfSize-1);
 $('#shelf-larger').onclick=()=>setShelfSize(shelfSize+1);
-const shape=dim=>stage().sequence?({3:I18n.t("3 个 ID"),6:'3 × 2',9:'3 × 3',18:'3 × 6'}[dim]||dim):dim;
+const shape=dim=>stage().shapes?.[dim]||(stage().sequence?({3:I18n.t("3 个 ID"),6:'3 × 2',9:'3 × 3',12:'3 × 4',18:'3 × 6'}[dim]||dim):dim);
 const playbackSpeedKey='neural-atelier-playback-speed-v1';
 const defaultPlaybackSpeed=.25;
 let playbackSpeed=defaultPlaybackSpeed;
@@ -71,7 +71,7 @@ function assignDevice(id,device){if(busy||!stage().engine)return;const n=state.n
 function closeReport(restoreFocus=false){$('#run-report').hidden=true;if(restoreFocus)$('#run').focus({preventScroll:true});}
 function resetReport(){closeReport();$('#run-report').replaceChildren();}
 function renderReport(){
- const panel=$('#run-report'),attentionValues=M.valueForKind(state,current,'softmax')||M.valueForKind(state,current,'attentionweights');let html=I18n.t("<div class=\"run-report-content\" tabindex=\"0\" aria-label=\"本次运行详情\">");
+ const panel=$('#run-report'),attentionValues=M.valueForKind(state,current,'softmax')||M.valueForKind(state,current,'attentionweights')||M.valueForKind(state,current,'original-weights');let html=I18n.t("<div class=\"run-report-content\" tabindex=\"0\" aria-label=\"本次运行详情\">");
  if(stage().tokenOutput){html+='<div class="word-trials">'+results.map((r,i)=>`${I18n.t("<div><small>输入：")}${samples()[i].word}</small><strong class="${r.pass?'good':'bad'}">${r.actual?M.readTokens(r.actual):I18n.t("未得到输出")}${I18n.t("</strong><span>目标：")}${M.readTokens(r.expected)}</span></div>`).join('')+I18n.t("</div><p>文字来自词表分数最高的候选。计算出错可能改词，也可能碰巧仍是同一个词。</p>");}
  if(stage().attentionReadout&&attentionValues){const a=M.math.rows(attentionValues,3),words=samples()[sample].word.split(' / ');html+=I18n.t("<h3>各位置从哪里读取内容</h3><div class=\"attention-map\">")+a.map((r,i)=>`<div><b>${words[i]}${I18n.t(" · 位置 ")}${i}</b>${r.map((v,j)=>`<span style="--weight:${Math.max(0,Math.min(1,v))}">${words[j]} ${Math.round(v*100)}%</span>`).join('')}</div>`).join('')+I18n.t("</div><p>比例是这次计算的注意力权重，不是对真实语言理解的完整解释。</p>");}
  if(stage().sequence&&!stage().engine&&!stage().tokenOutput&&(!stage().attentionReadout||!attentionValues)){const r=results[results.length-1];html+=`<p>${r?.pass?I18n.t("数值匹配。"):I18n.t("数值不匹配。")}${I18n.t("输出特征仍对应原来的输入位置；下一词要在词表投影后才确定。</p>")}`;}
@@ -147,7 +147,7 @@ function say(text,tone=''){$('#feedback').textContent=text;$('#feedback').classN
 function checkpoint(){history.push(clone(state));if(history.length>40)history.shift();}
 function changed(){closeCompletion();resetReport();engineReport=null;fault=null;current=null;selectedWire=actionNode=null;results=[];sample=0;level=99;world?.clearPreview?.();save();world?.rebuild();refresh();}
 function select(id){if(world?.focused())return;selected=id;selectedWire=null;actionNode=stage().buildable?id:null;world?.labels();inspect();}
-function outputName(id){return id==='R'?(stageId==='ffn'?I18n.t("原始输入 R"):I18n.t("输入 X")):id==='Z'?I18n.t("归一化输入 Z"):nodeName(id);}
+function outputName(id){if(stage().sourceNames?.[id])return stage().sourceNames[id];return id==='R'?(stageId==='ffn'?I18n.t("原始输入 R"):I18n.t("输入 X")):id==='Z'?I18n.t("归一化输入 Z"):nodeName(id);}
 function chooseOutput(id){if(busy)return;placing=selectedWire=actionNode=null;world?.clearPlacement?.();world?.clearPreview?.();pending=pending===id?null:id;world?.labels();say(pending?`${I18n.t("已拿起「")}${outputName(id)}${I18n.t("」的线，点一个方形输入口。")}`:I18n.t("已放下连线。"));}
 function link(from,to,port){if(busy)return;const next=clone(state),err=M.connect(next,from,to,port);if(err){say(err,'error');return;}checkpoint();state=next;pending=null;changed();say(I18n.t("已连接。"));}
 function chooseWire(to,index){if(busy)return;const from=to==='sink'?state.sink:state.nodes.find(n=>n.id===to)?.links[index];if(!from)return;pending=placing=actionNode=null;selectedWire={from,to,index};world?.clearPreview?.();world?.clearPlacement?.();world?.labels();}
@@ -160,10 +160,10 @@ function renderShelf(){
  shelf.querySelector('summary').title=shelf.hasAttribute('open')?I18n.t("收起组件架"):I18n.t("展开组件架");
  $('#module-palette').innerHTML=(state.palette||Object.keys(available)).map(kind=>{
   const d=M.definitions[kind],remaining=M.stock(state,kind),disabled=busy||!M.canAdd(state,kind),w=M.weights[kind];
-  const symbols={activation:'∿',add:'+',residual:'+',multiply:'×',norm:'RMS',rope:'↻',score:'QKᵀ',mask:'◩',softmax:'σ',mix:'AV',attention:'Attn',ffn:'FFN'};
+  const symbols={layernorm:'LN',position:'sin',concat:'∥',encoder:'Enc',decoder:'Dec',activation:'∿',add:'+',residual:'+',multiply:'×',norm:'RMS',rope:'↻',score:'QKᵀ',mask:'◩',softmax:'σ',mix:'AV',attention:'Attn',ffn:'FFN'};
   const visual=w?`<span class="stock-matrix" aria-hidden="true" style="grid-template-columns:repeat(${w[0].length},1fr)">`+w.flat().slice(0,8).map(v=>`<i class="${v<0?'negative':''}"></i>`).join('')+'</span>':`<span class="stock-symbol" aria-hidden="true">${symbols[d.type]||'◇'}</span>`;
   const color=M.extraColors?.[kind]?'#'+M.extraColors[kind].toString(16).padStart(6,'0'):({project:'#5eaa9c',down:'#90a79a',add:'#c3a26f',gate:'#a894bf'})[kind]||'#8aa59a';
-  const code=({project:'W',gate:'Wg',down:'Wd',output:'Wo',q:'Q',k:'K',v:'V',ropeq:'Q ↻',ropek:'K ↻',residual1:'+ A',residual2:'+ F'})[kind]||({activation:'SiLU',add:'+',residual:'+',multiply:'×',norm:'RMS',score:'QKᵀ',mask:'◩',softmax:'σ',mix:'AV',attention:'Attn',ffn:'FFN'})[d.type]||kind;
+  const code=({relu:'ReLU',layernorm2:'LN','ln-attn':'LN','ln-ffn':'LN','ln-cross':'LN',concat:'A ∥ B',position:'PE',project:'W',gate:'Wg',down:'Wd',output:'Wo',q:'Q',k:'K',v:'V',ropeq:'Q ↻',ropek:'K ↻',residual1:'+ A',residual2:'+ F'})[kind]||({activation:'SiLU',add:'+',residual:'+',multiply:'×',norm:'RMS',score:'QKᵀ',mask:'◩',softmax:'σ',mix:'AV',attention:'Attn',ffn:'FFN'})[d.type]||kind;
   const description=`${d.name} · ${d.ins.map(shape).join(' + ')} → ${shape(d.out)} · ${I18n.t("可用数量")} ${remaining} / ${available[kind]} · ${I18n.t("双击查看说明")}`;
   return `<div class="module-stock" role="button" tabindex="${busy?'-1':'0'}" aria-disabled="${busy}" data-add-disabled="${disabled}" aria-label="${description}" title="${description}" data-add-module="${kind}" style="--stock-color:${color}">${visual}<span class="stock-description"><b class="stock-name">${d.name}</b><small>${d.ins.map(shape).join(' + ')} → ${shape(d.out)}</small></span><b class="stock-code" aria-hidden="true">${code}</b><span class="stock-count" aria-hidden="true">${remaining}</span></div>`;
  }).join('');
@@ -177,10 +177,10 @@ $('#module-palette').addEventListener('keydown',e=>{if(e.key!=='Enter'&&e.key!==
 function removeModule(id=selected){if(busy)return;const next=clone(state);if(!M.removeNode(next,id))return;checkpoint();state=next;if(selected===id)selected=null;pending=placing=actionNode=null;world?.clearPlacement?.();changed();say(I18n.t("组件已收回，相关连线已移除。"));}
 $('#remove-module').onclick=()=>removeModule();
 function inspect(){renderShelf();const d=state.nodes.some(n=>n.id===selected)?definition(selected):null;$('#inspect-focus').disabled=!d||world?.focused()===selected;if(!d){$('#inspect-name').textContent=I18n.t("点一个模块，看看里面");$('#inspect-desc').textContent=stage().sequence?I18n.t("这里的每条线传递整段输入的张量，包含各位置的特征。接线会决定真实计算。"):I18n.t("这里的每条线传递一个完整向量。你接的线路会决定真实计算结果。");$('#inspect-visual').innerHTML='';$('#inspect-values').innerHTML='';return;}$('#inspect-name').textContent=nodeName(selected);$('#inspect-desc').textContent=(cardFor(kindOf(selected),stageId)||M.extraCard?.(kindOf(selected),stageId))?.meaning||d.hint;const w=weightsFor(selected);$('#inspect-visual').innerHTML=w?`<div class="matrix-label">${w.length} × ${w[0].length}${I18n.t(" 权重矩阵 · 每格为一个权重</div><div class=\"matrix\" style=\"grid-template-columns:repeat(")}${w[0].length},1fr)">${w.flat().map(x=>`<span>${fmt(x)}</span>`).join('')}</div>`:`<div class="matrix-label">${d.ins.map(shape).join(I18n.t(" 与 "))} → ${shape(d.out)}</div>`;
- const n=state.nodes.find(n=>n.id===selected),values=current?.values||{R:samples()[sample].v,Z:M.norm(samples()[sample].v)};
+ const n=state.nodes.find(n=>n.id===selected),values=current?.values||M.sourceValues(state,samples()[sample].v);
  $('#inspect-values').innerHTML=n.links.map((id,i)=>`${I18n.t("<div class=\"value-line\">输入 ")}${i+1} · ${id?outputName(id):I18n.t("未连接")}<b>${vector(values[id])}</b></div>`).join('')+`${I18n.t("<div class=\"value-line\">输出<b>")}${vector(values[selected])}</b></div>`;
 }
-function refresh(){refreshPauseControl();document.body.classList.toggle('network-running',busy);renderShelf();const t=samples()[sample];const won=levelPassed();$('.route strong').textContent=stage().concept+(won?I18n.t(" · 已通过"):'');$('#next-level').hidden=!(won||progress.completed(stageId))||!stage().next;$('#levels-open').disabled=busy;$('#engine-controls').querySelectorAll('input,select,button').forEach(e=>e.disabled=busy);$('#device-docks').querySelectorAll('button').forEach(e=>e.disabled=busy);$('#sample-name').textContent=t.word;$('#sample-value').textContent=stage().sequence?(stage().sourceDim===3?'Token ID '+vector(t.v):I18n.t("3 个位置 × 2 个特征")):vector(t.v);$('#pass-count').textContent=results.filter(r=>r.pass).length+' / '+stage().sampleCount;$('#test-results').innerHTML=results.map((r,i)=>`<div class="test-row ${r.pass?'pass':'fail'}"><span>${r.pass?'✓':'×'} ${samples()[i].word}</span><span>${stage().tokenOutput&&r.actual?M.readTokens(r.actual):stage().sequence?(r.actual?I18n.t("矩阵 ")+shape(r.actual.length):I18n.t("等待输入")):vector(r.actual)}</span></div>`).join('');$('#run').disabled=!world;$('#run').innerHTML=busy?I18n.t("<span>■</span> 停下检查"):I18n.t("<span>▶</span> 试跑我的网络");$('#undo').disabled=busy||!history.length;$('#reset').disabled=busy;$('#restore-layout').hidden=!progress.canRestore(stageId,state);$('#restore-layout').disabled=busy;$('#hint').disabled=busy||!stage().hints?.length;inspect();}
+function refresh(){refreshPauseControl();document.body.classList.toggle('network-running',busy);renderShelf();const t=samples()[sample];const won=levelPassed();$('.route strong').textContent=stage().concept+(won?I18n.t(" · 已通过"):'');$('#next-level').hidden=!(won||progress.completed(stageId))||!stage().next;$('#levels-open').disabled=busy;$('#engine-controls').querySelectorAll('input,select,button').forEach(e=>e.disabled=busy);$('#device-docks').querySelectorAll('button').forEach(e=>e.disabled=busy);$('#sample-name').textContent=t.word;$('#sample-value').textContent=stage().sequence?(stage().sourceDim===3?'Token ID '+vector(t.v):I18n.t(stage().sourceDim===12?"3 个位置 × 4 个特征":"3 个位置 × 2 个特征")):vector(t.v);$('#pass-count').textContent=results.filter(r=>r.pass).length+' / '+stage().sampleCount;$('#test-results').innerHTML=results.map((r,i)=>`<div class="test-row ${r.pass?'pass':'fail'}"><span>${r.pass?'✓':'×'} ${samples()[i].word}</span><span>${stage().tokenOutput&&r.actual?M.readTokens(r.actual):stage().sequence?(r.actual?I18n.t("矩阵 ")+shape(r.actual.length):I18n.t("等待输入")):vector(r.actual)}</span></div>`).join('');$('#run').disabled=!world;$('#run').innerHTML=busy?I18n.t("<span>■</span> 停下检查"):I18n.t("<span>▶</span> 试跑我的网络");$('#undo').disabled=busy||!history.length;$('#reset').disabled=busy;$('#restore-layout').hidden=!progress.canRestore(stageId,state);$('#restore-layout').disabled=busy;$('#hint').disabled=busy||!stage().hints?.length;inspect();}
 async function run(){
  closeCompletion();
  if(busy){busy=paused=false;runId++;say(I18n.t("已停止。"));world.clearPackets();world.labels();refresh();return;}
@@ -211,13 +211,13 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=practice-start-1');
+ const {createSceneArt}=await import('./scene-art.js?v=original-foundation-1');
  const art=createSceneArt(T,scene,colors,{anisotropy:renderer.capabilities.getMaxAnisotropy()});art.surroundings(samples(),stage());
  const assembly=new T.Group(),wires=new T.Group();scene.add(assembly,wires);const neuronGeo=new T.SphereGeometry(.115,16,12);let elements=[],curves=[],packets=[],drag=null,preview=null,yaw=.05,pitch=.8,zoom=stage().zoom,lastDepth=-1;
  const cameraTarget=new T.Vector3();let focusId=null,shelfFocus=null,shelfModel=null,overview=null,cameraFrame=0,transitioning=false,lastTap=null;
  const ray=new T.Raycaster(),cursor=new T.Vector2(),plane=new T.Plane(new T.Vector3(0,1,0),0);
  function dispose(group){for(const o of [...group.children]){group.remove(o);o.traverse(c=>{if(c.geometry&&!c.geometry.userData?.shared)c.geometry.dispose();c.material?.map?.dispose();c.material?.dispose?.();});}}
- function point(id,kind='out',index=0){if(id==='R'||id==='Z')return new T.Vector3(stage().sourceX+(stage().sequence?1.15:.85),.65,stageId==='ffn'?(id==='Z'?-.75:.75):0);if(id==='sink')return new T.Vector3(stage().sinkX-(stage().sequence?1.5:stage().sinkDim===4?1.2:.8),.65,0);const n=state.nodes.find(n=>n.id===id),d=definition(id);return new T.Vector3(n.x+(kind==='in'?-1.12:1.12),.68,n.z+(kind==='in'&&d.ins.length===2?(index===0?-.55:.55):0));}
+ function point(id,kind='out',index=0){if(id==='R'||id==='Z')return new T.Vector3(stage().sourceX+(stage().sourceDim===12?1.65:stage().sequence?1.15:.85),.65,stage().dualSource?(id==='Z'?-2.15:2.15):stageId==='ffn'?(id==='Z'?-.75:.75):0);if(id==='sink')return new T.Vector3(stage().sinkX-(stage().sequence?1.5:stage().sinkDim===4?1.2:.8),.65,0);const n=state.nodes.find(n=>n.id===id),d=definition(id);return new T.Vector3(n.x+(kind==='in'?-1.12:1.12),.68,n.z+(kind==='in'&&d.ins.length===2?(index===0?-.55:.55):0));}
  const curve=(a,b)=>new T.CubicBezierCurve3(a,new T.Vector3(a.x+.8,a.y+.4,a.z),new T.Vector3(b.x-.8,b.y+.4,b.z),b);
  const guide=document.createElementNS('http://www.w3.org/2000/svg','svg'),guidePath=document.createElementNS('http://www.w3.org/2000/svg','path');
  guide.setAttribute('class','connection-guide');guide.setAttribute('aria-hidden','true');guide.setAttribute('hidden','');guidePath.setAttribute('vector-effect','non-scaling-stroke');guide.appendChild(guidePath);
@@ -226,6 +226,7 @@ try{
  const wireTargets=document.createElementNS('http://www.w3.org/2000/svg','svg');wireTargets.setAttribute('class','wire-targets');let wireTargetKey='',wirePaths=[],placementMesh=null;
  const colorHex=color=>'#'+color.toString(16).padStart(6,'0');
  const flowIdentity=()=>stage().sequence?I18n.t("整段输入"):samples()[sample].word;
+ const packetIdentity=from=>stage().dualSource?(['Z','source-embed','original-encoder','original-k','original-v'].includes(kindOf(from))?I18n.t('源序列'):I18n.t('目标前缀')):flowIdentity();
  function rowEndpoint(kind){return new T.Vector3(kind==='source'?stage().sourceX+.34:stage().sinkX+.18,kind==='source'?.95:.98,art.rowZ(sample));}
  function wire(from,to,index){
   const cv=curve(point(from),point(to,'in',index)),color=nodeColor(from),dim=Math.min(4,(from==='R'||from==='Z')?(stage().sourceDim||2):definition(from).out);
@@ -240,10 +241,11 @@ try{
   if(edge&&!busy&&!focusId)addLabel('div','wire-actions',`<span>${outputName(edge.from)} → ${edge.to==='sink'?stage().outputTitle:nodeName(edge.to)}</span><button type="button" data-delete-wire>${I18n.t("删除连线")}</button><button type="button" data-close-wire aria-label="${I18n.t("关闭")}">×</button>`,{},()=>edge.curve.getPoint(.5));
   const removable=stage().buildable&&state.nodes.find(n=>n.id===actionNode);
   if(removable&&!busy&&!focusId&&!pending&&!placing&&!selectedWire)addLabel('div','wire-actions node-actions',`<button type="button" data-delete-node="${removable.id}">${I18n.t("删除组件")}</button><button type="button" data-close-node aria-label="${I18n.t("关闭")}">×</button>`,{'data-owner':removable.id},()=>new T.Vector3(removable.x,.7,removable.z+1.1));
-  addLabel('span','source-label',`<b>${stage().sourceTitle}</b>${stage().sourceNote?'<br>'+stage().sourceNote:''}`,{},()=>new T.Vector3(stage().sourceX,1.6,-2.05));
+  addLabel('span','source-label',`<b>${stage().sourceTitle}</b>${stage().sourceNote?'<br>'+stage().sourceNote:''}`,{},()=>new T.Vector3(stage().sourceX,1.6,-2.05+(stage().dualSource?2.15:0)));
+  if(stage().dualSource)addLabel('span','source-label',`<b>${stage().sourceNames.Z}</b><br>${stage().secondaryTitle}`,{},()=>new T.Vector3(stage().sourceX,1.6,-4.2));
   addLabel('span','source-label',`<b>${stage().outputTitle}</b><br>${stage().tokenOutput?I18n.t("词表选择后的文字"):shape(stage().sinkDim)+I18n.t(" · 各位置的特征")}`,{},()=>new T.Vector3(stage().sinkX,1.6,-2.05));
   if(busy&&!stage().sequence){const marker=addLabel('span','row-marker',flowIdentity(),{'data-owner':'R','data-row':sample<3?String(sample):'validation'},()=>sample<3?new T.Vector3(stage().sourceX-1,.99,art.rowZ(sample)):new T.Vector3(stage().sourceX,1.4,2));marker.style.setProperty('--row-color',colorHex(art.rowColor(sample)));}
-  stage().sources.forEach(id=>addLabel('button','port '+(pending===id?'pending':''),(id==='R'&&stageId!=='ffn'?'X':id)+' · '+shape(stage().sourceDim||2),{'type':'button','data-output':id,'aria-label':`${id==='Z'?I18n.t("归一化 Z"):stageId==='ffn'?I18n.t("原始 R"):I18n.t("输入 X")}${I18n.t(" 输出口，")}${shape(stage().sourceDim||2)}`},()=>point(id)));
+  stage().sources.forEach(id=>addLabel('button','port '+(pending===id?'pending':''),(stage().sourcePorts?.[id]||(id==='R'&&stageId!=='ffn'?'X':id))+' · '+shape(stage().sourceDim||2),{'type':'button','data-output':id,'aria-label':`${outputName(id)}${I18n.t(" 输出口，")}${shape(stage().sourceDim||2)}`},()=>point(id)));
   if(stageId==='ffn')addLabel('span','source-label','Z = RMSNorm(R)',{},()=>new T.Vector3(stage().sourceX,.65,2.55));
   state.nodes.forEach(n=>{const d=definition(n.id);addLabel('button','node-label '+(selected===n.id?'selected ':''),`${nodeName(n.id)}<small>${d.ins.map(shape).join(' / ')} → ${shape(d.out)}</small>`,{'type':'button','data-node':n.id,'aria-label':`${d.name}${I18n.t(" 模块，拖动移动")}`},()=>new T.Vector3(n.x,1.85,n.z-1.15));
    if(stage().engine)addLabel('button','device-badge device-'+n.device+(busy&&current?.depths[n.id]===level?' processing':''),n.device.toUpperCase(),{'type':'button','data-assign':n.id,'data-owner':n.id,'aria-label':definition(n.id).name+I18n.t(" 当前在 ")+n.device+I18n.t("，选择后点击芯片区域")},()=>new T.Vector3(n.x,1.9,n.z-.45));
@@ -379,18 +381,26 @@ try{
   for(const [field,value]of Object.entries({name,seal:c.seal,english:c.english,family:c.family,number:stage().chapter,ability:c.ability,meaning:c.meaning,formula:c.formula,purpose:c.purpose}))$('#card-'+field).textContent=value;
   $('#card-stats').innerHTML=`${I18n.t("<div><span>向量维度</span><b>")}${d.ins.map(shape).join(' / ')} → ${shape(d.out)}${I18n.t("</b></div><div><span>权重矩阵</span><b>")}${c.weight}${I18n.t("</b></div><div><span>计算方式</span><b>")}${c.trait}</b></div>`;
   $('#card-example-input').textContent=stageId==='ffn'?'R = [1, 1]':stage().sequence?I18n.t("三个位置的特征 · 教学缩尺"):'X = [1, 1]';
-  const names={Q:I18n.t("查询"),K:I18n.t("键"),V:I18n.t("内容"),A:I18n.t("注意力"),L:I18n.t("词表分数"),T:I18n.t("选出的词"),B:I18n.t("计算结果"),X:I18n.t("输入向量"),P:I18n.t("投影结果"),R:I18n.t("原始输入"),Z:I18n.t("归一化输入"),G:I18n.t("门分支"),U:I18n.t("内容分支"),S:['activation','plain-ffn'].includes(stageId)?I18n.t("SiLU 的输出"):I18n.t("激活门值"),H:I18n.t("门控结果"),F:I18n.t("本次变换"),Y:I18n.t("本层输出")};
-  const ex=M.extraExample?.(kind,stageId)||exampleFor(M,kind,stageId),vectorRow=([name,values],output=false,focus=-1,label=names[name]||name)=>`<div class="card-vector ${output?'result':''}" data-symbol="${name}"><b>${name} · ${label}</b><span>${values.map((v,i)=>`<i class="${v<0?'negative':''} ${i===focus?'example-focus':''}">${fmt(v)}</i>`).join('')}</span></div>`;
+  const names={Q:I18n.t("查询"),K:I18n.t("键"),V:I18n.t("内容"),A:I18n.t("注意力"),L:I18n.t("词表分数"),T:I18n.t("选出的词"),B:I18n.t("计算结果"),X:I18n.t("输入向量"),P:I18n.t("投影结果"),R:I18n.t("原始输入"),Z:I18n.t("归一化输入"),G:I18n.t("门分支"),U:I18n.t("内容分支"),S:stage().original?I18n.t('相关分数 S'):['activation','plain-ffn'].includes(stageId)?I18n.t("SiLU 的输出"):I18n.t("激活门值"),H:I18n.t("门控结果"),F:I18n.t("本次变换"),Y:I18n.t("本层输出")};
+  Object.assign(names,M.original?.exampleLabels(stageId));
+  if(stageId==='add-norm')names.R=I18n.t('残差相加结果');
+  const ex=M.extraExample?.(kind,stageId)||exampleFor(M,kind,stageId),vectorRow=([name,values],output=false,focus=-1,label=names[name]||name)=>`<div class="card-vector ${output?'result':''}" data-symbol="${name}"><b>${name} · ${label}</b><span ${stage().original&&stage().sequence?'style="display:grid;grid-template-columns:repeat('+Math.ceil(values.length/3)+',minmax(0,1fr))"':''}>${values.map((v,i)=>`<i class="${v<0?'negative':''} ${i===focus?'example-focus':''}">${fmt(v)}</i>`).join('')}</span></div>`;
   const formulaNumber=v=>Number(v.toFixed(4)).toString();
-  if(ex.sampleIndex===0){$('.card-example-title').firstChild.textContent=I18n.t("用“我”的向量看一次");$('#card-example-input').textContent=ex.exampleSource[0]+' = '+vector(ex.exampleSource[1]);}
-  if(ex.activation){
+  if(ex.sampleIndex===0&&!stage().sequence){$('.card-example-title').firstChild.textContent=I18n.t("用“我”的向量看一次");$('#card-example-input').textContent=ex.exampleSource[0]+' = '+vector(ex.exampleSource[1]);}
+  if(ex.normalization){
+   const {mean,variance,epsilon}=ex.normalization;
+   $('#card-example-values').innerHTML=ex.inputs.map(v=>vectorRow(v)).join('')+`<div class="card-silu-worked">${stage().sequence?'<small>'+I18n.t('这里只展开第一个位置的归一化，其他位置分别计算。')+'</small>':''}<code>μ = ${formulaNumber(mean)}<br>σ² = ${formulaNumber(variance)}<br>(x − μ) / √(σ² + ${epsilon})</code></div>`+vectorRow(ex.output,true);
+  }else if(ex.activation?.kind==='relu'){
+   const {feature}=ex.activation,input=ex.inputs[0],output=ex.output,x=input[1][feature];
+   $('#card-example-values').innerHTML=`<div class="card-silu-example">${vectorRow(input,false,feature)}<div class="card-silu-link"><b>ReLU</b><span>${input[1].map((_,i)=>`<i class="${i===feature?'example-focus':''}">↓</i>`).join('')}</span></div>${vectorRow(output,true,feature)}<div class="card-silu-worked"><code>max(0, ${formulaNumber(x)}) = ${fmt(output[1][feature])}</code></div></div>`;
+  }else if(ex.activation){
    const {feature,content,product}=ex.activation,input=ex.inputs[0],output=ex.output,x=input[1][feature],y=output[1][feature];
    const next=content?`<p class="card-silu-use">${I18n.t("把这个 S 与对应的内容特征相乘：")}</p><div class="card-gate-result"><span data-role="content"><small>${I18n.t("内容 U")}</small><b>${fmt(content[feature])}</b></span><i>×</i><span data-role="scale"><small>${I18n.t("SiLU 输出 S")}</small><b>${fmt(y)}</b></span><i>≈</i><span data-role="result"><small>${I18n.t("相乘结果")}</small><b>${fmt(product[feature])}</b></span></div>`:'';
    $('#card-example-values').innerHTML=`<div class="card-silu-example">${vectorRow(input,false,feature,I18n.t("SiLU 的输入"))}<div class="card-silu-link"><b>SiLU</b><span>${input[1].map((_,i)=>`<i class="${i===feature?'example-focus':''}" aria-hidden="true">↓</i>`).join('')}</span></div>${vectorRow(output,true,feature,I18n.t("SiLU 的输出"))}<div class="card-silu-worked"><small>${I18n.t("把高亮的输入代入公式：")}</small><code>SiLU(${formulaNumber(x)}) = ${formulaNumber(x)} / (1 + e<sup>${formulaNumber(-x)}</sup>) ≈ ${fmt(y)}</code></div>${next}</div>`;
   }else if(ex.addition){
-   const {feature}=ex.addition,[base,update]=ex.inputs,result=ex.output,roles={[base[0]]:I18n.t("原有特征"),F:I18n.t("修改量"),Y:I18n.t("更新结果")};
+   const {feature}=ex.addition,[base,update]=ex.inputs,result=ex.output,roles={[base[0]]:I18n.t("原有特征"),[update[0]]:I18n.t("修改量"),[result[0]]:I18n.t("更新结果")};
    const a=base[1][feature],b=update[1][feature],y=result[1][feature],signed=v=>v<0?'('+fmt(v)+')':fmt(v),equal=[a,b,y].some(v=>Math.abs(v-Number(v.toFixed(2)))>1e-9)?'≈':'=';
-   $('#card-example-values').innerHTML=`<div class="card-add-example">${[base,update,result].map(row=>vectorRow(row,row===result,feature,roles[row[0]])).join('')}<div class="card-add-step"><small>${I18n.t("同一位置，原值加上修改量：")}</small><code><span data-role="baseline">${signed(a)}</span> + <span data-role="update">${signed(b)}</span> ${equal} <b>${fmt(y)}</b></code></div><p class="card-add-zero">${I18n.t("如果修改量为零：")} <code>F = ${vector(update[1].map(()=>0))} → Y = ${base[0]}</code></p></div>`;
+   $('#card-example-values').innerHTML=`<div class="card-add-example">${[base,update,result].map(row=>vectorRow(row,row===result,feature,roles[row[0]])).join('')}<div class="card-add-step"><small>${I18n.t("同一位置，原值加上修改量：")}</small><code><span data-role="baseline">${signed(a)}</span> + <span data-role="update">${signed(b)}</span> ${equal} <b>${fmt(y)}</b></code></div><p class="card-add-zero">${I18n.t("如果修改量为零：")} <code>${update[0]} = ${vector(update[1].map(()=>0))} → ${result[0]} = ${base[0]}</code></p></div>`;
   }else if(ex.comparison){
    const {input,rows,feature}=ex.comparison,values=Object.fromEntries(rows),u=values.U[feature],g=values.G[feature],s=values.S[feature],h=values.H[feature];
    const roles={U:I18n.t("线性投影"),G:I18n.t("门投影"),S:I18n.t("SiLU 系数"),H:I18n.t("相乘结果")};
@@ -434,7 +444,7 @@ try{
   function movingPacket(values,from,to,motion){
    const color=seq?(nodeColor(from)):art.rowColor(sample);
    const el=document.createElement('span');el.className='packet';el.hidden=true;el.dataset.motion=motion;el.dataset.row=seq?'sequence':sample<3?String(sample):'validation';el.dataset.from=from;el.dataset.to=to;el.style.setProperty('--row-color',colorHex(color));
-   const title=document.createElement('b');title.className='packet-title';title.textContent=seq?flowIdentity():samples()[sample].word;el.appendChild(title);
+   const title=document.createElement('b');title.className='packet-title';title.textContent=packetIdentity(from);el.appendChild(title);
    const cells=document.createElement('span');cells.className='packet-values';
    cells.textContent=seq?shape(values.length):vector(values);
    el.appendChild(document.createTextNode(' '));el.appendChild(cells);overlay.appendChild(el);
@@ -586,6 +596,6 @@ try{
  $('#scene-expand').onclick=()=>{const expanded=document.body.classList.toggle('scene-expanded');$('#scene-expand').textContent=expanded?I18n.t("显示观察窗"):I18n.t("放大场景");$('#scene-expand').setAttribute('aria-pressed',String(expanded));render();};
  function beforeStage(){if(focusId)leaveFocus();cancelAnimationFrame(cameraFrame);transitioning=false;host.setAttribute('aria-busy','false');drag=lastTap=null;clearPreview();clearPlacement();clearPackets();elements=[];overlay.replaceChildren();}
  function setStage(){art.surroundings(samples(),stage());yaw=.05;pitch=.8;zoom=stage().zoom;cameraTarget.set(0,0,0);rebuild();}
- function relocalize(){art.surroundings(samples(),stage());rebuild();packets.forEach(p=>{p.el.querySelector('.packet-title').textContent=flowIdentity();if(p.motion==='process'&&p.progress!=null)art.processing(p.node.id,p.progress,p.input,p.output,p.color,{sequence:!!stage().sequence,detailed:p.detailed,paired:p.paired,other:p.other});});render();}
+ function relocalize(){art.surroundings(samples(),stage());rebuild();packets.forEach(p=>{p.el.querySelector('.packet-title').textContent=packetIdentity(p.el.dataset.from);if(p.motion==='process'&&p.progress!=null)art.processing(p.node.id,p.progress,p.input,p.output,p.color,{sequence:!!stage().sequence,detailed:p.detailed,paired:p.paired,other:p.other});});render();}
  new ResizeObserver(render).observe(host);world={relocalize,labels,rebuild,animate,clearPackets,clearPreview,clearPlacement,previewAt,previewPlacement,focus,focusShelf,focused:()=>focusId,beforeStage,setStage,syncShelf:()=>syncPlacementGuide(host.clientWidth,host.clientHeight)};$('#loading').hidden=true;rebuild();refresh();
 }catch(e){$('#loading').innerHTML=I18n.t("<strong>3D 台面没有加载成功，请刷新重试。</strong>");say(I18n.t("页面尚未开始运行。"),'error');console.error(e);}

@@ -47,6 +47,7 @@ export const moduleCards = {
 I18n.prepare(moduleCards);
 
 export function cardFor(id,levelId){
+ const original=window.NeuralPrologue.original?.card(id,levelId);if(original)return original;
  if(!moduleCards[id])return null;
  const card={...moduleCards[id]};
  if(id==='project'&&['gating','swiglu','ffn'].includes(levelId)){

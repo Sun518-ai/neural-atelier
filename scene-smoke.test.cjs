@@ -8,7 +8,7 @@ async function boot({reduced=true,frameMs=1000,onFrame=()=>{},languages=['zh-CN'
  for(const el of document.querySelectorAll('*')){Object.defineProperty(el,'clientWidth',{get:()=>el.id==='scene'?1400:100});Object.defineProperty(el,'clientHeight',{get:()=>el.id==='scene'?760:60});el.focus=()=>{};el.scrollIntoView=()=>{};}
  let view,renderedCamera;const scenes=[];class Renderer{constructor(){this.domElement=native('canvas');this.shadowMap={};this.capabilities={getMaxAnisotropy:()=>8};}setPixelRatio(){}setClearColor(){}setSize(){}render(scene,camera){renderedCamera=camera;view={position:camera.position.toArray(),width:camera.right-camera.left};scenes.push(scene);scene.updateMatrixWorld();camera.updateMatrixWorld();scene.traverse(o=>{if(o.isMesh)assert.ok(o.matrixWorld.elements.every(Number.isFinite),'nonfinite transform '+o.type);});}}
  const storage=new Map();let now=0;const c={document,console,navigator:{languages},T:{...Three,WebGLRenderer:Renderer},devicePixelRatio:2,ResizeObserver:class{observe(){}},requestAnimationFrame:cb=>setImmediate(()=>{now+=frameMs;onFrame({now,document,window});cb(now);}),cancelAnimationFrame:clearImmediate,performance:{now:()=>now},matchMedia:()=>({matches:reduced}),setTimeout,localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)}};c.window=c;vm.createContext(c);
- for(const f of ['locales/en.js','i18n.js','music.js','shell.js','model.js','campaign.js','engine-model.js'])vm.runInContext(fs.readFileSync(__dirname+'/'+f,'utf8'),c,{filename:f});
+ for(const f of ['locales/en.js','i18n.js','music.js','shell.js','model.js','campaign.js','engine-model.js','original-curriculum.js'])vm.runInContext(fs.readFileSync(__dirname+'/'+f,'utf8'),c,{filename:f});
  for(const f of ['module-cards.js','level-progress.js','scene-art.js'])vm.runInContext(fs.readFileSync(__dirname+'/'+f,'utf8').replaceAll('export ',''),c,{filename:f});
  let src=fs.readFileSync(__dirname+'/game.js','utf8').replace(/^import .*\n/gm,'').replace("const T=await import('./vendor/three.module.js');",'const T=window.T;').replace(/const \{createSceneArt\}=await import\('\.\/scene-art\.js\?v=[^']+'\);/,'');
  src+='\nwindow.testAPI={switchLevel,run,togglePause,refresh,select,assignDevice,chooseOutput,chooseInput,chooseModule,placeModule,getState:()=>state,setState:s=>state=s,getWorld:()=>world,getFault:()=>fault};';
@@ -99,6 +99,60 @@ test('construct every 3D level, run its data through scene updates, open and clo
   assert.equal(app.document.querySelectorAll('[data-node]').length,M.levels[id].nodes.length);
   for(const n of s.nodes){app.api.getWorld().focus(n.id);assert.equal(app.document.querySelector('#module-card').open,true);assert.ok(app.document.querySelector('#card-name').textContent);app.document.querySelector('#card-close').onclick();assert.equal(app.document.querySelector('#module-card').open,false);assert.ok(app.document.querySelector('.arena > #scene'));}
  }
+});
+
+test('original ReLU visibly stops negative features at zero while keeping positive features unchanged',async()=>{
+ let app;const seen=new Set();
+ app=await boot({reduced:false,frameMs:100,onFrame:()=>{
+  if(!app)return;app.scenes.at(-1).traverse(o=>{
+   if(o.userData.activation!=='relu')return;
+   o.children.filter(c=>c.userData.activationFeature!=null&&c.visible).forEach(spark=>{
+    const {inputValue,outputValue,phase}=spark.userData;
+    if(inputValue<0&&phase>.5){seen.add('negative');assert.equal(outputValue,0);assert.ok(spark.position.x<=1e-9,'negative carrier stops at the zero threshold');}
+    if(inputValue>0&&phase>.5){seen.add('positive');assert.equal(outputValue,inputValue);}
+   });
+  });
+ }});
+ app.api.switchLevel('relu');app.api.setState(app.c.NeuralPrologue.solutions('relu'));app.api.getWorld().rebuild();await app.api.run();
+ assert.deepEqual([...seen].sort(),['negative','positive']);
+ app.api.getWorld().focus('relu');assert.match(app.document.querySelector('#card-formula').textContent,/max\(0/);
+ assert.match(app.document.querySelector('#card-example-values').textContent,/ReLU/);assert.doesNotMatch(app.document.querySelector('#card-example-values').textContent,/注意力|SiLU/);
+ app.document.querySelector('#card-close').onclick();assert.equal(app.document.querySelectorAll('.packet').length,0);
+});
+
+test('cross-attention uses separate four-feature source racks and distinct travelling source and target labels',async()=>{
+ let app;const seen=new Set();
+ app=await boot({reduced:false,frameMs:160,languages:['en-US'],onFrame:({document})=>{
+  if(!app)return;
+  for(const el of document.querySelectorAll('.packet')){
+   if(el.hidden)continue;
+   if(el.dataset.from==='Z'){seen.add('source');assert.equal(el.querySelector('.packet-title').textContent,'Source sequence');}
+   if(el.dataset.from==='R'){seen.add('target');assert.equal(el.querySelector('.packet-title').textContent,'Target prefix');}
+  }
+ }});
+ const M=app.c.NeuralPrologue;app.api.switchLevel('cross-attention');
+ assert.equal(app.document.querySelector('#sample-value').textContent,'3 positions × 4 features');
+ const groups={R:[],Z:[]};app.scenes.at(-1).traverse(o=>{if(o.userData.sourceId)groups[o.userData.sourceId].push(o);});
+ assert.equal(groups.R.length,3);assert.equal(groups.Z.length,3);assert.ok(Math.min(...groups.R.map(o=>o.position.z))>Math.max(...groups.Z.map(o=>o.position.z)));
+ assert.match(app.document.querySelector('[data-output="R"]').textContent,/D · 3 × 4/);assert.match(app.document.querySelector('[data-output="Z"]').textContent,/E · 3 × 4/);
+ app.api.setState(M.solutions('cross-attention'));app.api.getWorld().rebuild();await app.api.run();assert.deepEqual([...seen].sort(),['source','target']);
+ app.api.getWorld().focus('original-k');assert.match(app.document.querySelector('#card-formula').textContent,/E/);
+ const example=app.document.querySelector('#card-example-values');assert.doesNotMatch(example.textContent,/original-|\bwide-/);assert.ok(example.querySelector('[style*="repeat(4"]'));
+ app.document.querySelector('#card-close').onclick();assert.equal(app.document.querySelectorAll('.packet').length,0);assert.deepEqual([...app.c.I18n.missing],[]);
+});
+
+test('original LayerNorm animates centering and scaling on four features and clears its highlights after stopping',async()=>{
+ let app,checked=false;
+ app=await boot({reduced:false,frameMs:140,onFrame:()=>{
+  if(!app)return;app.scenes.at(-1).traverse(o=>{
+   const n=o.userData.normalization;if(!o.userData.processing||!n)return;
+   checked=true;assert.equal(n.centered.length,4);assert.ok(Math.abs(n.centered.reduce((a,b)=>a+b,0))<1e-10);assert.ok(n.phase>=0&&n.phase<=2);
+  });
+ }});
+ app.api.switchLevel('encoder-layer');app.api.setState(app.c.NeuralPrologue.solutions('encoder-layer'));app.api.getWorld().rebuild();await app.api.run();assert.ok(checked);
+ app.scenes.at(-1).traverse(o=>assert.equal(o.userData.normalization,undefined));
+ app.api.getWorld().focus('ln-attn');assert.match(app.document.querySelector('#card-example-values').textContent,/μ =/);assert.doesNotMatch(app.document.querySelector('.card-example-title').textContent,/“我”/);
+ app.document.querySelector('#card-close').onclick();
 });
 test('small matrices keep their blocks while numbers return when zoomed in',async()=>{
  const app=await boot();app.api.switchLevel('residual');app.api.setState(app.c.NeuralPrologue.solutions('residual'));app.api.getWorld().rebuild();

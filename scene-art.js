@@ -75,16 +75,19 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   for(const x of [-w/2+.45,w/2-.45])for(const z of [-d/2+.4,d/2-.4]){const screw=new T.Mesh(new T.CylinderGeometry(.065,.065,.03,12),mat(0x728a7c));screw.position.set(x,.1,z);floor.add(screw);}
   textTile(context,layout.boardText||'FFN / SWIGLU',3.2,.48,-w/2+3.3,.1,d/2-.8,{color:'#526d5e',bg:'#eaf0e4',size:58});
   textTile(context,layout.shape||'2 → 4 → 2',2.5,.45,w/2-3.25,.1,d/2-.8,{color:'#526d5e',bg:'#eaf0e4',size:62});
-  const seq=!!layout.sequence,inputCols=seq&&layout.sourceDim===3?1:2,outCols=seq?(dim===3?1:dim/3):dim;
-  const sourceW=seq?2.4:1.8,rackW=seq?3.2:dim===4?2.6:1.8;
-  slab(context,sourceW,3.8,.42,sourceX,.07,0,0x7fa6af);slab(context,sourceW-.14,3.64,.08,sourceX,.5,0,0xe8f1ea);
+  const seq=!!layout.sequence,inputCols=seq?(layout.sourceDim||6)/3:2,outCols=seq?(dim===3?1:dim/3):dim;
+  const sourceW=inputCols>2?3.4:seq?2.4:1.8,rackW=seq?3.2:dim===4?2.6:1.8;
+  for(const sourceId of layout.dualSource?['Z','R']:['R']){
+  const offset=layout.dualSource?(sourceId==='Z'?-2.15:2.15):0;
+  slab(context,sourceW,3.8,.42,sourceX,.07,offset,sourceId==='Z'?0x9d91b0:0x7fa6af);slab(context,sourceW-.14,3.64,.08,sourceX,.5,offset,0xe8f1ea);
   [I18n.t("我"),I18n.t("爱"),I18n.t("猫")].forEach((word,i)=>{
-   const g=new T.Group();g.position.set(sourceX,.65,rowZ(i));g.userData.sourceRow=i;context.add(g);
+   const g=new T.Group();g.position.set(sourceX,.65,rowZ(i)+offset);g.userData.sourceRow=i;g.userData.sourceId=sourceId;context.add(g);
    const panel=slab(g,sourceW-.25,.72,.12,0,0,0,0xbfd8d3);
    const stripe=box(g,sourceW-.38,.045,.055,0,.15,.31,rowColor(i),{emissive:rowColor(i),emissiveIntensity:.1});
-   const label=textTile(g,seq?samples[0].word.split(' / ')[i]:word,.65,.3,seq?-.82:-.3,.17,-.02,{size:70});
-   const cells=Array.from({length:inputCols},(_,j)=>{const x=seq?-.12+j*.48:.17+j*.34;box(g,seq?.4:.24,.12,.36,x,.18,0,0x73aaa6);return textTile(g,'·',seq?.4:.24,.34,x,.25,0,{color:'#fffdf4',bg:'#73aaa6',size:72});});tokens.push({g,cells,label,panel,stripe});
+   const label=textTile(g,seq?samples[0].word.split(' / ')[i]:word,.65,.3,inputCols>2?-1.22:seq?-.82:-.3,.17,-.02,{size:70});
+   const cells=Array.from({length:inputCols},(_,j)=>{const x=inputCols>2?-.45+j*.48:seq?-.12+j*.48:.17+j*.34;box(g,seq?.4:.24,.12,.36,x,.18,0,0x73aaa6);return textTile(g,'·',seq?.4:.24,.34,x,.25,0,{color:'#fffdf4',bg:'#73aaa6',size:72});});tokens.push({g,cells,label,panel,stripe,sourceId,index:i});
   });
+  }
   slab(context,rackW,3.8,.42,sinkX,.07,0,0x608f7c);slab(context,rackW-.15,3.64,.08,sinkX,.5,0,0xe8f1df);
   const labelX=seq?-1.15:dim===4?-.87:-.47;
   textTile(context,I18n.t("位置"),.48,.28,sinkX+labelX,.63,-1.65,{size:72,color:'#526d5e',bg:'#e8f1df'});
@@ -105,7 +108,7 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   slab(g,2.05,2.4,.26,0,.07,0,color);slab(g,1.91,2.26,.08,0,.36,0,0xf4f5e9);
   const glow=box(g,1.6,.035,.055,0,.41,1.13,color,{emissive:color,emissiveIntensity:.18});
   const border=new T.Group();g.add(border);[[[-.96,.49,-1.12],[-.96,.49,-.78]],[[-.96,.49,-1.12],[-.62,.49,-1.12]],[[.96,.49,1.12],[.96,.49,.78]],[[.96,.49,1.12],[.62,.49,1.12]]].forEach(points=>tube(border,points,color,.018));
-  let outputs=[],inputs=[],connections=[],weightCells=[],activationChannels=[],columnCues=[],pairChannels=[];
+  let outputs=[],inputs=[],connections=[],weightCells=[],activationChannels=[],columnCues=[],pairChannels=[],normalizationStages=[];
   if(d.type==='linear'){
    const w=weights[n.kind||n.id],a=w.length,b=w[0].length,cw=1.5/b,ch=1.5/a;
    for(let i=0;i<a;i++)for(let j=0;j<b;j++){const x=(j-(b-1)/2)*cw,z=(i-(a-1)/2)*ch,c=w[i][j]<0?0xc89d70:w[i][j]===0?0xd7dfd4:color;const tile=box(g,cw*.84,.055+Math.abs(w[i][j])*.065,ch*.82,x,.49,z,c);const face=textTile(g,String(w[i][j]),cw*.8,ch*.76,x,.53+Math.abs(w[i][j])*.065,z,{bg:w[i][j]<0?'#d7b68b':w[i][j]===0?'#dfe5d9':'#d2dfcc',color:'#456052',size:63});weightCells.push({tile,face:face.mesh,i,j,weight:w[i][j]});}
@@ -125,15 +128,16 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
     connections.push({mesh,spark,i,j,weight:w[i][j]});
    }
   }else if(d.type==='activation'){
+   g.userData.activation=d.activation||'silu';
    const panel=box(g,1.5,.025,1.7,0,.57,0,0xe4cc9d,{transparent:true,opacity:.34,depthWrite:false});
    for(let i=0;i<4;i++){
-    const z=(i-1.5)*.42,pts=Array.from({length:33},(_,j)=>{const x=-3+j*6/32;return [x*.22,.92+.22*x/(1+Math.exp(-x)),z];});
+    const z=(i-1.5)*.42,pts=Array.from({length:33},(_,j)=>{const x=-3+j*6/32;return [x*.22,.92+.22*(d.activation==='relu'?Math.max(0,x):x/(1+Math.exp(-x))),z];});
     inputs.push(neuron(g,...pts[0],0xb6ab83));outputs.push(neuron(g,...pts[32],color));
     const channel=tube(g,pts,0xb38649,.026),gate=ring(g,.19,0,.92,z,color,.025);
     const spark=new T.Mesh(sharedSphere,mat(color,{emissive:color,emissiveIntensity:1.6,transparent:true,depthWrite:false}));spark.visible=false;spark.userData={activationFeature:i};g.add(spark);
     activationChannels.push({channel,gate,spark,i});
    }
-   textTile(g,'x · σ(x)',1.2,.22,0,.64,1.02,{size:67,color:'#8b6739',bg:'#f0e7c8'});
+   textTile(g,d.activation==='relu'?'max(0, x)':'x · σ(x)',1.2,.22,0,.64,1.02,{size:67,color:'#8b6739',bg:'#f0e7c8'});
   }else if(pairOperation){
    for(let i=0;i<d.out;i++){
     const z=(i-(d.out-1)/2)*(d.out===2?.65:.43),left=neuron(g,-.65,.84,z,pairTones[0]),right=neuron(g,-.22,1.22,z,pairTones[1]);
@@ -150,19 +154,47 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
     const c=d.type==='mask'&&j>i?0xc3b6a5:color,x=(j-1)*.47,z=(i-1)*.48;
     box(g,.39,.06,.39,x,.52,z,c);textTile(g,d.type==='mask'?(j>i?'−∞':'✓'):d.type==='softmax'?'p':String(i)+','+String(j),.35,.32,x,.56,z,{size:56,bg:'#e2e9da',color:'#4e6b5a'});
    }
-   for(let i=0;i<3;i++){neuron(g,-.75,.96,(i-1)*.5,0x789abf);outputs.push(neuron(g,.75,1.05,(i-1)*.5,color));for(let j=0;j<=i;j++)tube(g,[[-.75,.96,(j-1)*.5],[0,1.3,0],[.75,1.05,(i-1)*.5]],color,.012,.55);}
+   for(let i=0;i<3;i++){neuron(g,-.75,.96,(i-1)*.5,0x789abf);outputs.push(neuron(g,.75,1.05,(i-1)*.5,color));for(let j=0;j<3;j++)if(!d.causal||j<=i)tube(g,[[-.75,.96,(j-1)*.5],[0,1.3,0],[.75,1.05,(i-1)*.5]],color,.012,.55);}
   }else if(d.type==='rope'){
    for(let i=0;i<3;i++){const z=(i-1)*.6;ring(g,.24,0,.7,z,color);tube(g,[[0,.72,z],[Math.cos(i)*.25,.72,z+Math.sin(i)*.25]],color,.027);outputs.push(neuron(g,.7,1.02,z,color));}
+  }else if(d.type==='position'){
+   for(let feature=0;feature<2;feature++){
+    const z=feature?.45:-.45,pts=Array.from({length:40},(_,i)=>{const x=i*2*Math.PI/39;return [(i/39-.5)*1.5,.85+.2*(feature?Math.cos(x):Math.sin(x)),z];});
+    tube(g,pts,feature?0xa394bd:0x789abf,.026);outputs.push(neuron(g,.75,1.1,z,color));
+    textTile(g,feature?'cos(p)':'sin(p)',.8,.23,0,.55,z,{size:58});
+   }
+   textTile(g,'X + PE',1,.25,0,.55,1.02,{size:60});
+  }else if(d.type==='concat'){
+   for(let i=0;i<3;i++){
+    const z=(i-1)*.58;
+    for(let head=0;head<2;head++){
+     const tone=head?0xa394bd:0x789abf,x=head?.35:-.1;
+     neuron(g,-.7,.75+head*.35,z,tone);outputs.push(neuron(g,x+.25,1.2,z,tone));
+     tube(g,[[-.7,.75+head*.35,z],[x,1.02,z],[x+.25,1.2,z]],tone,.025);
+     box(g,.36,.09,.35,x,.55,z,tone);textTile(g,head?'B':'A',.31,.28,x,.61,z,{size:65});
+    }
+   }
+  }else if(d.type==='layernorm'){
+   ['− μ','÷ σ','γ · + β'].forEach((word,i)=>{
+    const x=(i-1)*.53,tile=box(g,.46,.12,1.1,x,.65,0,color);
+    textTile(g,word,.43,.5,x,.725,0,{size:58});normalizationStages.push(tile);
+    outputs.push(neuron(g,x,1.18,.65,color));
+   });
+   tube(g,[[-.8,1.05,0],[0,1.05,0],[.8,1.05,0]],color,.025);
+   textTile(g,'LayerNorm',1.5,.27,0,.5,1.02,{size:60});
   }else if(['embedding','vocabulary','pick','storage','cache','decode','norm','ffn','invert'].includes(d.type)){
-   const words=d.type==='vocabulary'||d.type==='pick'?[I18n.t("我"),I18n.t("爱"),I18n.t("猫"),I18n.t("你"),I18n.t("恨"),I18n.t("狗")]:d.type==='cache'?['K','V','+1']:d.type==='norm'?['x','RMS','÷']:d.type==='storage'?['W','W','W']:d.type==='ffn'?['G','×','U']:['0','1','2'];
+   const words=d.glyphs||(d.type==='vocabulary'||d.type==='pick'?[I18n.t("我"),I18n.t("爱"),I18n.t("猫"),I18n.t("你"),I18n.t("恨"),I18n.t("狗")]:d.type==='cache'?['K','V','+1']:d.type==='norm'?['x','RMS','÷']:d.type==='storage'?['W','W','W']:d.type==='ffn'?['G','×','U']:['0','1','2']);
    words.forEach((t,i)=>{const x=words.length>3?(i%2-.5)*.7:0,z=words.length>3?(Math.floor(i/2)-1)*.55:(i-1)*.58;box(g,.55,.09,.44,x,.55,z,color);textTile(g,t,.5,.38,x,.605,z,{size:64,bg:'#e9edde',color:'#496253'});});
    for(let i=0;i<3;i++)outputs.push(neuron(g,.7,1.08,(i-1)*.5,color));
+  }else if(['encoder','decoder'].includes(d.type)){
+   const parts=d.type==='encoder'?['MHA','LN','FFN','LN']:['Mask','Cross','FFN'];
+   parts.forEach((word,i)=>{const z=(i-(parts.length-1)/2)*.45;box(g,1.4,.11,.35,0,.6+i*.05,z,color);textTile(g,word,1.25,.31,0,.66+i*.05,z,{size:60});outputs.push(neuron(g,.7,1.18,z,color));});
   }else{
    for(let i=0;i<2;i++){const z=(i-.5)*.65;neuron(g,-.6,.78,z,0x6b9fb1);neuron(g,-.3,1.25,z,0xb7a17d);outputs.push(neuron(g,.68,1.08,z,color));tube(g,[[-.6,.78,z],[.02,.96,z],[.68,1.08,z]],0x6b9fb1,.027);tube(g,[[-.3,1.25,z],[.02,.96,z],[.68,1.08,z]],color,.027);ring(g,.18,.06,.94,z,color);}
   }
   d.ins.forEach((dim,i)=>{const z=d.ins.length===2?(i?.55:-.55):0;box(g,.21,.17,.27,-1.08,.58,z,0x6e887c);for(let j=0;j<Math.min(dim,4);j++)box(g,.12,.02,.035,-1.08,.68,z+(j-(Math.min(dim,4)-1)/2)*.055,0xc6d7c3);});
   const sock=new T.Mesh(new T.CylinderGeometry(.15,.15,.18,20),mat(color));sock.rotation.z=Math.PI/2;sock.position.set(1.05,.68,0);g.add(sock);
-  if(register)units.set(n.id,{g,glow,outputs,inputs,connections,weightCells,activationChannels,columnCues,pairChannels,pairTones,pairOperation,links:n.links,color});return g;
+  if(register)units.set(n.id,{g,glow,outputs,inputs,connections,weightCells,activationChannels,columnCues,pairChannels,pairTones,pairOperation,normalizationStages,links:n.links,color});return g;
  }
  function sync(values,depths,depth,selected,activeSample,results,busy,layout={},output=null){
   if(!busy)clearProcessing();
@@ -175,7 +207,8 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   }
   const {samples}=context.userData,seq=!!layout.sequence,input=seq?samples[activeSample].v:null;
   const words=seq?samples[activeSample].word.split(' / '):samples.slice(0,3).map(s=>s.word);
-  tokens.forEach((t,i)=>{t.label.write(words[i]);t.g.userData.active=busy&&(seq||i===activeSample);t.cells.forEach((c,j)=>c.write(String(seq?input[i*t.cells.length+j]:samples[i].v[j])));});
+  const sourceValues=layout.dualSource?window.NeuralPrologue.sourceValues({levelId:layout.id},input):null;
+  tokens.forEach(t=>{const i=t.index,secondary=t.sourceId==='Z',v=secondary?sourceValues.Z:input;t.label.write(secondary?window.NeuralPrologue.math.vocab[layout.secondaryTokenIds[i]]:words[i]);t.g.userData.active=busy&&(seq||i===activeSample);t.cells.forEach((c,j)=>{const value=seq?v[i*t.cells.length+j]:samples[i].v[j];c.write(Number.isFinite(value)?Number(value.toFixed(2)).toString():'·');});});
   pulseSource();
   rows.forEach((r,i)=>{
    const active=busy&&(seq||i===activeSample);r.g.userData.active=active;r.stripe.material.emissiveIntensity=active?1.3:.1;
@@ -208,6 +241,8 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   u.g.userData.activePair=paired&&focus>0?timing.column:null;
   u.columnCues.forEach(({cue,fill,outline},j)=>{const strength=j===timing?.column?focus:0;cue.visible=strength>0;fill.material.opacity=.19*strength;outline.material.opacity=strength;});
   u.glow.material.emissiveIntensity=.12+1.5*pulse;
+  u.normalizationStages.forEach((tile,i)=>{const local=p*3-i,strength=active&&local>=0&&local<=1?Math.sin(Math.PI*local):0;tile.material.emissive.set(color);tile.material.emissiveIntensity=strength*1.4;});
+  if(u.normalizationStages.length){const features=input.slice(0,sequence?input.length/3:input.length),mean=features.reduce((a,b)=>a+b,0)/features.length;u.g.userData.normalization={mean,centered:features.map(x=>x-mean),phase:Math.min(2,Math.floor(p*3))};}
   u.inputs.forEach((o,i)=>{const v=sequence?1:input[i],size=Math.abs(v)<1e-9?.55:1+Math.min(2,Math.abs(v))*.3;o.scale.setScalar(1+(size-1)*entering);if(u.connections.length){o.material.color.set(detailed&&active?featureColor(i):0x6c9eb1);o.material.emissive.set(detailed?featureColor(i):0x6c9eb1);}o.material.emissiveIntensity=.08+(active&&Math.abs(v)>1e-9?entering*(1-ramp(p,.65,1)):0);});
   for(const {mesh,spark,i,j,weight} of u.connections){
    const contribution=sequence?weight:input[i]*weight,lit=Number.isFinite(contribution)&&Math.abs(contribution)>1e-9;
@@ -220,12 +255,12 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   }
   for(const {tile,face,i,j,weight} of u.weightCells){const contribution=sequence?weight:input[i]*weight,lit=active&&(detailed||Math.abs(contribution)>1e-9),highlight=detailed?(j===timing.column?focus:0):pulse,tone=detailed?projectionColor:color;tile.material.emissive.set(lit?tone:0);tile.material.emissiveIntensity=lit?highlight*.35:0;face.material.color.set(0xffffff);if(lit)face.material.color.lerp(new T.Color(tone),highlight*.4);}
   for(const {channel,gate,spark,i} of u.activationChannels){
-   const from=input[i],to=output[i],sigmoid=1/(1+Math.exp(-from)),travel=ramp(p,.16,.84),transform=ramp(p,.35,.7),value=from+(to-from)*transform,tone=from<0?0xd6a578:color;
+   const from=input[i],to=output[i],isReLU=u.g.userData.activation==='relu',sigmoid=isReLU?(from>0?1:0):1/(1+Math.exp(-from)),travel=ramp(p,.16,.84),transform=ramp(p,.35,.7),value=from+(to-from)*transform,tone=from<0?0xd6a578:color;
    gate.scale.setScalar(1-(1-(.22+.78*sigmoid))*pulse);gate.material.emissive.set(tone);gate.material.emissiveIntensity=active?pulse*.85:0;
    channel.material.emissive.set(tone);channel.material.emissiveIntensity=active?pulse*.9:0;
    spark.visible=active&&p>=.16&&p<.86&&Math.abs(from)>1e-9;
    Object.assign(spark.userData,{inputValue:from,outputValue:to,value,sigmoid,phase:transform});
-   if(spark.visible){spark.position.copy(channel.geometry.parameters.path.getPoint(travel));spark.scale.setScalar(.3+Math.min(3,Math.abs(value))*.5);spark.material.color.set(tone);spark.material.emissive.set(tone);spark.material.opacity=ramp(p,.16,.23)*(1-ramp(p,.78,.86));}
+   if(spark.visible){spark.position.copy(channel.geometry.parameters.path.getPoint(isReLU&&from<0?Math.min(.5,travel):travel));spark.scale.setScalar(.3+Math.min(3,Math.abs(value))*.5);spark.material.color.set(tone);spark.material.emissive.set(tone);spark.material.opacity=ramp(p,.16,.23)*(1-ramp(p,isReLU&&from<0?.5:.78,isReLU&&from<0?.7:.86));}
   }
   for(const {i,left,right,leftPath,rightPath,outPath,gate,carrier} of u.pairChannels){
    if(!paired||!other){carrier.visible=false;continue;}
@@ -242,7 +277,7 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   }
   u.outputs.forEach((o,i)=>{const v=sequence?1:output[i],size=Number.isFinite(v)?Math.abs(v)<1e-9?.55:1+Math.min(2,Math.abs(v))*.18:1,gather=worked?ramp(progress,.59+i*timing.step,.68+i*timing.step):gathering,highlight=worked&&i===timing.column?focus:0;o.scale.setScalar(1+(size-1)*gather);o.material.color.set(v<0?0xc79868:u.color);if(highlight)o.material.color.lerp(new T.Color(accent),highlight*.7);o.material.emissive.set(highlight?accent:u.color);o.material.emissiveIntensity=worked?.08+highlight*.85:.08+(active?1.3*gather*(1-ramp(p,.9,1)):progress>=1?.35:0);});
  }
- function clearProcessing(){for(const u of units.values()){u.g.userData.processing=false;u.g.userData.activeColumn=u.g.userData.activePair=null;u.columnCues.forEach(({cue})=>cue.visible=false);u.outputs.forEach(o=>{o.material.emissive.set(u.color);o.material.emissiveIntensity=.08;});if(u.connections.length)u.inputs.forEach(o=>{o.material.color.set(0x6c9eb1);o.material.emissive.set(0x6c9eb1);o.material.emissiveIntensity=.08;});u.connections.forEach(c=>c.spark.visible=false);u.activationChannels.forEach(({spark,gate,channel})=>{spark.visible=false;gate.scale.setScalar(1);gate.material.emissiveIntensity=0;channel.material.emissiveIntensity=0;});u.pairChannels.forEach(({left,right,leftPath,rightPath,outPath,gate,carrier})=>{carrier.visible=false;gate.scale.setScalar(1);[leftPath,rightPath,outPath,gate].forEach(o=>o.material.emissiveIntensity=0);[left,right].forEach(o=>{o.scale.setScalar(1);o.material.emissiveIntensity=.08;});});u.weightCells.forEach(({tile,face})=>{tile.material.emissiveIntensity=0;face.material.color.set(0xffffff);});}}
+ function clearProcessing(){for(const u of units.values()){u.g.userData.processing=false;u.g.userData.activeColumn=u.g.userData.activePair=null;delete u.g.userData.normalization;u.normalizationStages.forEach(tile=>tile.material.emissiveIntensity=0);u.columnCues.forEach(({cue})=>cue.visible=false);u.outputs.forEach(o=>{o.material.emissive.set(u.color);o.material.emissiveIntensity=.08;});if(u.connections.length)u.inputs.forEach(o=>{o.material.color.set(0x6c9eb1);o.material.emissive.set(0x6c9eb1);o.material.emissiveIntensity=.08;});u.connections.forEach(c=>c.spark.visible=false);u.activationChannels.forEach(({spark,gate,channel})=>{spark.visible=false;gate.scale.setScalar(1);gate.material.emissiveIntensity=0;channel.material.emissiveIntensity=0;});u.pairChannels.forEach(({left,right,leftPath,rightPath,outPath,gate,carrier})=>{carrier.visible=false;gate.scale.setScalar(1);[leftPath,rightPath,outPath,gate].forEach(o=>o.material.emissiveIntensity=0);[left,right].forEach(o=>{o.scale.setScalar(1);o.material.emissiveIntensity=.08;});});u.weightCells.forEach(({tile,face})=>{tile.material.emissiveIntensity=0;face.material.color.set(0xffffff);});}}
  // A single colour pulse identifies the departing row without moving its tray.
  function pulseSource(progress=1){
   const pulse=Math.pow(1-Math.min(1,Math.max(0,progress)/.65),2);
