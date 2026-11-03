@@ -154,6 +154,62 @@ test('original LayerNorm animates centering and scaling on four features and cle
  app.api.getWorld().focus('ln-attn');assert.match(app.document.querySelector('#card-example-values').textContent,/μ =/);assert.doesNotMatch(app.document.querySelector('.card-example-title').textContent,/“我”/);
  app.document.querySelector('#card-close').onclick();
 });
+test('RMSNorm visibly reduces and rescales each token independently with equal timing and signed values',async()=>{
+ let app;const seen=new Set(),starts=new Map();
+ app=await boot({reduced:false,frameMs:80,onFrame:({now,document})=>{
+  if(!app)return;
+  const formula=document.querySelector('.rms-calculation:not([hidden])');
+  if(formula){
+   const key=document.querySelector('#sample-name').textContent+'|'+formula.dataset.normRow;
+   if(!starts.has(key))starts.set(key,now);seen.add(formula.dataset.normStage);
+   assert.ok(formula.querySelector('.projection-equation').textContent.length);assert.ok(Number(formula.style.getPropertyValue('--calculation-scale'))>0);
+  }
+  app.scenes.at(-1).traverse(o=>{
+   if(o.userData.rms){
+    const {groups}=o.userData.rms;assert.equal(groups.length,3);
+    for(const g of groups){
+     const r=Math.sqrt(g.values.reduce((sum,v)=>sum+v*v,0)/g.values.length+1e-6);
+     assert.ok(Math.abs(g.divisor-r)<1e-12);
+     g.output.forEach((value,i)=>assert.ok(Math.abs(value-g.values[i]/r)<1e-12));
+    }
+    if(groups[0].divisor!==groups[2].divisor)seen.add('separate divisors');
+   }
+   if(o.visible&&o.userData.rmsSquare){assert.equal(o.userData.value,o.userData.input**2);if(o.userData.input<0)seen.add('negative squared');}
+   if(o.visible&&o.userData.rmsScaled){assert.ok(Math.abs(o.userData.value-o.userData.input/o.userData.divisor)<1e-12);if(o.userData.value<0)seen.add('negative preserved');if(o.userData.value===0){seen.add('zero');assert.equal(o.material.wireframe,true);}}
+  });
+ }});
+ app.api.switchLevel('normalize');app.api.setState(app.c.NeuralPrologue.solutions('normalize'));app.api.getWorld().rebuild();await app.api.run();
+ for(const event of ['squares','rms','scale','separate divisors','negative squared','negative preserved','zero'])assert.ok(seen.has(event),event);
+ assert.equal(starts.size,9);
+ for(const sample of app.c.NeuralPrologue.samplesFor('normalize')){
+  const a=starts.get(sample.word+'|0'),b=starts.get(sample.word+'|1'),c=starts.get(sample.word+'|2');
+  assert.ok(b>a&&c>b);assert.ok(Math.abs((b-a)-(c-b))<=160,'each token gets the same visible processing time');
+ }
+ assert.equal(app.document.querySelectorAll('#test-results .pass').length,3);assert.equal(app.document.querySelectorAll('.rms-calculation,.projection-result').length,0);
+ app.scenes.at(-1).traverse(o=>{assert.equal(o.userData.rms,undefined);if(o.userData.rmsSquare||o.userData.rmsScaled)assert.equal(o.visible,false);});
+});
+
+test('paused RMSNorm keeps its computation while zooming and changing language, and stopping clears it',async()=>{
+ let app,phase=0,frames=0,stop,before;
+ app=await boot({reduced:false,frameMs:80,onFrame:({document})=>{
+  if(!app)return;
+  const formula=document.querySelector('.rms-calculation:not([hidden])');
+  if(!phase&&formula?.dataset.normStage==='scale'){
+   app.api.togglePause();before=formula.querySelector('.projection-equation').textContent;phase=1;
+  }else if(phase===1&&++frames===3){
+   assert.equal(formula.querySelector('.projection-equation').textContent,before);
+   const oldScale=Number(formula.style.getPropertyValue('--calculation-scale'));
+   const wheel=new app.window.Event('wheel',{bubbles:true,cancelable:true});wheel.deltaY=2000;document.querySelector('#scene').dispatchEvent(wheel);
+   assert.ok(Number(formula.style.getPropertyValue('--calculation-scale'))<oldScale);assert.equal(formula.dataset.detail,'abstract');
+   app.c.I18n.setPreference('en');assert.match(formula.querySelector('.projection-equation').textContent,/I · /);
+   stop=app.api.run();phase=2;
+  }
+ }});
+ app.document.querySelector('#welcome').close();app.api.switchLevel('normalize');app.api.setState(app.c.NeuralPrologue.solutions('normalize'));app.api.getWorld().rebuild();await app.api.run();await stop;
+ assert.equal(phase,2);assert.equal(app.document.querySelectorAll('.packet,.rms-calculation,.projection-result').length,0);assert.ok(!app.document.querySelector('#level-complete').open);
+ app.scenes.at(-1).traverse(o=>{assert.equal(o.userData.rms,undefined);if(o.userData.rmsSquare||o.userData.rmsScaled)assert.equal(o.visible,false);});
+ assert.deepEqual([...app.c.I18n.missing],[]);
+});
 test('small matrices keep their blocks while numbers return when zoomed in',async()=>{
  const app=await boot();app.api.switchLevel('residual');app.api.setState(app.c.NeuralPrologue.solutions('residual'));app.api.getWorld().rebuild();
  const state=JSON.stringify(app.api.getState());

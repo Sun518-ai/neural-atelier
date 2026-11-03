@@ -94,7 +94,8 @@ test('bridge lessons precede compositions and each starts with a real unsolved t
  const order=[...M.routes.main.ids,...M.routes.modern.ids],before=(a,b)=>assert.ok(order.indexOf(a)<order.indexOf(b),a+' must precede '+b);
  for(const chain of [['relu','down-projection','original-ffn','residual','workshop','activation','plain-ffn','gate-projection','pairwise','gating','swiglu','normalize','ffn'],['scores','softmax','causal','rotation','rope','aggregation','attention'],['vocabulary-scores','vocabulary','autoregressive']])for(let i=1;i<chain.length;i++)before(chain[i-1],chain[i]);
  for(const id of ['down-projection','plain-ffn','gate-projection','pairwise','swiglu','softmax','rotation','aggregation','vocabulary-scores']){
-  const s=M.initial(id);assert.ok(!M.levels[id].buildable,id+' teaches with fixed modules');
+  const s=M.initial(id);assert.deepEqual(Array.from(s.nodes,n=>n.kind),Array.from(M.levels[id].nodes),id+' keeps its prepared teaching modules');
+  if(id!=='down-projection')assert.equal(M.levels[id].buildable,true,id+' now permits returning and placing modules');
   assert.ok(M.samplesFor(id).slice(0,M.levels[id].sampleCount).some(t=>{const ev=M.evaluate(s,t.v);return ev.error||!close(ev.output,M.reference(t.v,id));}),id+' should not start solved');
  }
 });

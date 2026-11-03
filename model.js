@@ -83,10 +83,10 @@ function arrange(state,random=Math.random){
  const slots=shuffled(Array.from({length:cols*rows},(_,i)=>[(b.left+b.right)/2+(i%cols-(cols-1)/2)*dx,(Math.floor(i/cols)-(rows-1)/2)*dz]),random);
  state.nodes.forEach((n,i)=>{n.x=Math.max(b.left,Math.min(b.right,slots[i][0]+(random()-.5)*.24));n.z=Math.max(b.back,Math.min(b.front,slots[i][1]+(random()-.5)*.24));});return state;
 }
-function initial(levelId='ffn',{complete=false,random=Math.random}={}){const level=levels[levelId]||levels.ffn,empty=level.buildable&&!complete;
+function initial(levelId='ffn',{complete=false,random=Math.random}={}){const level=levels[levelId]||levels.ffn,empty=level.buildable&&!level.startWithModules&&!complete;
  const state={version:1,levelId:level.id,palette:Object.keys(inventory(level)),...(level.engine?{settings:{...api.engineDefaults,...level.settings}}:{}),nodes:(empty?[]:level.nodes).map(id=>{const d=definitions[id];return {id,kind:id,x:d.x??0,z:d.z??0,...(level.engine?{device:level.devices?.[id]||'gpu'}:{}),links:level.initialLinks?.[id]?[...level.initialLinks[id]]:d.ins.map(()=>null)};}),sink:empty?null:level.initialSink||null};return arrange(state,random);
 }
-function placement(state,kind,x,z){const level=levelFor(state),b=bounds(level);if(!canAdd(state,kind))return null;if(!Number.isFinite(x)||!Number.isFinite(z)||x<b.left||x>b.right||z<b.back||z>b.front)return null;if(state.nodes.some(n=>Math.abs(n.x-x)<2.65&&Math.abs(n.z-z)<2.9))return null;return {id:nextId(state,kind),kind,x,z,links:definitions[kind].ins.map(()=>null)};}
+function placement(state,kind,x,z){const level=levelFor(state),b=bounds(level);if(!canAdd(state,kind))return null;if(!Number.isFinite(x)||!Number.isFinite(z)||x<b.left||x>b.right||z<b.back||z>b.front)return null;if(state.nodes.some(n=>Math.abs(n.x-x)<2.65&&Math.abs(n.z-z)<2.9))return null;return {id:nextId(state,kind),kind,x,z,...(level.engine?{device:level.devices?.[kind]||'gpu'}:{}),links:definitions[kind].ins.map(()=>null)};}
 function addNode(state,id,x,z){const n=placement(state,id,x,z);if(!n)return false;state.nodes.push(n);return true;}
 function removeNode(state,id){if(!levelFor(state).buildable||!state.nodes.some(n=>n.id===id))return false;state.nodes=state.nodes.filter(n=>n.id!==id);state.nodes.forEach(n=>n.links=n.links.map(k=>k===id?null:k));if(state.sink===id)state.sink=null;return true;}
 function disconnect(state,to,port){if(to==='sink'){if(!state.sink)return false;state.sink=null;return true;}const n=state.nodes.find(n=>n.id===to);if(!n?.links[port])return false;n.links[port]=null;return true;}

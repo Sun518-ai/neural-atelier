@@ -1,5 +1,15 @@
 // English copy. Chinese source phrases are stable lookup keys.
 globalThis.AtelierEnglish = {
+  "归一化": "Normalization",
+  "同一组特征，除以同一个均方根": "One feature group, one shared RMS divisor",
+  "先把一个 token 的各个特征平方、求平均，再开平方，得到它自己的尺度 r。随后各特征都除以这个 r；另一个 token 单独算自己的 r。": "Square one token’s features, take their mean and then its square root to obtain that token’s scale r. Divide every feature by the same r; another token computes its own r.",
+  "它调整整体数值尺度，不把各个特征变成同一个数，也不减去均值。本例 γ 全为 1，缩放后仍保留原来的正负与特征间比例；真实模型还会学习每个特征的 γ。": "It adjusts the overall scale without making all features equal or subtracting their mean. Here every γ is 1, so signs and feature ratios are preserved. Real models also learn a γ for each feature.",
+  "逐个 token 缩放": "Scale each token independently",
+  "U 给出内容特征，S 根据当前输入调节各项的贡献。两者来自同一个 token 的不同投影；这里不汇合不同 token。之后的降维投影才把各项乘积加权组合。S = 1 保持原值，S = 0 消去这一项。": "U supplies content features; S adjusts each feature’s contribution according to the current input. They come from different projections of the same token, without combining tokens here. The later down projection takes weighted sums of these products. S = 1 preserves a value; S = 0 removes it.",
+  "用同两组数比较：": "Compare the same two vectors:",
+  "逐项调节强弱；乘以 1 保持原值。": "Rescale each feature; multiplying by 1 preserves it.",
+  "在原值上增加或减少；加上 0 保持原值。": "Add an increase or decrease; adding 0 preserves the value.",
+  "这里只比较运算：门控中 B 是调节系数，残差中 B 是修改量。": "This compares the operations: B acts as a scale in gating and as an update in a residual.",
   "原版基础共 27 关：从 ReLU FFN、残差和 LayerNorm 开始，逐步接出正弦位置编码、单头与多头注意力、编码器和解码器。13 关现代扩展再比较 SiLU、SwiGLU、RMSNorm、Pre-LN 和 RoPE。9 关端侧推理独立探索 Qwen 27B、Kapitsa 与 Apple ANE。": "The 27-level original track starts with ReLU FFNs, residuals and LayerNorm, then builds sinusoidal positions, single-head and multi-head attention, and the encoder–decoder. Thirteen modern extensions compare SiLU, SwiGLU, RMSNorm, Pre-LN and RoPE. Nine independent on-device challenges explore Qwen 27B, Kapitsa and Apple ANE.",
   "原版结构使用固定手工权重做缩尺推理：基础算子两维，完整层四维、两个头，编码器和解码器各一层。LayerNorm 的缩放为 1、偏移为 0，FFN 偏置为 0；不包含训练和翻译能力。生成循环关单独使用固定转移表解释控制流程。": "The original structure uses fixed teaching weights: two features for basic operators, four features and two heads in full layers, with one encoder and one decoder layer. LayerNorm scale is 1 and shift is 0; FFN biases are zero. It does not train or translate. The generation-loop lesson separately uses a fixed transition table to explain control flow.",
   "对每个数做 x / (1 + exp(−x))，改变数值关系，不改变向量维度。": "Apply x / (1 + exp(−x)) to each value, changing numerical relationships without changing the vector's dimensions.",

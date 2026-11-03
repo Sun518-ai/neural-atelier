@@ -234,6 +234,10 @@ M.routes.main={name:L('主线 · 原版基础','Main · Original Transformer'),d
 M.routes.modern={name:L('扩展 · 现代模型','Extensions · Modern models'),description:L('学过原版后再比较：SiLU 与 SwiGLU 改了 FFN，RMSNorm 与 Pre-LN 改了归一化，RoPE 改了位置的用法。旧关卡与存档仍可继续。','After the original, compare how SiLU and SwiGLU change FFNs, RMSNorm and Pre-LN change normalization, and RoPE changes position handling. Existing levels and saves remain available.'),ids:modern};
 M.routes={main:M.routes.main,modern:M.routes.modern,engine:M.routes.engine};
 for(const [track,route]of Object.entries(M.routes))route.ids.forEach((id,i)=>{M.levels[id].track=track;M.levels[id].next=route.ids[i+1]||null;});
+// After the placement tutorial, the shelf remains a usable part of the game.
+// Preserve each lesson's prepared table and existing inventory; removing a
+// module makes that copy available to place again without changing the puzzle.
+for(const level of Object.values(M.levels))if(!level.practice&&!level.buildable){level.buildable=true;level.startWithModules=true;}
 M.levels.qkv.description=L('三块投影尚未接线，同一份输入可产生 Q、K、V。本关出口需要 V；后面分别用 Q/K 打分，再用 V 取内容。','The three projections start disconnected. One input can produce Q, K and V. This outlet needs V; later lessons use Q/K for scoring and V for content.');
 M.levels.softmax.description=L('将已学过的 Q/K 投影和打分接起来，再把分数交给 Softmax。每组权重的和应为 1，本关不遮住未来位置。','Connect the familiar Q/K projections and scoring, then feed the scores to Softmax. Each weight row should sum to 1; this level has no future mask.');
 M.levels.residual.rationale.scope=L('这里先用线性支路练习残差。进入原版基础章后，会把它包在 ReLU FFN 和 Attention 外，再加入 LayerNorm。','Practice the residual with a linear branch here. The original chapter then wraps ReLU FFNs and Attention with residuals and LayerNorm.');

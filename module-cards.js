@@ -1,5 +1,12 @@
 // Card copy describes the same toy operators as model.js. Numbers are computed, not baked into the art.
 export const moduleCards = {
+  norm: {
+    number:'',seal:'r',english:'RMS NORMALIZATION',family:I18n.t('归一化'),color:'#9a813d',
+    ability:I18n.t('同一组特征，除以同一个均方根'),formula:'r = √(mean(X²) + ε); Zᵢ = (Xᵢ / r) · γᵢ',
+    meaning:I18n.t('先把一个 token 的各个特征平方、求平均，再开平方，得到它自己的尺度 r。随后各特征都除以这个 r；另一个 token 单独算自己的 r。'),
+    purpose:I18n.t('它调整整体数值尺度，不把各个特征变成同一个数，也不减去均值。本例 γ 全为 1，缩放后仍保留原来的正负与特征间比例；真实模型还会学习每个特征的 γ。'),
+    weight:'γ = 1',trait:I18n.t('逐个 token 缩放'),stage:0
+  },
   project: {
     number:'01',seal:I18n.t("映"),english:'LINEAR PROJECTION',family:I18n.t("投影"),color:'#397f71',
     ability:I18n.t("用权重组合出新特征"),formula:'P = X × W',
@@ -25,7 +32,7 @@ export const moduleCards = {
     number:'04', seal:I18n.t("合"), english:'ELEMENTWISE GATING', family:I18n.t("门控"), color:'#3e8078',
     ability:I18n.t("让门值作用于内容"), formula:'Hᵢ = Sᵢ × Uᵢ',
     meaning:I18n.t("把两个向量的对应特征配对：第 1 个乘第 1 个，第 2 个乘第 2 个。4 对乘积组成新的 4 维向量 H。"),
-    purpose:I18n.t("内容特征的贡献随当前输入产生的门值而改变。这里逐项相乘；矩阵乘法才会把多个乘积求和。"),
+    purpose:I18n.t("U 给出内容特征，S 根据当前输入调节各项的贡献。两者来自同一个 token 的不同投影；这里不汇合不同 token。之后的降维投影才把各项乘积加权组合。S = 1 保持原值，S = 0 消去这一项。"),
     input:I18n.t("门值 S 与内容 U"), output:I18n.t("门控结果 H"), weight:I18n.t("无"), trait:I18n.t("对应位置相乘"), stage:2
   },
   down: {

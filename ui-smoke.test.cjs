@@ -293,6 +293,33 @@ test('the simple placement lesson introduces one familiar module before the orig
  const app=boot(new Map(),'#workshop',['en-US']);assert.equal(app.eval('state.nodes.length'),0);assert.equal(app.document.querySelectorAll('[data-add-module]').length,1);assert.equal(app.document.querySelector('#module-count').textContent,'0 / 1');assert.equal(app.eval('M.levels.residual.next'),'workshop');assert.equal(app.eval('M.levels.workshop.next'),'embedding');assert.doesNotMatch(app.document.querySelector('#module-shelf').textContent,/[\u3400-\u9fff]/);
 });
 
+test('the shelf remains usable after the placement tutorial on every track without discarding prepared boards',()=>{
+ const app=boot(),M=app.c.NeuralPrologue,shelf=app.document.querySelector('#module-shelf');
+ for(const [index,id]of M.routes.main.ids.entries()){
+  app.eval(`switchLevel('${id}')`);assert.equal(shelf.hidden,index<6,id+' shelf visibility');
+ }
+ for(const id of [...M.routes.modern.ids,...M.routes.engine.ids]){
+  app.eval(`switchLevel('${id}')`);assert.equal(shelf.hidden,false,id);
+  assert.equal(app.document.querySelectorAll('[data-add-module]').length,Object.keys(M.inventory(M.levels[id])).length,id+' exposes its own stock');
+ }
+ app.eval("switchLevel('normalize')");assert.equal(app.eval('state.nodes.length'),1,'prepared arithmetic lessons keep their starting modules');
+ shelf.removeAttribute('open');app.eval("switchLevel('embedding');switchLevel('normalize')");assert.equal(shelf.hidden,false);assert.equal(shelf.hasAttribute('open'),false,'the player can still collapse the persistent shelf');
+ app.eval("switchLevel('workshop')");assert.equal(app.eval('state.nodes.length'),0,'the placement tutorial still requires taking a module');
+});
+
+test('formerly fixed saved modules can be returned, placed and reconnected with undo and engine defaults',()=>{
+ const first=boot(),storage=new Map(),saved=first.eval("M.solutions('normalize')");saved.nodes[0].x=-.75;saved.nodes[0].z=.8;
+ storage.set('neural-atelier-level-normalize-v1',JSON.stringify(saved));const app=boot(storage,'#normalize');
+ assert.equal(app.eval('state.nodes[0].x'),-.75);assert.equal(app.eval('state.sink'),'norm');
+ app.eval("select('norm');removeModule()");assert.equal(app.eval('state.nodes.length'),0);assert.equal(app.eval('state.sink'),null);assert.equal(app.eval("M.stock(state,'norm')"),1);
+ app.eval("chooseModule('norm');placeModule(0,0);link('R','norm',0);link('norm','sink',0)");assert.equal(app.eval("M.stock(state,'norm')"),0);
+ const again=boot(storage,'#normalize');assert.equal(again.eval('state.nodes.length'),1);assert.equal(again.eval('state.nodes[0].x'),0);assert.equal(again.eval('state.sink'),'norm');
+ app.eval("$('#undo').onclick()");assert.equal(app.eval('state.sink'),null);assert.equal(app.eval('state.nodes[0].links[0]'),'R');
+ app.eval("switchLevel('placement');const removed=state.nodes.find(n=>n.id==='enqkv');const position=[removed.x,removed.z];removeModule('enqkv');chooseModule('enqkv');placeModule(...position)");
+ assert.equal(app.eval("state.nodes.find(n=>n.id==='enqkv').device"),app.c.NeuralPrologue.levels.placement.devices?.enqkv||'gpu');
+ assert.equal(app.eval("M.canAdd(state,'enqkv')"),false,'returning a task does not enlarge its allowed stock');
+});
+
 test('reordered chapters retain completion and advanced saves while finished prologues restart',()=>{
  const storage=new Map(),app=boot(storage),kept=new Map();
  for(const id of ['activation','gating','residual','workshop','ffn','normalize','attention']){

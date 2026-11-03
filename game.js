@@ -1,5 +1,5 @@
-import {cardFor,exampleFor} from './module-cards.js?v=original-foundation-1';
-import {createProgress} from './level-progress.js?v=original-foundation-1';
+import {cardFor,exampleFor} from './module-cards.js?v=rms-shelf-1';
+import {createProgress} from './level-progress.js?v=rms-shelf-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -113,7 +113,7 @@ function stageChrome(){
 function renderLevelMenu(){
  $('#level-tracks').innerHTML=Object.entries(M.routes).map(([id,r])=>`<button type="button" role="tab" data-track="${id}" aria-selected="${id===menuTrack}" aria-controls="level-list">${r.name}<span>${r.ids.length}</span></button>`).join('');
  $('.level-menu-intro').textContent=M.routes[menuTrack].description;
- $('#level-list').innerHTML=M.routes[menuTrack].ids.map(id=>M.levels[id]).map(c=>`<button class="level-choice ${c.id===stageId?'current':''}" data-level="${c.id}"><span class="level-choice-top"><span>${c.chapter}</span><span>${progress.completed(c.id)?I18n.t("✓ 已通过"):c.id===stageId?I18n.t("当前关卡"):''}</span></span><strong>${c.title}</strong><span>${c.summary}</span><small>${c.buildable?I18n.t('最多 ')+M.moduleLimit(c):c.nodes.length}${I18n.t(" 个计算模块 · ")}${c.buildable?I18n.t("自行放置组件"):c.engine?I18n.t("正确性 + 性能验收"):c.sampleCount+I18n.t(" 组输入")}</small></button>`).join('');
+ $('#level-list').innerHTML=M.routes[menuTrack].ids.map(id=>M.levels[id]).map(c=>`<button class="level-choice ${c.id===stageId?'current':''}" data-level="${c.id}"><span class="level-choice-top"><span>${c.chapter}</span><span>${progress.completed(c.id)?I18n.t("✓ 已通过"):c.id===stageId?I18n.t("当前关卡"):''}</span></span><strong>${c.title}</strong><span>${c.summary}</span><small>${c.buildable?I18n.t('最多 ')+M.moduleLimit(c):c.nodes.length}${I18n.t(" 个计算模块 · ")}${c.engine?I18n.t("正确性 + 性能验收"):c.buildable?I18n.t("自行放置组件"):c.sampleCount+I18n.t(" 组输入")}</small></button>`).join('');
 }
 function levelMenu(){
  menuTrack=stage().track;renderLevelMenu();$('#level-menu').showModal();$('#level-list .current')?.scrollIntoView({block:'nearest'});
@@ -211,7 +211,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=original-foundation-1');
+ const {createSceneArt}=await import('./scene-art.js?v=rms-shelf-1');
  const art=createSceneArt(T,scene,colors,{anisotropy:renderer.capabilities.getMaxAnisotropy()});art.surroundings(samples(),stage());
  const assembly=new T.Group(),wires=new T.Group();scene.add(assembly,wires);const neuronGeo=new T.SphereGeometry(.115,16,12);let elements=[],curves=[],packets=[],drag=null,preview=null,yaw=.05,pitch=.8,zoom=stage().zoom,lastDepth=-1;
  const cameraTarget=new T.Vector3();let focusId=null,shelfFocus=null,shelfModel=null,overview=null,cameraFrame=0,transitioning=false,lastTap=null;
@@ -338,11 +338,12 @@ try{
     const scale=w/width/60;
     p.equationVisible=art.detailsVisible();
     p.calculation.dataset.detail=p.equationVisible?'full':'abstract';p.calculation.style.setProperty('--calculation-scale',String(scale));
-    const [cx,cy]=project(art.projectionOutlet(p.node.id,p.column)),cw=(p.equationVisible?(p.calculation.offsetWidth||p.equation.textContent.length*7+14):24)*scale;
-    const radius=art.projectionRadius(p.node.id,p.column)*w/width,offset=radius+9*scale,side=cx+offset+cw<w-12?'right':'left';
+    const anchor=p.normalizing?art.rmsAnchor(p.node.id,p.rmsRow):art.projectionOutlet(p.node.id,p.column);
+    const [cx,cy]=project(anchor),cw=(p.equationVisible?(p.calculation.offsetWidth||p.equation.textContent.length*7+14):24)*scale;
+    const radius=(p.normalizing?.2:art.projectionRadius(p.node.id,p.column))*w/width,offset=radius+9*scale,side=cx+offset+cw<w-12?'right':'left';
     p.calculation.dataset.side=side;
     p.calculation.style.left=(side==='right'?cx+offset:cx-offset)+'px';p.calculation.style.top=cy+'px';
-    const accent=colorHex(p.paired?nodeColor(p.node.id):art.projectionColor);
+    const accent=colorHex(p.normalizing?art.rowColor(p.rmsRow):p.paired?nodeColor(p.node.id):art.projectionColor);
     p.calculation.style.setProperty('--calculation-color',accent);p.calculation.style.setProperty('--calculation-halo',accent+'33');
     p.calculation.style.setProperty('--calculation-focus',String(p.focus||0));
     for(const {el,bar}of p.outputLabels){
@@ -384,10 +385,13 @@ try{
   const names={Q:I18n.t("查询"),K:I18n.t("键"),V:I18n.t("内容"),A:I18n.t("注意力"),L:I18n.t("词表分数"),T:I18n.t("选出的词"),B:I18n.t("计算结果"),X:I18n.t("输入向量"),P:I18n.t("投影结果"),R:I18n.t("原始输入"),Z:I18n.t("归一化输入"),G:I18n.t("门分支"),U:I18n.t("内容分支"),S:stage().original?I18n.t('相关分数 S'):['activation','plain-ffn'].includes(stageId)?I18n.t("SiLU 的输出"):I18n.t("激活门值"),H:I18n.t("门控结果"),F:I18n.t("本次变换"),Y:I18n.t("本层输出")};
   Object.assign(names,M.original?.exampleLabels(stageId));
   if(stageId==='add-norm')names.R=I18n.t('残差相加结果');
-  const ex=M.extraExample?.(kind,stageId)||exampleFor(M,kind,stageId),vectorRow=([name,values],output=false,focus=-1,label=names[name]||name)=>`<div class="card-vector ${output?'result':''}" data-symbol="${name}"><b>${name} · ${label}</b><span ${stage().original&&stage().sequence?'style="display:grid;grid-template-columns:repeat('+Math.ceil(values.length/3)+',minmax(0,1fr))"':''}>${values.map((v,i)=>`<i class="${v<0?'negative':''} ${i===focus?'example-focus':''}">${fmt(v)}</i>`).join('')}</span></div>`;
+  const ex=M.extraExample?.(kind,stageId)||exampleFor(M,kind,stageId),vectorRow=([name,values],output=false,focus=-1,label=names[name]||name)=>`<div class="card-vector ${output?'result':''}" data-symbol="${name}"><b>${name} · ${label}</b><span ${(stage().original||ex.rms)&&stage().sequence?'style="display:grid;grid-template-columns:repeat('+Math.ceil(values.length/3)+',minmax(0,1fr))"':''}>${values.map((v,i)=>`<i class="${v<0?'negative':''} ${i===focus?'example-focus':''}">${fmt(v)}</i>`).join('')}</span></div>`;
   const formulaNumber=v=>Number(v.toFixed(4)).toString();
   if(ex.sampleIndex===0&&!stage().sequence){$('.card-example-title').firstChild.textContent=I18n.t("用“我”的向量看一次");$('#card-example-input').textContent=ex.exampleSource[0]+' = '+vector(ex.exampleSource[1]);}
-  if(ex.normalization){
+  if(ex.rms){
+   const {width,meanSquare,divisor}=ex.rms,v=ex.inputs[0][1].slice(0,width);
+   $('#card-example-values').innerHTML=ex.inputs.map(v=>vectorRow(v)).join('')+`<div class="card-silu-worked"><small>${I18n.t('这里只展开第一个位置的归一化，其他位置分别计算。')}</small><code>mean(X²) = ${formulaNumber(meanSquare)}<br>r = √(${formulaNumber(meanSquare)} + ε) ≈ ${formulaNumber(divisor)}<br>${vector(v)} / ${formulaNumber(divisor)} ≈ ${vector(ex.output[1].slice(0,width))}</code></div>`+vectorRow(ex.output,true);
+  }else if(ex.normalization){
    const {mean,variance,epsilon}=ex.normalization;
    $('#card-example-values').innerHTML=ex.inputs.map(v=>vectorRow(v)).join('')+`<div class="card-silu-worked">${stage().sequence?'<small>'+I18n.t('这里只展开第一个位置的归一化，其他位置分别计算。')+'</small>':''}<code>μ = ${formulaNumber(mean)}<br>σ² = ${formulaNumber(variance)}<br>(x − μ) / √(σ² + ${epsilon})</code></div>`+vectorRow(ex.output,true);
   }else if(ex.activation?.kind==='relu'){
@@ -407,6 +411,11 @@ try{
    $('.card-example-title').firstChild.textContent=I18n.t("用“我”的向量比较两条支路");$('#card-example-input').textContent=input[0]+' = '+vector(input[1]);
    $('#card-example-values').innerHTML=`<div class="card-comparison"><p class="card-example-focus">${I18n.t("只看高亮的这一项：")}</p>${rows.map(row=>vectorRow(row,row[0]==='H',feature,roles[row[0]])).join('')}<div class="card-gate-step">SiLU(${formulaNumber(g)}) ≈ ${fmt(s)}</div><div class="card-gate-result"><span data-role="content"><small>${I18n.t("内容")}</small><b>${fmt(u)}</b></span><i>×</i><span data-role="scale"><small>${I18n.t("调节系数")}</small><b>${fmt(s)}</b></span><i>≈</i><span data-role="result"><small>${I18n.t("相乘结果")}</small><b>${fmt(h)}</b></span></div></div>`;
   }else $('#card-example-values').innerHTML=ex.inputs.map(v=>vectorRow(v)).join('')+vectorRow(ex.output,true);
+  const contrast=$('#card-merge-contrast');contrast.hidden=!['multiply','add','residual'].includes(d.type);contrast.replaceChildren();
+  if(!contrast.hidden){
+   const a=[4,2],b=[.25,1.5],product=a.map((v,i)=>v*b[i]),sum=a.map((v,i)=>v+b[i]);
+   contrast.innerHTML=`<b>${I18n.t('用同两组数比较：')}</b><code>A = ${vector(a)}　B = ${vector(b)}</code><div class="merge-compare-row ${d.type==='multiply'?'current':''}" data-operation="multiply"><strong>×</strong><span><code>A ⊙ B = ${vector(product)}</code><small>${I18n.t('逐项调节强弱；乘以 1 保持原值。')}</small></span></div><div class="merge-compare-row ${d.type!=='multiply'?'current':''}" data-operation="add"><strong>+</strong><span><code>A + B = ${vector(sum)}</code><small>${I18n.t('在原值上增加或减少；加上 0 保持原值。')}</small></span></div><small>${I18n.t('这里只比较运算：门控中 B 是调节系数，残差中 B 是修改量。')}</small>`;
+  }
   $('.card-path>span').textContent=stage().title;
   $('#card-path').innerHTML=(stageId==='ffn'?[I18n.t("双路投影"),'SiLU',I18n.t("门控"),I18n.t("降维"),I18n.t("残差")]:stage().nodes.map(k=>M.definitions[k].name)).map((label,i)=>`${i?'<i>›</i>':''}<span class="${(stageId==='ffn'?i===c.stage:stage().nodes[i]===kind)?'active':''}">${label}</span>`).join('');
   host.setAttribute('aria-label',I18n.t("拖动旋转模块，滚轮缩放"));$('#card-portrait').append(host,overlay);if(!card.open)card.showModal();
@@ -435,7 +444,7 @@ try{
   // Travel is 1.5× faster than before; every operator keeps its original clock.
   const travelDuration=2/3;
   for(let depth=1;depth<=lastWave;depth++){
-   const durations=readyNodes.filter(n=>ev.depths[n.id]===depth).map(n=>!seq&&['linear','multiply','add'].includes(definition(n.id).type)?art.projectionFrame(0,ev.values[n.id].length).duration:1);
+   const durations=readyNodes.filter(n=>ev.depths[n.id]===depth).map(n=>definition(n.id).type==='norm'?art.rmsFrame(0,seq?3:1).duration:!seq&&['linear','multiply','add'].includes(definition(n.id).type)?art.projectionFrame(0,ev.values[n.id].length).duration:1);
    starts[depth]=ends[depth-1]+travelDuration;ends[depth]=starts[depth]+Math.max(1,...durations);
   }
   const max=ends[lastWave]+travelDuration;
@@ -465,8 +474,8 @@ try{
    const input=ev.values[n.links[0]],output=ev.values[n.id],p=movingPacket(input,n.id,n.id,'process');
    p.el.classList.add('processing-packet');p.el.dataset.node=n.id;p.mesh.userData.processing=n.id;
    const detailed=!seq&&definition(n.id).type==='linear',paired=pairedNode(n.id),worked=detailed||paired,other=paired?ev.values[n.links[1]]:null;
-   const operation=definition(n.id).type,pairTones=paired?art.pairColorsFor(n.id):null,operator=operation==='add'?'+':'×';
-   Object.assign(p,{detailed,paired,worked,other});
+   const operation=definition(n.id).type,normalizing=operation==='norm',pairTones=paired?art.pairColorsFor(n.id):null,operator=operation==='add'?'+':'×';
+   Object.assign(p,{detailed,paired,worked,other,normalizing});
    if(worked)art.prepareProjectionPacket(p.mesh,paired?()=>pairTones[0]:undefined);
    if(paired){
     const otherMesh=art.packet(other,p.color);otherMesh.userData={processingSecondary:n.id,row:p.el.dataset.row};otherMesh.visible=false;scene.add(otherMesh);
@@ -478,12 +487,29 @@ try{
    p.el.style.visibility='hidden';p.el.hidden=false;
    const beforeWidth=p.cells.offsetWidth||p.cells.textContent.length*6.6,afterWidth=after.offsetWidth||after.textContent.length*6.6;
    p.el.hidden=true;p.el.style.visibility='';morph.style.width=beforeWidth+'px';
-   if(worked){
+   if(worked||normalizing){
     art.prepareProjectionOutput(outputMesh);
     p.outputLabels=output.map((value,j)=>{
      const el=document.createElement('span');el.className='projection-result';el.hidden=true;el.textContent=fmt(value);el.dataset.node=n.id;el.dataset.column=String(j);el.dataset.row=p.el.dataset.row;overlay.appendChild(el);
      return {el,bar:outputMesh.children.find(o=>o.userData.feature===j)};
     });
+   }
+   if(normalizing){
+    const calculation=document.createElement('span');calculation.className='projection-calculation rms-calculation';calculation.hidden=true;calculation.dataset.node=n.id;calculation.dataset.operation='rmsnorm';
+    const equation=document.createElement('span');equation.className='projection-equation';
+    const token=document.createElement('b'),formula=document.createElement('span');equation.append(token,formula);calculation.append(equation);
+    const abstract=document.createElement('span');abstract.className='projection-sum-symbol';abstract.textContent='÷r';abstract.setAttribute('aria-hidden','true');calculation.append(abstract);overlay.append(calculation);
+    const factor=v=>v<0?'('+fmt(v)+')':fmt(v),width=input.length/(seq?3:1);
+    const updateRMS=timing=>{
+     const key=I18n.language()+':'+timing.row+':'+timing.stage;if(p.rmsEquationKey===key)return;p.rmsEquationKey=key;
+     const row=timing.row,values=input.slice(row*width,(row+1)*width),squares=values.map(x=>x*x),r=Math.sqrt(squares.reduce((a,b)=>a+b,0)/width+1e-6);
+     const word=seq?samples()[sample].word.split(' / ')[row]:samples()[sample].word;
+     token.textContent=word+' · ';formula.textContent=timing.stage==='squares'?vector(values)+'² → '+vector(squares):timing.stage==='rms'?'r = √(('+values.map(x=>factor(x)+'²').join(' + ')+') / '+width+' + ε) ≈ '+fmt(r):vector(values)+' / '+Number(r.toFixed(4))+' ≈ '+vector(output.slice(row*width,(row+1)*width));
+     calculation.dataset.normRow=String(row);calculation.dataset.normStage=timing.stage;p.rmsRow=row;
+    };
+    Object.assign(p,{calculation,equation,updateRMS,rmsRow:0});updateRMS(art.rmsFrame(0,seq?3:1));
+   }
+   if(worked){
     const calculation=document.createElement('span');calculation.className='projection-calculation';calculation.hidden=true;calculation.dataset.node=n.id;calculation.dataset.operation=operation;
     const equation=document.createElement('span');equation.className='projection-equation';calculation.appendChild(equation);
     const abstract=document.createElement('span');abstract.className='projection-sum-symbol';abstract.textContent=paired?operator:'∑';abstract.setAttribute('aria-hidden','true');calculation.appendChild(abstract);
@@ -513,7 +539,7 @@ try{
    if(level!==lastDepth){lastDepth=level;labels();inspect();}
    art.pulseSource(reduced?1:t);
    packets.forEach(p=>{
-    const tt=t-p.start,timing=p.worked?art.projectionFrame(tt,p.output.length):null,progress=timing?timing.phase:clamp(tt/(p.motion==='wire'?travelDuration:1));
+    const tt=t-p.start,timing=p.normalizing?art.rmsFrame(tt,seq?3:1):p.worked?art.projectionFrame(tt,p.output.length):null,progress=timing?timing.phase:clamp(tt/(p.motion==='wire'?travelDuration:1));
     if(p.motion==='process'){
      p.progress=tt;
      const visible=tt>=0&&t<p.end&&(!focusId||focusId===p.node.id),blend=ramp(progress,p.worked?.76:.55,p.worked?.9:.83);
@@ -543,6 +569,18 @@ try{
       });
       p.calculation.dataset.column=String(timing.column);
       if(p.column!==timing.column){p.column=timing.column;p.updateEquation(p.column);}
+     }
+     if(p.normalizing){
+      p.el.hidden=!visible||(progress>.18&&progress<.88);p.mesh.visible=visible&&progress<.3;
+      p.materials.forEach(m=>m.opacity=1-ramp(progress,.15,.3));
+      art.routeRMSOutput(p.node.id,p.outputMesh,tt,p.p);p.outputMesh.visible=visible&&tt>=timing.start+.82*timing.step;
+      p.portFade=visible?ramp(progress,.18,.3):0;p.focus=visible&&timing.local>=.05&&timing.local<.94?1:0;
+      p.updateRMS(timing);p.calculation.hidden=!visible||tt<timing.start||tt>=timing.end;p.calculation.style.opacity=String(ramp(timing.local,0,.06)*(1-ramp(timing.local,.94,1)));
+      const width=p.output.length/(seq?3:1);
+      p.outputLabels.forEach(({el},j)=>{
+       const ready=timing.start+Math.floor(j/width)*timing.step+.84*timing.step,alpha=ramp(tt,ready,ready+.05)*(1-ramp(progress,.9,.98));
+       el.hidden=!visible||alpha<=0;el.style.opacity=String(alpha);
+      });
      }
      art.processing(p.node.id,tt,p.input,p.output,p.color,{sequence:seq,detailed:p.detailed,paired:p.paired,other:p.other});
     }else{
@@ -596,6 +634,6 @@ try{
  $('#scene-expand').onclick=()=>{const expanded=document.body.classList.toggle('scene-expanded');$('#scene-expand').textContent=expanded?I18n.t("显示观察窗"):I18n.t("放大场景");$('#scene-expand').setAttribute('aria-pressed',String(expanded));render();};
  function beforeStage(){if(focusId)leaveFocus();cancelAnimationFrame(cameraFrame);transitioning=false;host.setAttribute('aria-busy','false');drag=lastTap=null;clearPreview();clearPlacement();clearPackets();elements=[];overlay.replaceChildren();}
  function setStage(){art.surroundings(samples(),stage());yaw=.05;pitch=.8;zoom=stage().zoom;cameraTarget.set(0,0,0);rebuild();}
- function relocalize(){art.surroundings(samples(),stage());rebuild();packets.forEach(p=>{p.el.querySelector('.packet-title').textContent=packetIdentity(p.el.dataset.from);if(p.motion==='process'&&p.progress!=null)art.processing(p.node.id,p.progress,p.input,p.output,p.color,{sequence:!!stage().sequence,detailed:p.detailed,paired:p.paired,other:p.other});});render();}
+ function relocalize(){art.surroundings(samples(),stage());rebuild();packets.forEach(p=>{p.el.querySelector('.packet-title').textContent=packetIdentity(p.el.dataset.from);if(p.normalizing&&p.progress!=null)p.updateRMS(art.rmsFrame(p.progress,stage().sequence?3:1));if(p.motion==='process'&&p.progress!=null)art.processing(p.node.id,p.progress,p.input,p.output,p.color,{sequence:!!stage().sequence,detailed:p.detailed,paired:p.paired,other:p.other});});render();}
  new ResizeObserver(render).observe(host);world={relocalize,labels,rebuild,animate,clearPackets,clearPreview,clearPlacement,previewAt,previewPlacement,focus,focusShelf,focused:()=>focusId,beforeStage,setStage,syncShelf:()=>syncPlacementGuide(host.clientWidth,host.clientHeight)};$('#loading').hidden=true;rebuild();refresh();
 }catch(e){$('#loading').innerHTML=I18n.t("<strong>3D 台面没有加载成功，请刷新重试。</strong>");say(I18n.t("页面尚未开始运行。"),'error');console.error(e);}

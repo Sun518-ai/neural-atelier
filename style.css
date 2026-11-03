@@ -204,3 +204,12 @@ html[lang=en] .stock-name{font-size:10px;line-height:12px}
 .projection-calculation[data-side="left"]{transform:translate(-100%,-50%) scale(var(--calculation-scale,1));transform-origin:right center}
 .projection-calculation::before{content:"";position:absolute;left:-7px;top:calc(50% - 5px);width:10px;height:10px;background:#fffdf0;border-left:1px solid var(--calculation-color,#b77724);border-bottom:1px solid var(--calculation-color,#b77724);transform:rotate(45deg)}
 .projection-calculation[data-side="left"]::before{left:auto;right:-7px;transform:rotate(225deg)}
+
+/* The same example contrasts scaling with adding an update. */
+.card-merge-contrast{border-top:1px dashed #ccbf9e;margin-top:12px;padding-top:9px;font-size:11px;color:#657064}
+.card-merge-contrast[hidden]{display:none}.card-merge-contrast>code{display:block;margin:5px 0 8px;font-size:11px}
+.merge-compare-row{display:flex;gap:10px;align-items:center;padding:6px 8px;border-radius:6px;margin:4px 0;background:#e6e8db66}
+.merge-compare-row.current{background:color-mix(in srgb,var(--card-accent) 12%,#fff9e8);color:var(--card-accent)}
+.merge-compare-row>strong{font:23px Georgia,serif;min-width:20px;text-align:center}.merge-compare-row code{font-size:12px}
+.card-merge-contrast small{display:block;font-size:10px;line-height:1.6;margin-top:3px;color:#857756}
+.rms-calculation .projection-equation>b{margin-right:4px}.rms-calculation .projection-equation{font-weight:500}
