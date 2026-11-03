@@ -51,12 +51,14 @@ The later puzzles add memory and execution-cost constraints to the numerical goa
 | Test your circuit | Click **Run my network** and watch the vectors move. |
 | Pause a run | Click **Pause** beside the run button. Rotate or zoom while frozen, then click **Resume** to continue from the same moment. |
 | Finish a level | After all inputs pass, choose **Replay level** to return to your current circuit, or **Next level**. Replay keeps all modules and wires; click **Run my network** when ready. |
-| Change levels | Open the level menu. Each level keeps its own circuit. |
+| Change levels | Open the level menu. Unfinished circuits are saved; completed prologues reopen as fresh challenges. |
 | Return to the title screen | Click the **N / Neural Atelier** brand at the top left. |
 
 The left shelf starts in its smallest size. Use **− / +** to resize it, **Hide shelf** to collapse it, and **Module shelf** to reopen it. Your chosen size is remembered.
 
-The first six lessons provide fixed modules. **[Take a module](https://hacking.pub/games/neural-atelier/#workshop)** is a short placement tutorial with just one familiar projection. Later construction levels allow multiple copies, each with independent connections. The shelf shows remaining stock and the table limit: **8** modules for the FFN, **12** for Attention, and **7** for the Transformer block. Each module type has two copies, except the FFN's four linear projections, which combine the formerly identical linear and content projection stocks. Returning a module restores its stock. Existing saves keep all copies, positions, and wires after the merge.
+The first six prologues provide fixed modules with **no wires connected**. Prologue 07, **[Take a module](https://hacking.pub/games/neural-atelier/#workshop)**, starts with an **empty table**: drag in one familiar projection and wire it yourself. Later construction levels allow multiple copies, each with independent connections. The shelf shows remaining stock and the table limit: **8** modules for the FFN, **12** for Attention, and **7** for the Transformer block. Each module type has two copies, except the FFN's four linear projections, which combine the formerly identical linear and content projection stocks. Returning a module restores its stock. Existing saves keep all copies, positions, and wires after the merge.
+
+After completing a prologue, reopening or reloading it starts a fresh challenge. **Restore previous solution** brings back your last completed layout and wiring without running it. Unfinished attempts continue where you left off, including attempts at a level you have beaten before. **Replay level** in the completion dialog stays on your current board without resetting or running it. Advanced, network, and engine levels continue to load their saved circuits directly.
 
 The FFN reuses **Linear projection** for its content branch; the card explains this role and compares it with the different weights in **Gate projection**. The advanced FFN chapter introduces **SwiGLU** only after single-branch computation and residuals. Separate lessons cover different weights, elementwise multiplication, gating, and down projection; RMSNorm is taught before the final puzzle uses normalized input. Existing level links, circuits, and completion records stay valid after reordering.
 
@@ -64,7 +66,7 @@ The FFN reuses **Linear projection** for its content branch; the card explains t
 
 The animated title screen introduces the workbench. Music starts after you enter and pauses while the tab is in the background. You can mute it or replay the introduction from Settings.
 
-SiLU has its own activation animation: values travel along curved channels and shrink according to their sigmoid gates. For vector projections, individual components leave the horizontal tray and align with their weight rows. Matching colors and a worked sum follow each output in turn, all at the same pace. Use the speed setting to speed up the whole animation. Existing saves keep your placed modules and wiring; drag modules to rearrange them or use **Reset** to start the level again.
+SiLU has its own activation animation: values travel along curved channels and shrink according to their sigmoid gates. For vector projections, individual components leave the horizontal tray and align with their weight rows. Matching colors and a worked sum follow each output in turn, all at the same pace. Use the speed setting to speed up the whole animation. Drag modules to rearrange them or use **Rebuild** to start the level again.
 
 Moving vectors share a small tray with features arranged left to right, matching the input and output racks. A sequence keeps its token rows separate. You can rotate and zoom during execution; wiring and module placement stay locked until the run stops.
 

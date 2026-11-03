@@ -211,10 +211,10 @@ const chapters=[
  {prefix:I18n.t("FFN 进阶 / "),board:'FFN',ids:['gate-projection','pairwise','gating','swiglu','normalize','ffn']},
  {prefix:I18n.t("网络 / "),board:'NETWORK',ids:['embedding','qkv','scores','softmax','causal','rotation','rope','aggregation','attention','block','vocabulary-scores','vocabulary','autoregressive']}
 ];
-chapters.forEach(({prefix,board,ids})=>ids.forEach((id,i)=>{M.levels[id].chapter=prefix+String(i+1).padStart(2,'0');M.levels[id].boardText=board+' / '+String(i+1).padStart(2,'0');}));
+chapters.forEach(({prefix,board,ids})=>ids.forEach((id,i)=>{M.levels[id].chapter=prefix+String(i+1).padStart(2,'0');M.levels[id].boardText=board+' / '+String(i+1).padStart(2,'0');M.levels[id].practice=board==='PROLOGUE';}));
 M.levels.residual.concept=I18n.t("在已有结果上加入残差");
-M.levels.residual.description=I18n.t("前面已经练过降维，桌上的两块投影也已接好并算出修改量 F。本关只加入残差相加，让出口得到 X + F。五组输入都要匹配。");
-M.levels.residual.rationale.scope=I18n.t("本关用接好的线性支路提供修改量，专门练 X + F；也可以把这条支路换成上一关的 FFN。真实网络中的直连路径还有助于训练信号回传。");
+M.levels.residual.description=I18n.t("用两块熟悉的投影算出修改量 F，再用残差相加得到 X + F。桌上的组件都还没有接线，五组输入都要匹配。");
+M.levels.residual.rationale.scope=I18n.t("本关用线性支路提供修改量，重点练 X + F；也可以把这条支路换成上一关的 FFN。真实网络中的直连路径还有助于训练信号回传。");
 M.levels.gating.summary=I18n.t("相乘已经学会，现在把熟悉的 SiLU 加到门支路。这里只组合已学运算。");
 M.levels.gating.description=I18n.t("两种投影和逐元素相乘都已练过。本关让门投影的 G 经过 SiLU 变成系数，再调节另一条支路的内容。连接熟悉的模块，让五组输入都匹配。");
 M.levels.normalize.description=I18n.t("前面逐个试跑的向量，这里放在一起展示；仍各自除以自己的均方根，维度与位置顺序不变。本关的缩放权重设为 1。");

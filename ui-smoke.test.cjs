@@ -116,7 +116,9 @@ test('completion waits for every input, replay preserves the circuit and undo, a
  assert.equal(app.eval('JSON.stringify(state)'),before);assert.equal(app.eval('JSON.stringify(history)'),undo);assert.equal(app.eval('playbackSpeed'),.5);
  await app.eval('run()');assert.equal(dialog.open,true);assert.equal(runs,2*app.eval('stage().sampleCount'));
  app.document.querySelector('#complete-next').onclick();assert.equal(dialog.open,false);assert.equal(app.location.hash,'#'+app.c.NeuralPrologue.levels.workshop.next);assert.equal(app.eval('JSON.stringify(state)'),app.c.destination);
- app.eval("switchLevel('workshop')");assert.equal(app.eval('JSON.stringify(state)'),before);
+ app.eval("switchLevel('workshop')");assert.equal(app.eval('state.nodes.length'),0);assert.equal(app.eval('state.sink'),null);
+ assert.equal(app.document.querySelector('#restore-layout').hidden,false);app.document.querySelector('#restore-layout').onclick();
+ assert.equal(app.eval('JSON.stringify(state)'),before);assert.equal(app.eval('busy'),false);assert.equal(runs,2*app.eval('stage().sampleCount'),'restoring never runs the circuit');
 });
 
 test('failure, cancellation and unmet engine constraints never show completion; every solved level does',async()=>{
@@ -291,18 +293,120 @@ test('the simple placement lesson introduces one familiar module before the adva
  const app=boot(new Map(),'#workshop',['en-US']);assert.equal(app.eval('state.nodes.length'),0);assert.equal(app.document.querySelectorAll('[data-add-module]').length,1);assert.equal(app.document.querySelector('#module-count').textContent,'0 / 1');assert.equal(app.eval('M.levels.residual.next'),'workshop');assert.equal(app.eval('M.levels.workshop.next'),'gate-projection');assert.doesNotMatch(app.document.querySelector('#module-shelf').textContent,/[\u3400-\u9fff]/);
 });
 
-test('reordered chapters preserve old circuits and completion while new lessons start fresh',()=>{
+test('reordered chapters retain completion and advanced saves while finished prologues restart',()=>{
  const storage=new Map(),app=boot(storage),kept=new Map();
  for(const id of ['activation','gating','residual','workshop','ffn','normalize','attention']){
   app.eval(`switchLevel('${id}');state=M.solutions(stageId);state.nodes[0].x+=.17;save();progress.complete(stageId)`);
   kept.set(id,app.eval('JSON.stringify(state)'));
  }
  const reopened=boot(storage,'#gating');assert.equal(reopened.location.hash,'#gating');
- for(const [id,circuit]of kept){reopened.eval(`switchLevel('${id}')`);assert.equal(reopened.eval('JSON.stringify(state)'),circuit);assert.equal(reopened.eval('progress.completed(stageId)'),true);}
+ for(const [id,circuit]of kept){
+  reopened.eval(`switchLevel('${id}')`);assert.equal(reopened.eval('progress.completed(stageId)'),true);
+  if(reopened.c.NeuralPrologue.levels[id].practice){
+   assert.equal(reopened.eval('state.sink'),null);assert.ok(reopened.eval('state.nodes.every(n=>n.links.every(x=>x===null))'));
+   assert.equal(reopened.document.querySelector('#restore-layout').hidden,false);reopened.document.querySelector('#restore-layout').onclick();
+  }else assert.equal(reopened.document.querySelector('#restore-layout').hidden,true);
+  assert.equal(reopened.eval('JSON.stringify(state)'),circuit);
+ }
  reopened.eval("switchLevel('down-projection')");assert.equal(reopened.eval('progress.completed(stageId)'),false);assert.equal(reopened.eval('state.sink'),null);
  reopened.eval('levelMenu()');assert.match(reopened.document.querySelector('[data-level="gating"]').textContent,/FFN 进阶/);
  reopened.c.I18n.setPreference('en');assert.doesNotMatch(reopened.document.querySelector('#level-list').textContent,/[\u3400-\u9fff]/);
  assert.deepEqual([...reopened.c.I18n.missing],[]);
+});
+
+test('every fresh prologue requires wiring and the placement lesson requires taking a module',async()=>{
+ const app=boot(),M=app.c.NeuralPrologue,ids=['wire','projection','activation','down-projection','plain-ffn','residual','workshop'];
+ assert.deepEqual(Object.keys(M.levels).filter(id=>M.levels[id].practice),ids);
+ for(const id of ids){
+  app.eval(`switchLevel('${id}')`);
+  assert.equal(app.eval('state.sink'),null,id+' starts with no output wire');
+  assert.ok(app.eval('state.nodes.every(n=>n.links.every(x=>x===null))'),id+' has no preset connections');
+  assert.equal(app.eval('state.nodes.length'),id==='workshop'?0:M.levels[id].nodes.length);
+  assert.equal(app.document.querySelector('#restore-layout').hidden,true,'no previous solution is supplied');
+  await app.eval('run()');assert.equal(app.eval('levelPassed()'),false,id+' cannot pass without playing');
+  assert.ok(!app.document.querySelector('#level-complete').open);assert.equal(app.eval('progress.completed(stageId)'),false);
+ }
+});
+
+test('a legacy completed workshop opens empty and its solution is restored only on request with undo',()=>{
+ const fixture=boot(),solution=fixture.c.NeuralPrologue.solutions('workshop');solution.nodes[0].x=.42;solution.nodes[0].z=-.31;
+ const saved=JSON.stringify(solution),storage=new Map([
+  ['neural-atelier-chapters-v1',JSON.stringify({current:'workshop',completed:['workshop']})],
+  ['neural-atelier-level-workshop-v1',saved]
+ ]),app=boot(storage,'#workshop',['en-US']),button=app.document.querySelector('#restore-layout'),fresh=app.eval('JSON.stringify(state)');
+ assert.equal(app.eval('state.nodes.length'),0);assert.equal(app.eval('state.sink'),null);assert.equal(app.eval('progress.completed(stageId)'),true);
+ assert.equal(storage.get('neural-atelier-level-workshop-v1-completed'),saved);assert.equal(app.document.querySelector('#module-count').textContent,'0 / 1');
+ assert.equal(button.hidden,false);assert.equal(button.textContent,'Restore previous solution');
+ app.eval('busy=true;refresh()');assert.equal(button.disabled,true);button.onclick();assert.equal(app.eval('JSON.stringify(state)'),fresh);
+ app.eval('busy=false;refresh();window.runs=0;world.animate=async()=>runs++');button.onclick();
+ assert.equal(app.eval('JSON.stringify(state)'),saved);assert.equal(button.hidden,true);assert.equal(app.eval('busy'),false);assert.equal(app.c.runs,0);
+ app.document.querySelector('#undo').onclick();assert.equal(app.eval('JSON.stringify(state)'),fresh);assert.equal(button.hidden,false);
+ app.c.I18n.setPreference('zh');assert.equal(button.textContent,'恢复上次方案');button.onclick();assert.equal(app.eval('JSON.stringify(state)'),saved);
+ app.document.querySelector('#reset').onclick();assert.equal(app.eval('state.nodes.length'),0);assert.equal(app.eval('state.sink'),null);
+ app.document.querySelector('#undo').onclick();assert.equal(app.eval('JSON.stringify(state)'),saved);
+ const reloaded=boot(storage,'#workshop');assert.equal(reloaded.eval('JSON.stringify(state)'),saved,'an explicitly restored attempt continues until it is finished');
+ assert.equal(reloaded.eval('busy'),false);assert.ok(!reloaded.document.querySelector('#level-complete').open);
+ assert.deepEqual([...app.c.I18n.missing],[]);
+});
+
+test('legacy prologue migration preserves unfinished work and archives only completed answers',()=>{
+ const fixture=boot(),M=fixture.c.NeuralPrologue;
+ for(const id of Object.keys(M.levels).filter(id=>M.levels[id].practice))for(const completed of [false,true])for(const wired of [false,true]){
+  const state=M.solutions(id);if(state.nodes.length)state.nodes[0].z+=.12;if(!wired)state.sink=null;
+  const saved=JSON.stringify(state),storage=new Map([
+   ['neural-atelier-chapters-v1',JSON.stringify({current:id,completed:completed?[id]:[]})],
+   [`neural-atelier-level-${id}-v1`,saved]
+  ]),app=boot(storage,'#'+id);
+  assert.equal(app.eval('progress.completed(stageId)'),completed);
+  if(completed&&wired){
+   assert.equal(app.eval('state.sink'),null);assert.ok(app.eval('state.nodes.every(n=>n.links.every(x=>x===null))'));
+   assert.equal(storage.get(`neural-atelier-level-${id}-v1-completed`),saved);
+  }else{
+   assert.equal(app.eval('JSON.stringify(state)'),saved,id+' keeps an unfinished attempt');
+   assert.equal(storage.has(`neural-atelier-level-${id}-v1-completed`),false);
+  }
+ }
+ const wrong=M.solutions('activation');wrong.sink='project';assert.equal(M.evaluate(wrong,M.samples[0].v).error,null);
+ const storage=new Map([
+  ['neural-atelier-chapters-v1',JSON.stringify({current:'activation',completed:['activation']})],
+  ['neural-atelier-level-activation-v1',JSON.stringify(wrong)]
+ ]),app=boot(storage,'#activation');
+ assert.equal(app.eval('JSON.stringify(state)'),JSON.stringify(wrong),'a fully connected but incorrect attempt is still unfinished');
+ assert.equal(storage.has('neural-atelier-level-activation-v1-completed'),false);
+});
+
+test('migration retains the only saved solution when browser storage cannot archive it',()=>{
+ const app=boot(),solution=app.c.NeuralPrologue.solutions('workshop'),saved=JSON.stringify(solution),storage=new Map([
+  ['neural-atelier-chapters-v1',JSON.stringify({current:'workshop',completed:['workshop']})],
+  ['neural-atelier-level-workshop-v1',saved]
+ ]);
+ app.c.limitedStorage={getItem:key=>storage.get(key)||null,setItem(key,value){if(key.endsWith('-completed'))throw new Error('Storage quota exceeded');storage.set(key,value);}};
+ assert.equal(app.eval("JSON.stringify(createProgress(M,limitedStorage).load('workshop'))"),saved);
+ assert.equal(storage.get('neural-atelier-level-workshop-v1'),saved,'do not overwrite a solution before it is archived');
+});
+
+test('finishing a prologue restarts it once while a rebuilt untested circuit survives reload',async()=>{
+ const app=boot(),M=app.c.NeuralPrologue;
+ for(const id of Object.keys(M.levels).filter(id=>M.levels[id].practice)){
+  app.eval(`switchLevel('${id}');state=M.solutions(stageId)`);await app.eval('run()');
+  const solved=app.eval('JSON.stringify(state)'),reopened=boot(app.storage,'#'+id),fresh=reopened.eval('JSON.stringify(state)');
+  assert.equal(reopened.eval('state.sink'),null);assert.ok(reopened.eval('state.nodes.every(n=>n.links.every(x=>x===null))'));
+  assert.equal(boot(app.storage,'#'+id).eval('JSON.stringify(state)'),fresh,'reload preserves the newly started attempt and its positions');
+  reopened.c.previous=JSON.parse(solved);reopened.eval('state=previous;changed()');
+  const pending=boot(app.storage,'#'+id);assert.equal(pending.eval('JSON.stringify(state)'),solved,'a rebuilt answer has not finished until the player runs it');
+  assert.equal(pending.eval('results.length'),0);assert.equal(pending.eval('busy'),false);
+ }
+});
+
+test('editing a completed prologue keeps the unfinished attempt across navigation and reload',async()=>{
+ const app=boot(new Map(),'#workshop');app.eval('state=M.solutions(stageId)');await app.eval('run()');
+ app.document.querySelector('#run').focus=()=>{};app.document.querySelector('#complete-replay').onclick();
+ app.eval("chooseInput('sink',0);deleteWire()");
+ const unfinished=app.eval('JSON.stringify(state)');assert.equal(app.eval('state.sink'),null);
+ app.eval("switchLevel('projection');switchLevel('workshop')");assert.equal(app.eval('JSON.stringify(state)'),unfinished);
+ const reloaded=boot(app.storage,'#workshop');assert.equal(reloaded.eval('JSON.stringify(state)'),unfinished);assert.equal(reloaded.eval('state.nodes.length'),1);
+ assert.equal(reloaded.document.querySelector('#restore-layout').hidden,false);
+ reloaded.document.querySelector('#restore-layout').onclick();assert.equal(reloaded.eval('state.sink'),'project');assert.equal(reloaded.eval('busy'),false);
 });
 
 test('bridge cards explain only their actual inputs and calculations in both languages',()=>{

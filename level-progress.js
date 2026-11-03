@@ -1,9 +1,12 @@
 export function createProgress(M,storage){
  const legacy='neural-atelier-prologue-v1',metaKey='neural-atelier-chapters-v1';
  const read=key=>{try{return JSON.parse(storage.getItem(key));}catch{return null;}};
- const write=(key,value)=>{try{storage.setItem(key,JSON.stringify(value));}catch{}};
+ const write=(key,value)=>{try{storage.setItem(key,JSON.stringify(value));return true;}catch{return false;}};
  const key=id=>id==='ffn'?legacy:`neural-atelier-level-${id}-v1`;
- const saved=read(metaKey),meta={current:M.levels[saved?.current]?saved.current:(read(legacy)?'ffn':'wire'),completed:(Array.isArray(saved?.completed)?saved.completed:[]).filter(id=>M.levels[id])};
+ const saved=read(metaKey),meta={current:M.levels[saved?.current]?saved.current:(read(legacy)?'ffn':'wire'),completed:(Array.isArray(saved?.completed)?saved.completed:[]).filter(id=>M.levels[id]),practiceRuns:{}};
+ for(const [id,run]of Object.entries(saved?.practiceRuns||{}))if(M.levels[id]?.practice&&run&&typeof run.finished==='boolean'&&(!run.finished||typeof run.circuit==='string'))meta.practiceRuns[id]={finished:run.finished,...(run.finished?{circuit:run.circuit}:{})};
+ const completedKey=id=>key(id)+'-completed';
+ const circuitKey=(s,positions=false)=>JSON.stringify([s.sink,[...s.nodes].sort((a,b)=>a.id.localeCompare(b.id)).map(n=>[n.id,M.nodeKind(n),n.links,...(positions?[n.x,n.z]:[])])]);
  function mergeProjections(s){
   if(s?.version!==1||!Array.isArray(s.nodes))return s;
   const old=s.nodes.filter(n=>M.nodeKind(n)==='up'&&M.validNodeId(n.id,'up'));
@@ -14,22 +17,55 @@ export function createProgress(M,storage){
   const rename=id=>renames.get(id)||id;
   return {...s,nodes:s.nodes.map(n=>n?{...n,...(renames.has(n.id)?{id:rename(n.id),kind:'project'}:{}),links:Array.isArray(n.links)?n.links.map(rename):n.links}:n),sink:rename(s.sink),palette:Array.isArray(s.palette)?s.palette.map(k=>k==='up'?'project':k):s.palette};
  }
- function load(id){
-  const s=mergeProjections(read(key(id))),l=M.levels[id],stock=M.inventory(l),allowed=Object.keys(stock);
-  if(s?.version!==1||!Array.isArray(s.nodes))return M.initial(id);
+ function validated(raw,id){
+  const s=mergeProjections(raw),l=M.levels[id];if(!l||s?.version!==1||!Array.isArray(s.nodes))return null;
+  const stock=M.inventory(l),allowed=Object.keys(stock);
   const valid=new Set([...l.sources,...s.nodes.map(n=>n?.id)]),counts={};
   if((l.buildable?s.nodes.length>M.moduleLimit(l):s.nodes.length!==l.nodes.length)||new Set(s.nodes.map(n=>n?.id)).size!==s.nodes.length||s.nodes.some(n=>{
    const kind=M.nodeKind(n);counts[kind]=(counts[kind]||0)+1;
    return !n||!allowed.includes(kind)||!M.validNodeId(n.id,kind)||(!l.buildable&&n.id!==kind)||counts[kind]>stock[kind]||!Number.isFinite(n.x)||!Number.isFinite(n.z)||!Array.isArray(n.links)||n.links.length!==M.definitions[kind].ins.length||n.links.some(k=>k!==null&&!valid.has(k));
-  })||(s.sink!==null&&!valid.has(s.sink)))return M.initial(id);
+  })||(s.sink!==null&&!valid.has(s.sink)))return null;
   // Old saves keep their IDs and positions; only append newly available stock.
   s.palette=[...new Set((Array.isArray(s.palette)?s.palette:[]).filter(k=>allowed.includes(k)))];
   s.palette.push(...allowed.filter(k=>!s.palette.includes(k)));
   return {...s,levelId:id,...(l.engine?{settings:{...M.engineDefaults,...l.settings,...s.settings},nodes:s.nodes.map(n=>({...n,device:['cpu','gpu','ane'].includes(n.device)?n.device:'gpu'}))}:{})};
  }
+ function solved(s,id){
+  // Old saves have a lifetime completion badge but no per-attempt status.
+  // Only restart a completed answer, never a partly edited circuit.
+  return M.samplesFor(id).slice(0,M.levels[id].sampleCount).every(({v})=>{
+   const ev=M.evaluate(s,v),expected=M.reference(v,id);
+   return !ev.error&&ev.output?.length===expected.length&&ev.output.every((x,i)=>Number.isFinite(x)&&Math.abs(x-expected[i])<1e-9);
+  });
+ }
+ function load(id){
+  const s=validated(read(key(id)),id)||M.initial(id);if(!M.levels[id].practice)return s;
+  const run=meta.practiceRuns[id],finished=run?run.finished&&run.circuit===circuitKey(s):meta.completed.includes(id)&&solved(s,id);
+  if(finished){
+   // Keep the only copy if browser storage cannot archive it.
+   if(!write(completedKey(id),s))return s;const fresh=M.initial(id);
+   meta.practiceRuns[id]={finished:false};write(key(id),fresh);write(metaKey,meta);return fresh;
+  }
+  if(!run||run.finished){meta.practiceRuns[id]={finished:false};write(metaKey,meta);}
+  return s;
+ }
+ function save(state){
+  const id=state.levelId||'ffn',run=meta.practiceRuns[id];
+  if(M.levels[id]?.practice&&(!run||(run.finished&&run.circuit!==circuitKey(state)))){
+   meta.practiceRuns[id]={finished:false};write(metaKey,meta);
+  }
+  write(key(id),state);
+ }
+ const previous=id=>M.levels[id]?.practice?validated(read(completedKey(id)),id):null;
  return {current:()=>meta.current,completed:id=>meta.completed.includes(id),load,
-  save(state){write(key(state.levelId||'ffn'),state);},
+  save,
+  canRestore(id,state){const s=previous(id);return !!s&&(!state||circuitKey(s,true)!==circuitKey(state,true));},
+  restore(id){const s=previous(id);if(!s)return null;meta.practiceRuns[id]={finished:false};write(metaKey,meta);write(key(id),s);return s;},
   select(id){meta.current=id;write(metaKey,meta);},
-  complete(id){if(!meta.completed.includes(id)){meta.completed.push(id);write(metaKey,meta);}}
+  complete(id,state){
+   if(!meta.completed.includes(id))meta.completed.push(id);
+   if(M.levels[id]?.practice){const s=validated(state||read(key(id)),id);if(s){save(s);write(completedKey(id),s);meta.practiceRuns[id]={finished:true,circuit:circuitKey(s)};}}
+   write(metaKey,meta);
+  }
  };
 }
