@@ -210,6 +210,101 @@ test('paused RMSNorm keeps its computation while zooming and changing language, 
  app.scenes.at(-1).traverse(o=>{assert.equal(o.userData.rms,undefined);if(o.userData.rmsSquare||o.userData.rmsScaled)assert.equal(o.visible,false);});
  assert.deepEqual([...app.c.I18n.missing],[]);
 });
+test('embedding lookup selects actual IDs, copies complete table entries and keeps token order at equal pace',async()=>{
+ let app;const seen=new Set(),starts=new Map(),paths=new Map();
+ app=await boot({reduced:false,frameMs:80,onFrame:({now,document})=>{
+  if(!app)return;const formula=document.querySelector('.token-calculation[data-operation="lookup"]:not([hidden])'),name=document.querySelector('#sample-name').textContent;
+  if(formula){const key=name+'|'+formula.dataset.tokenRow;if(!starts.has(key))starts.set(key,now);seen.add(formula.dataset.tokenStage);assert.ok(formula.querySelector('.projection-equation').textContent.length);}
+  app.scenes.at(-1).traverse(o=>{
+   const flow=o.userData.tokenFlow;
+   if(flow?.operation==='lookup'){
+    for(const group of flow.groups)assert.deepEqual([...group.output],[...app.c.NeuralPrologue.math.emb[group.lookupId]]);
+    if(flow.local>.28&&flow.local<.84){const cues=o.children.filter(c=>c.userData.lookupEntry!=null&&c.visible);assert.deepEqual(cues.map(c=>c.userData.lookupEntry),[flow.groups[flow.row].lookupId]);}
+   }
+   if(o.visible&&o.userData.tokenResult){
+    const d=o.userData;assert.equal(d.value,app.c.NeuralPrologue.math.emb[d.lookupId][d.feature]);seen.add('id '+d.lookupId);
+    if(d.value<0)seen.add('negative');if(d.value===0){seen.add('zero');assert.equal(o.material.wireframe,true);}
+    const key=name+'|'+d.row+'|'+d.feature;if(!paths.has(key))paths.set(key,[]);paths.get(key).push(o.position.clone());
+   }
+   if(o.visible&&o.userData.processingOutput==='embedding'){
+    const bars=o.children.filter(c=>c.userData.feature!=null&&c.visible&&c.material.opacity>.99);
+    if(bars.length&&bars.length<6)seen.add('waiting results');
+    if(o.userData.gather>0){assert.equal(bars.length,6,'gather waits for all three lookups');seen.add('gather');}
+   }
+  });
+ }});
+ const M=app.c.NeuralPrologue,before=JSON.stringify(M.math.emb);
+ app.api.switchLevel('embedding');app.api.setState(M.solutions('embedding'));app.api.getWorld().rebuild();await app.api.run();
+ for(const mark of ['address','read','copy','negative','zero','waiting results','gather',...Array.from({length:6},(_,i)=>'id '+i)])assert.ok(seen.has(mark),mark);
+ assert.equal(starts.size,9);
+ for(const sample of M.samplesFor('embedding')){const a=starts.get(sample.word+'|0'),b=starts.get(sample.word+'|1'),c=starts.get(sample.word+'|2');assert.ok(b>a&&c>b);assert.ok(Math.abs((b-a)-(c-b))<=160,'same reading time for each token');}
+ for(const positions of paths.values()){assert.ok(positions.length>3);assert.ok(positions.every((p,i)=>!i||p.distanceTo(positions[i-1])<.5),'copies move continuously from table to output');}
+ assert.equal(JSON.stringify(M.math.emb),before,'looking up a word never consumes or changes its table entry');
+ assert.equal(app.document.querySelectorAll('#test-results .pass').length,3);assert.equal(app.document.querySelectorAll('.token-calculation,.projection-result,.packet').length,0);
+ app.scenes.at(-1).traverse(o=>{assert.equal(o.userData.tokenFlow,undefined);if(o.userData.tokenResult||o.userData.lookupEntry!=null)assert.equal(o.visible,false);});
+});
+
+test('sinusoidal positions visibly scale features, sample the correct frequencies, then add before gathering',async()=>{
+ let app,levelId='positions';const seen=new Set();
+ app=await boot({reduced:false,frameMs:100,onFrame:({document})=>{
+  if(!app)return;const width=levelId==='positions'?2:4,formula=document.querySelector('.token-calculation[data-operation="position"]:not([hidden])');
+  if(formula){seen.add(width+':'+formula.dataset.tokenStage);assert.ok(Number(formula.style.getPropertyValue('--calculation-scale'))>0);}
+  app.scenes.at(-1).traverse(o=>{
+   const flow=o.userData.tokenFlow;
+   if(flow?.operation==='position'){
+    for(const group of flow.groups){
+     assert.equal(group.values.length,width);
+     group.values.forEach((x,j)=>{const angle=group.row/10000**(2*Math.floor(j/2)/width),code=(j%2?Math.cos:Math.sin)(angle);assert.equal(group.scaled[j],x*Math.sqrt(width));assert.equal(group.codes[j],code);assert.ok(Math.abs(group.output[j]-group.scaled[j]-code)<1e-12);});
+    }
+   }
+   if(o.visible&&o.userData.positionCode){const d=o.userData;assert.equal(d.value,(d.feature%2?Math.cos:Math.sin)(d.angle));if(d.value<0)seen.add('negative code');if(d.value===0){seen.add('zero code');assert.equal(o.material.wireframe,true);}if(width===4&&d.row===2&&d.feature===2){assert.equal(d.angle,.02);seen.add('lower frequency');}}
+   if(o.visible&&o.userData.tokenResult&&o.userData.operation==='position'){const d=o.userData;assert.ok(Math.abs(d.value-d.scaled-d.code)<1e-12);seen.add(width+':sum moves');}
+   if(o.visible&&o.userData.tokenInput&&o.userData.lookupId==null&&o.userData.mappingProgress===1){assert.ok(Math.abs(o.userData.displayValue-o.userData.value*Math.sqrt(width))<1e-12);seen.add(width+':input scales');}
+   if(o.visible&&o.userData.processingOutput===(width===2?'position':'wide-position')&&o.userData.gather>0){assert.equal(o.children.filter(c=>c.userData.feature!=null&&c.visible&&c.material.opacity>.99).length,width*3);seen.add(width+':gather');}
+  });
+ }});
+ for(const stage of ['positions','wider-features']){levelId=stage;app.api.switchLevel(stage);app.api.setState(app.c.NeuralPrologue.solutions(stage));app.api.getWorld().rebuild();await app.api.run();assert.equal(app.document.querySelectorAll('#test-results .pass').length,3);}
+ for(const mark of ['negative code','zero code','lower frequency',...[2,4].flatMap(w=>['scale','position','add','sum moves','input scales','gather'].map(s=>w+':'+s))])assert.ok(seen.has(mark),mark);
+ assert.equal(app.document.querySelectorAll('.token-calculation,.projection-result,.packet').length,0);app.scenes.at(-1).traverse(o=>{assert.equal(o.userData.tokenFlow,undefined);if(o.userData.positionCode||o.userData.tokenResult)assert.equal(o.visible,false);});
+});
+
+test('repeated IDs keep separate positions and an extra position module animates its actual already-positioned input',async()=>{
+ let app;const seen=new Set();
+ app=await boot({reduced:false,frameMs:120,onFrame:()=>{
+  if(!app)return;app.scenes.at(-1).traverse(o=>{
+   const f=o.userData.tokenFlow;if(!f)return;
+   if(f.operation==='lookup'){assert.ok(f.groups.every(g=>g.lookupId===0));assert.ok(f.groups.every(g=>g.output.join(',')==='1,0'));seen.add('repeat '+f.row);}
+   if(o.userData.node==='position-2'){
+    const expected=app.c.NeuralPrologue.original.position([1,0,1,0,1,0]);assert.deepEqual([...f.groups.flatMap(g=>g.values)],[...expected]);
+    assert.notDeepEqual([...f.groups[0].output],[...f.groups[1].output]);seen.add('actual second input');
+   }
+  });
+ }});
+ const M=app.c.NeuralPrologue;for(const sample of M.samplesFor('positions')){sample.v=[0,0,0];sample.word='我 / 我 / 我';}
+ app.api.switchLevel('positions');const state=M.solutions('positions');state.nodes.push({id:'position-2',kind:'position',x:4,z:2,links:['position']});state.sink='position-2';app.api.setState(state);app.api.getWorld().rebuild();await app.api.run();
+ for(const mark of ['repeat 0','repeat 1','repeat 2','actual second input'])assert.ok(seen.has(mark),mark);
+ assert.ok(!app.document.querySelector('#level-complete').open,'an extra position addition is still an incorrect circuit');assert.ok(app.document.querySelectorAll('#test-results .fail').length);
+});
+
+for(const [levelId,operation]of [['embedding','lookup'],['positions','position']])test(`paused ${operation} retains its step while zooming, changing language and speed, then cleans up on stop`,async()=>{
+ let app,phase=0,frames=0,stop,before;
+ app=await boot({reduced:false,frameMs:90,onFrame:({document})=>{
+  if(!app)return;const formula=document.querySelector(`.token-calculation[data-operation="${operation}"]:not([hidden])`);
+  if(!phase&&formula?.dataset.tokenRow==='0'&&formula.dataset.tokenStage===(operation==='lookup'?'copy':'add')){app.api.togglePause();before=formula.querySelector('.projection-equation').textContent;phase=1;}
+  else if(phase===1&&++frames===3){
+   assert.equal(formula.querySelector('.projection-equation').textContent,before);
+   const scale=Number(formula.style.getPropertyValue('--calculation-scale')),wheel=new app.window.Event('wheel',{bubbles:true,cancelable:true});wheel.deltaY=2000;document.querySelector('#scene').dispatchEvent(wheel);
+   assert.ok(Number(formula.style.getPropertyValue('--calculation-scale'))<scale);assert.equal(formula.dataset.detail,'abstract');
+   app.c.I18n.setPreference('en');assert.match(formula.querySelector('.projection-equation').textContent,/I · /);
+   const speed=document.querySelector('#playback-speed');speed.value='1';speed.dispatchEvent(new app.window.Event('input'));assert.equal(formula.dataset.tokenRow,'0');
+   app.api.togglePause();phase=2;
+  }else if(phase===2&&formula?.dataset.tokenRow==='1'){stop=app.api.run();phase=3;}
+ }});
+ app.document.querySelector('#welcome').close();app.api.switchLevel(levelId);app.api.setState(app.c.NeuralPrologue.solutions(levelId));app.api.getWorld().rebuild();await app.api.run();await stop;
+ assert.equal(phase,3);assert.equal(app.document.querySelectorAll('.packet,.token-calculation,.projection-result').length,0);assert.ok(!app.document.querySelector('#level-complete').open);
+ app.scenes.at(-1).traverse(o=>{assert.equal(o.userData.tokenFlow,undefined);if(o.userData.tokenResult||o.userData.positionCode||o.userData.lookupEntry!=null)assert.equal(o.visible,false);});assert.deepEqual([...app.c.I18n.missing],[]);
+});
+
 test('small matrices keep their blocks while numbers return when zoomed in',async()=>{
  const app=await boot();app.api.switchLevel('residual');app.api.setState(app.c.NeuralPrologue.solutions('residual'));app.api.getWorld().rebuild();
  const state=JSON.stringify(app.api.getState());

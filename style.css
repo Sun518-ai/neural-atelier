@@ -213,3 +213,5 @@ html[lang=en] .stock-name{font-size:10px;line-height:12px}
 .merge-compare-row>strong{font:23px Georgia,serif;min-width:20px;text-align:center}.merge-compare-row code{font-size:12px}
 .card-merge-contrast small{display:block;font-size:10px;line-height:1.6;margin-top:3px;color:#857756}
 .rms-calculation .projection-equation>b{margin-right:4px}.rms-calculation .projection-equation{font-weight:500}
+
+.token-calculation .projection-equation{font-weight:500}.token-calculation .projection-equation>b:first-child{margin-right:4px}.token-result{transform:translate(-50%,-100%) scale(var(--calculation-scale,1));transform-origin:center bottom;padding:1px 3px;font-size:10px}

@@ -8,6 +8,8 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
  const pairColors=[0x8b6ea5,0x368d77];
  const additionColors=[0x397aa2,0xb68036];
  const rowZ=i=>-1.05+i*.96;
+ const tokenOperation=d=>d.type==='embedding'&&d.ins[0]===3?'lookup':d.type==='position'&&d.ins[0]===d.out?'position':null;
+ const positionalValue=(p,j,width)=>(j%2?Math.cos:Math.sin)(p/10000**(2*Math.floor(j/2)/width));
  sharedSphere.userData.shared=true;
  const mat=(color,extra={})=>new T.MeshStandardMaterial({color,roughness:.5,metalness:.12,...extra});
  function box(parent,w,h,d,x,y,z,color,extra={}){const mesh=new T.Mesh(new T.BoxGeometry(w,h,d),mat(color,extra));mesh.position.set(x,y,z);mesh.castShadow=true;mesh.receiveShadow=true;parent.add(mesh);return mesh;}
@@ -108,7 +110,8 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   slab(g,2.05,2.4,.26,0,.07,0,color);slab(g,1.91,2.26,.08,0,.36,0,0xf4f5e9);
   const glow=box(g,1.6,.035,.055,0,.41,1.13,color,{emissive:color,emissiveIntensity:.18});
   const border=new T.Group();g.add(border);[[[-.96,.49,-1.12],[-.96,.49,-.78]],[[-.96,.49,-1.12],[-.62,.49,-1.12]],[[.96,.49,1.12],[.96,.49,.78]],[[.96,.49,1.12],[.62,.49,1.12]]].forEach(points=>tube(border,points,color,.018));
-  let outputs=[],inputs=[],connections=[],weightCells=[],activationChannels=[],columnCues=[],pairChannels=[],normalizationStages=[],rmsRows=[];
+  let outputs=[],inputs=[],connections=[],weightCells=[],activationChannels=[],columnCues=[],pairChannels=[],normalizationStages=[],rmsRows=[],tokenRows=[],lookupRows=[],positionWaves=[];
+  const tokenKind=tokenOperation(d),tokenWidth=d.out/3;
   if(d.type==='linear'){
    const w=weights[n.kind||n.id],a=w.length,b=w[0].length,cw=1.5/b,ch=1.5/a;
    for(let i=0;i<a;i++)for(let j=0;j<b;j++){const x=(j-(b-1)/2)*cw,z=(i-(a-1)/2)*ch,c=w[i][j]<0?0xc89d70:w[i][j]===0?0xd7dfd4:color;const tile=box(g,cw*.84,.055+Math.abs(w[i][j])*.065,ch*.82,x,.49,z,c);const face=textTile(g,String(w[i][j]),cw*.8,ch*.76,x,.53+Math.abs(w[i][j])*.065,z,{bg:w[i][j]<0?'#d7b68b':w[i][j]===0?'#dfe5d9':'#d2dfcc',color:'#456052',size:63});weightCells.push({tile,face:face.mesh,i,j,weight:w[i][j]});}
@@ -157,6 +160,53 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
    for(let i=0;i<3;i++){neuron(g,-.75,.96,(i-1)*.5,0x789abf);outputs.push(neuron(g,.75,1.05,(i-1)*.5,color));for(let j=0;j<3;j++)if(!d.causal||j<=i)tube(g,[[-.75,.96,(j-1)*.5],[0,1.3,0],[.75,1.05,(i-1)*.5]],color,.012,.55);}
   }else if(d.type==='rope'){
    for(let i=0;i<3;i++){const z=(i-1)*.6;ring(g,.24,0,.7,z,color);tube(g,[[0,.72,z],[Math.cos(i)*.25,.72,z+Math.sin(i)*.25]],color,.027);outputs.push(neuron(g,.7,1.02,z,color));}
+  }else if(tokenKind){
+   const width=tokenWidth,spacing=width===2?.76:.43;
+   if(tokenKind==='lookup'){
+    const model=window.NeuralPrologue,table=width===4?model.original.wide.embedding:model.math.emb;
+    table.forEach((values,id)=>{
+     const z=(id-2.5)*.29,cells=[];
+     const word=textTile(g,model.math.vocab[id],.43,.24,-.67,.61,z,{size:88});
+     values.forEach((value,j)=>{
+      const cw=1.12/width,x=-.32+(j+.5)*cw,tone=value<0?0xd7b68b:0xd2dfcc;
+      const tile=box(g,cw*.9,.075,.25,x,.52,z,tone),face=textTile(g,String(value),cw*.86,.23,x,.565,z,{size:88,color:'#456052',bg:value<0?'#d7b68b':'#d2dfcc'});
+      cells.push({tile,face:face.mesh,value,point:new T.Vector3(x,.62,z)});
+     });
+     const cue=new T.Group();cue.position.set(0,.64,z);cue.visible=false;cue.userData.lookupEntry=id;g.add(cue);
+     const fill=new T.Mesh(new T.PlaneGeometry(1.76,.275),new T.MeshBasicMaterial({color:projectionColor,transparent:true,opacity:.2,depthWrite:false,toneMapped:false}));fill.rotation.x=-Math.PI/2;cue.add(fill);
+     const outline=new T.LineLoop(new T.BufferGeometry().setFromPoints([new T.Vector3(-.88,.005,-.138),new T.Vector3(.88,.005,-.138),new T.Vector3(.88,.005,.138),new T.Vector3(-.88,.005,.138)]),new T.LineBasicMaterial({color:projectionColor,transparent:true,depthWrite:false,toneMapped:false}));cue.add(outline);
+     lookupRows.push({id,values,cells,word,cue,fill,outline,address:new T.Vector3(-.68,.83,z)});
+    });
+    textTile(g,'ID → E[ID]',1.45,.22,0,.5,1.02,{size:64});
+   }else{
+    for(let j=0;j<width;j++){
+     const x=(j-(width-1)/2)*spacing,tone=j%2?0xa394bd:0x789abf;
+     const points=Array.from({length:41},(_,i)=>{const p=i/20;return [x,.93+.22*positionalValue(p,j,width),(p-1)*.66];});
+     const wave=tube(g,points,tone,.025,.35);wave.userData.positionWave=j;
+     positionWaves.push(wave);
+     textTile(g,(j%2?'cos':'sin')+'('+(j>=2?'p/100':'p')+')',spacing*.94,.23,x,.57,-1.02,{size:64,color:'#6b6285',bg:'#ece6f2'});
+    }
+    textTile(g,(width===2?'√2':'2')+' · X + PE',1.55,.22,0,.53,1.04,{size:62,color:'#74602f',bg:'#f2e7c7'});
+   }
+   for(let row=0;row<3;row++){
+    const z=(row-1)*.66,tone=rowColor(row),features=[];
+    const band=box(g,1.72,.025,.53,0,tokenKind==='lookup'?1.48:.46,z,tone,{transparent:true,opacity:.06,depthWrite:false});
+    const word=textTile(g,'·',.37,.25,-.88,1.78,z,{size:72,color:'#456052',bg:'#edf3e8'});
+    for(let j=0;j<width;j++){
+     const x=(j-(width-1)/2)*spacing,output=neuron(g,x,1.7,z,tone);output.scale.setScalar(.7);outputs.push(output);
+     const carrier=new T.Mesh(new T.BoxGeometry(.14,.14,.14),mat(tone,{emissive:tone,emissiveIntensity:1.5,transparent:true,depthWrite:false}));carrier.visible=false;carrier.userData.tokenResult=true;g.add(carrier);
+     const feature={index:j,output,carrier};
+     if(tokenKind==='position'){
+      const input=neuron(g,x,.72,z,featureColor(j)),scaleGate=ring(g,.13,x,1.12,z,featureColor(j),.02),join=ring(g,.135,x,1.4,z,0xb68036,.023);
+      const marker=neuron(g,x,.93+.22*positionalValue(row,j,width),z,0xb68036);marker.scale.setScalar(.6);
+      const code=new T.Mesh(sharedSphere,mat(0xb68036,{emissive:0xb68036,emissiveIntensity:1.4,transparent:true,depthWrite:false}));code.visible=false;code.userData.positionCode=true;g.add(code);
+      textTile(g,'+',.18,.18,x,1.415,z,{size:82,color:'#876732',bg:'#f2e7c7'});
+      inputs.push(input);Object.assign(feature,{input,scaleGate,join,marker,code});
+     }
+     features.push(feature);
+    }
+    tokenRows.push({row,z,tone,band,word,features});
+   }
   }else if(d.type==='position'){
    for(let feature=0;feature<2;feature++){
     const z=feature?.45:-.45,pts=Array.from({length:40},(_,i)=>{const x=i*2*Math.PI/39;return [(i/39-.5)*1.5,.85+.2*(feature?Math.cos(x):Math.sin(x)),z];});
@@ -215,7 +265,7 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   }
   d.ins.forEach((dim,i)=>{const z=d.ins.length===2?(i?.55:-.55):0;box(g,.21,.17,.27,-1.08,.58,z,0x6e887c);for(let j=0;j<Math.min(dim,4);j++)box(g,.12,.02,.035,-1.08,.68,z+(j-(Math.min(dim,4)-1)/2)*.055,0xc6d7c3);});
   const sock=new T.Mesh(new T.CylinderGeometry(.15,.15,.18,20),mat(color));sock.rotation.z=Math.PI/2;sock.position.set(1.05,.68,0);g.add(sock);
-  if(register)units.set(n.id,{g,glow,outputs,inputs,connections,weightCells,activationChannels,columnCues,pairChannels,pairTones,pairOperation,normalizationStages,rmsRows,links:n.links,color});return g;
+  if(register)units.set(n.id,{g,glow,outputs,inputs,connections,weightCells,activationChannels,columnCues,pairChannels,pairTones,pairOperation,normalizationStages,rmsRows,tokenKind,tokenWidth,tokenRows,lookupRows,positionWaves,links:n.links,color});return g;
  }
  function sync(values,depths,depth,selected,activeSample,results,busy,layout={},output=null){
   if(!busy)clearProcessing();
@@ -253,6 +303,67 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   const offset=column*step,local=time-offset,focus=local>=.4&&local<.76?ramp(local,.4,.43)*(1-ramp(local,.71,.76)):0;
   return {duration,phase:Math.max(0,Math.min(1,phase)),column,offset,step,focus};
  }
+ function tokenFrame(time,kind,count=3){
+  const start=.22,step=kind==='lookup'?.9:1.2,end=start+count*step,duration=end+.3;
+  const row=Math.max(0,Math.min(count-1,Math.floor((time-start)/step))),local=Math.max(0,Math.min(1,(time-start-row*step)/step));
+  const phase=time<start?time/start*.18:time<end?.18+(time-start)/(count*step)*.62:.8+(time-end)/.3*.2;
+  const stage=kind==='lookup'?(local<.3?'address':local<.58?'read':local<.84?'copy':'ready'):(local<.28?'scale':local<.56?'position':local<.84?'add':'ready');
+  return {row,local,start,step,end,duration,stage,phase:Math.max(0,Math.min(1,phase))};
+ }
+ function processingToken(u,time,input,output,words){
+  const timing=tokenFrame(time,u.tokenKind),active=time>=0&&time<timing.duration,width=u.tokenWidth;
+  u.g.userData.processing=active;
+  if(!active){clearToken(u);return;}
+  u.glow.material.emissiveIntensity=1.1;
+  const local=timing.local,lookup=u.tokenKind==='lookup',id=lookup?input[timing.row]:null;
+  for(const entry of u.lookupRows){
+   const strength=entry.id===id&&time>=timing.start?ramp(local,.08,.25)*(1-ramp(local,.84,1)):0;
+   entry.cue.visible=strength>0;entry.fill.material.opacity=.22*strength;entry.outline.material.opacity=strength;
+   entry.cells.forEach(({tile,face})=>{tile.material.emissive.set(projectionColor);tile.material.emissiveIntensity=.7*strength;face.material.color.set(0xffffff).lerp(new T.Color(projectionColor),strength*.23);});
+  }
+  u.positionWaves.forEach(wave=>{wave.material.opacity=timing.stage==='position'?.95:.35;wave.material.emissive.set(wave.material.color);wave.material.emissiveIntensity=timing.stage==='position'?.6:0;});
+  const groups=[];
+  for(const row of u.tokenRows){
+   const clock=(time-timing.start-row.row*timing.step)/timing.step,focus=clock>=0&&clock<1,done=clock>=.84;
+   const values=lookup?u.lookupRows[input[row.row]].values:input.slice(row.row*width,(row.row+1)*width),scaled=lookup?values:values.map(x=>x*Math.sqrt(width));
+   const codes=lookup?null:values.map((_,j)=>positionalValue(row.row,j,width)),results=output.slice(row.row*width,(row.row+1)*width);
+   row.band.material.opacity=focus?.25:done?.12:.06;row.word.write(words[row.row]||'·');
+   for(const f of row.features){
+    const j=f.index,value=results[j],zero=Math.abs(value)<1e-9,tone=value<0?0xc79868:row.tone;
+    f.output.scale.setScalar(done?.6+Math.min(2,Math.abs(value))*.15:.7);f.output.material.color.set(done?tone:row.tone);f.output.material.emissiveIntensity=focus&&clock>.6?1.2:done?.3:.08;
+    const start=lookup?u.lookupRows[input[row.row]].cells[j].point:new T.Vector3(f.output.position.x,1.4,row.z),begin=lookup?.4:.61,finish=.84,k=ramp(clock,begin,.82);
+    f.carrier.visible=focus&&clock>=begin&&clock<finish;
+    Object.assign(f.carrier.userData,{operation:u.tokenKind,row:row.row,feature:j,value,input:values[j],lookupId:lookup?input[row.row]:null,scaled:scaled[j],code:codes?.[j]});
+    if(f.carrier.visible){
+     f.carrier.position.copy(start).lerp(f.output.position,k);f.carrier.position.y+=Math.sin(Math.PI*k)*.18;
+     f.carrier.scale.setScalar(zero?.65:.7+Math.min(2,Math.abs(value))*.3);f.carrier.material.wireframe=zero;
+     f.carrier.material.color.set(tone);f.carrier.material.emissive.set(tone);f.carrier.material.opacity=ramp(clock,begin,begin+.035)*(1-ramp(clock,.80,.84));
+    }
+    if(!lookup){
+     f.input.material.emissiveIntensity=focus&&clock<.36?.9:.08;
+     f.scaleGate.material.emissive.set(featureColor(j));f.scaleGate.material.emissiveIntensity=focus&&clock<.34?1.4:0;
+     f.join.material.emissive.set(0xb68036);f.join.material.emissiveIntensity=focus&&clock>=.5&&clock<.84?1.5:0;f.join.scale.setScalar(focus?1+.18*ramp(clock,.5,.61)*(1-ramp(clock,.8,.9)):1);
+     f.marker.material.emissiveIntensity=focus&&clock>=.28&&clock<.6?1.5:.08;
+     f.code.visible=focus&&clock>=.34&&clock<.65;Object.assign(f.code.userData,{row:row.row,feature:j,value:codes[j],angle:row.row/10000**(2*Math.floor(j/2)/width)});
+     if(f.code.visible){
+      f.code.position.copy(f.marker.position).lerp(new T.Vector3(f.output.position.x,1.4,row.z),ramp(clock,.34,.60));f.code.position.x+=Math.sin(Math.PI*ramp(clock,.34,.60))*.16;
+      f.code.scale.setScalar(.6+Math.abs(codes[j])*.45);f.code.material.wireframe=Math.abs(codes[j])<1e-9;f.code.material.opacity=ramp(clock,.34,.38)*(1-ramp(clock,.59,.65));
+     }
+    }
+   }
+   groups.push({row:row.row,lookupId:lookup?input[row.row]:null,values:[...values],scaled:[...scaled],codes,output:results});
+  }
+  u.g.userData.tokenFlow={operation:u.tokenKind,row:timing.row,stage:timing.stage,local,groups};
+ }
+ function clearToken(u){
+  delete u.g.userData.tokenFlow;
+  u.lookupRows.forEach(entry=>{entry.cue.visible=false;entry.cells.forEach(({tile,face})=>{tile.material.emissiveIntensity=0;face.material.color.set(0xffffff);});});
+  u.positionWaves.forEach(wave=>{wave.material.opacity=.35;wave.material.emissiveIntensity=0;});
+  for(const row of u.tokenRows){
+   row.band.material.opacity=.06;row.word.write('·');
+   for(const f of row.features){f.carrier.visible=false;if(f.code){f.code.visible=false;f.input.material.emissiveIntensity=f.marker.material.emissiveIntensity=.08;f.scaleGate.material.emissiveIntensity=f.join.material.emissiveIntensity=0;f.join.scale.setScalar(1);}}
+  }
+ }
  function rmsFrame(time,count=3){
   const start=.22,step=.9,end=start+count*step,duration=end+.3;
   const row=Math.max(0,Math.min(count-1,Math.floor((time-start)/step))),local=Math.max(0,Math.min(1,(time-start-row*step)/step));
@@ -285,8 +396,9 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   }
   if(active)u.g.userData.rms={row:timing.row,stage:timing.stage,local:timing.local,groups:states};else delete u.g.userData.rms;
  }
- function processing(id,progress,input,output,color,{sequence=false,detailed=false,paired=false,other=null}={}){
+ function processing(id,progress,input,output,color,{sequence=false,detailed=false,paired=false,other=null,words=[]}={}){
   const u=units.get(id);if(!u)return;
+  if(u.tokenKind){processingToken(u,progress,input,output,words);return;}
   if(u.rmsRows.length){processingRMS(u,progress,input,output,sequence);return;}
   const worked=detailed||paired,timing=worked?projectionFrame(progress,output.length):null,active=progress>=0&&progress<(timing?.duration||1),p=timing?timing.phase:Math.max(0,Math.min(1,progress));u.g.userData.processing=active;
   const entering=ramp(p,0,.23),gathering=ramp(p,.6,.9),pulse=active?Math.sin(Math.PI*p):0;
@@ -338,7 +450,7 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
    for(const f of row.features){f.label.write('x');f.square.visible=f.scaled.visible=false;f.squarePath.material.opacity=f.scalePath.material.opacity=.2;f.input.scale.setScalar(1);f.output.scale.setScalar(1);f.input.material.emissiveIntensity=f.output.material.emissiveIntensity=.08;}
   }
  }
- function clearProcessing(){for(const u of units.values()){clearRMS(u);u.g.userData.processing=false;u.g.userData.activeColumn=u.g.userData.activePair=null;delete u.g.userData.normalization;u.normalizationStages.forEach(tile=>tile.material.emissiveIntensity=0);u.columnCues.forEach(({cue})=>cue.visible=false);u.outputs.forEach(o=>{o.material.emissive.set(u.color);o.material.emissiveIntensity=.08;});if(u.connections.length)u.inputs.forEach(o=>{o.material.color.set(0x6c9eb1);o.material.emissive.set(0x6c9eb1);o.material.emissiveIntensity=.08;});u.connections.forEach(c=>c.spark.visible=false);u.activationChannels.forEach(({spark,gate,channel})=>{spark.visible=false;gate.scale.setScalar(1);gate.material.emissiveIntensity=0;channel.material.emissiveIntensity=0;});u.pairChannels.forEach(({left,right,leftPath,rightPath,outPath,gate,carrier})=>{carrier.visible=false;gate.scale.setScalar(1);[leftPath,rightPath,outPath,gate].forEach(o=>o.material.emissiveIntensity=0);[left,right].forEach(o=>{o.scale.setScalar(1);o.material.emissiveIntensity=.08;});});u.weightCells.forEach(({tile,face})=>{tile.material.emissiveIntensity=0;face.material.color.set(0xffffff);});}}
+ function clearProcessing(){for(const u of units.values()){clearRMS(u);clearToken(u);u.g.userData.processing=false;u.g.userData.activeColumn=u.g.userData.activePair=null;delete u.g.userData.normalization;u.normalizationStages.forEach(tile=>tile.material.emissiveIntensity=0);u.columnCues.forEach(({cue})=>cue.visible=false);u.outputs.forEach(o=>{o.material.emissive.set(u.color);o.material.emissiveIntensity=.08;});if(u.connections.length)u.inputs.forEach(o=>{o.material.color.set(0x6c9eb1);o.material.emissive.set(0x6c9eb1);o.material.emissiveIntensity=.08;});u.connections.forEach(c=>c.spark.visible=false);u.activationChannels.forEach(({spark,gate,channel})=>{spark.visible=false;gate.scale.setScalar(1);gate.material.emissiveIntensity=0;channel.material.emissiveIntensity=0;});u.pairChannels.forEach(({left,right,leftPath,rightPath,outPath,gate,carrier})=>{carrier.visible=false;gate.scale.setScalar(1);[leftPath,rightPath,outPath,gate].forEach(o=>o.material.emissiveIntensity=0);[left,right].forEach(o=>{o.scale.setScalar(1);o.material.emissiveIntensity=.08;});});u.weightCells.forEach(({tile,face})=>{tile.material.emissiveIntensity=0;face.material.color.set(0xffffff);});}}
  // A single colour pulse identifies the departing row without moving its tray.
  function pulseSource(progress=1){
   const pulse=Math.pow(1-Math.min(1,Math.max(0,progress)/.65),2);
@@ -359,9 +471,9 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   // routing into the weight rows, not a transpose of the input tensor.
   g.userData.featureRoutes=g.children.filter(o=>o.userData.feature!=null).map(bar=>{
    const i=bar.userData.feature,pad=g.children.find(o=>o.userData.featurePad===i),v=bar.userData.value;
-   const label=textTile(g,String(Number(v.toFixed(2))),.31,.25,bar.position.x,bar.position.y+bar.geometry.parameters.height/2+.02,bar.position.z,{size:76,color:'#fffdf4',bg:'#'+colorFor(i).toString(16).padStart(6,'0')}).mesh;
+   const labelTile=textTile(g,String(Number(v.toFixed(2))),.31,.25,bar.position.x,bar.position.y+bar.geometry.parameters.height/2+.02,bar.position.z,{size:76,color:'#fffdf4',bg:'#'+colorFor(i).toString(16).padStart(6,'0')}),label=labelTile.mesh;
    label.visible=false;label.material.transparent=true;label.material.depthWrite=false;label.userData.featureValue=i;
-   return {bar,pad,label,home:bar.position.clone(),padHome:pad.position.clone(),labelHome:label.position.clone(),tone:bar.material.color.clone()};
+   return {bar,pad,label,write:labelTile.write,home:bar.position.clone(),padHome:pad.position.clone(),labelHome:label.position.clone(),tone:bar.material.color.clone()};
   });
  }
  function routeProjectionPacket(id,mesh,p,origin,anchor){
@@ -399,6 +511,44 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
    Object.assign(bar.userData,{[u.pairOperation==='add'?'additionInput':'multiplyInput']:slot,mappedInput:i,mappingProgress:fan,pairProgress:meet});
   }
  }
+ function routeTokenInput(id,mesh,time,origin,anchor){
+  const u=units.get(id),timing=tokenFrame(time,u.tokenKind),lookup=u.tokenKind==='lookup',width=u.tokenWidth,fan=ramp(timing.phase,.04,.17);
+  mesh.userData.routing=fan>0;
+  mesh.children.find(o=>o.userData.packetTray).material.opacity=1-ramp(timing.phase,.04,.17);
+  for(const {bar,pad,label,write,home,padHome,labelHome} of mesh.userData.featureRoutes){
+   const index=bar.userData.feature,row=lookup?index:Math.floor(index/width),j=index%width,value=bar.userData.value,local=(time-timing.start-row*timing.step)/timing.step;
+   const to=lookup?ramp(local,.02,.27):ramp(local,.02,.32),alpha=1-ramp(local,lookup?.46:.56,lookup?.6:.64);
+   const rowData=u.tokenRows[row],target=lookup?new T.Vector3(-1.12,.78,rowData.z).lerp(u.lookupRows[value].address,to):rowData.features[j].input.position.clone().lerp(new T.Vector3(rowData.features[j].output.position.x,1.4,rowData.z),to);
+   target.add(u.g.position);
+   for(const [object,start] of [[bar,home],[pad,padHome],[label,labelHome]]){
+    const end=target.clone().add(new T.Vector3(0,object===label?.22:start.y*(1-to),0));
+    object.position.copy(timing.phase<.04?origin:anchor).add(start).lerp(end,fan).sub(origin);
+   }
+   const shown=lookup?value:value*(1+(Math.sqrt(width)-1)*to),height=lookup?.055:Math.abs(shown)<1e-9?.035:.08+Math.min(Math.abs(shown),2)*.24;
+   bar.scale.y=1+(height/bar.geometry.parameters.height-1)*fan;
+   const tone=lookup?rowColor(row):featureColor(j);bar.material.color.set(tone);bar.material.emissive.set(tone);bar.material.emissiveIntensity=.4+(local>=0&&local<.6?.6:0);bar.material.opacity=alpha;
+   pad.material.opacity=(1-fan)*alpha;label.material.opacity=fan*alpha;label.visible=fan>0&&alpha>0&&detailModes[detailScope];
+   write(lookup?'ID '+value:String(Number(shown.toFixed(2))));
+   Object.assign(bar.userData,{tokenInput:true,tokenRow:row,lookupId:lookup?value:null,mappingProgress:to,displayValue:shown});
+  }
+ }
+ function tokenAnchor(id,row,input,time){
+  const u=units.get(id),r=u.tokenRows[row],target=new T.Vector3(0,1.75,r.z);
+  if(u.tokenKind==='lookup')target.copy(u.lookupRows[input[row]].address).lerp(new T.Vector3(0,1.75,r.z),ramp(tokenFrame(time,u.tokenKind).local,.3,.84));
+  return target.add(u.g.position);
+ }
+ function routeTokenOutput(id,mesh,time,origin){
+  const u=units.get(id),timing=tokenFrame(time,u.tokenKind),gather=ramp(timing.phase,.8,.97);
+  mesh.userData.gather=gather;mesh.userData.routing=gather<1;
+  mesh.children.forEach((o,i)=>{
+   if(o.userData.packetTray){o.material.opacity=ramp(timing.phase,.8,.94);return;}
+   const feature=o.userData.feature??o.userData.featurePad,row=Math.floor(feature/u.tokenWidth),home=mesh.userData.outputHomes[i];
+   const ready=timing.start+(row+.82)*timing.step,alpha=ramp(time,ready,ready+.06);
+   o.visible=alpha>0;o.material.opacity=alpha;
+   const start=projectionOutlet(id,feature).add(new T.Vector3(0,home.y+.02,0)),target=origin.clone().add(home);
+   o.position.copy(gather===1?home:start.lerp(target,gather).sub(origin));
+  });
+ }
  function projectionOutlet(id,column){return units.get(id).outputs[column].getWorldPosition(new T.Vector3());}
  function projectionRadius(id,column){const sphere=units.get(id).outputs[column];return sphere.geometry.parameters.radius*sphere.getWorldScale(new T.Vector3()).x;}
  function prepareProjectionOutput(mesh){
@@ -431,5 +581,5 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   });
  }
  function resetUnits(){units.clear();}
- return {surroundings,module,sync,updateDetail,detailsVisible:()=>detailModes[detailScope],pulseSource,projectionFrame,rmsFrame,rmsAnchor,routeRMSOutput,projectionColor,pairColorsFor:id=>units.get(id)?.pairTones||pairColors,processing,clearProcessing,packet,prepareProjectionPacket,routeProjectionPacket,routePairedPacket,projectionOutlet,projectionRadius,prepareProjectionOutput,routeProjectionOutput,featureColor,rowColor,rowZ,resetUnits,focus(active){context.visible=!active;floor.visible=!active;detailScope=active?'card':'board';if(active)detailModes.card=true;}};
+ return {surroundings,module,sync,updateDetail,detailsVisible:()=>detailModes[detailScope],pulseSource,tokenOperation,tokenFrame,tokenAnchor,routeTokenInput,routeTokenOutput,projectionFrame,rmsFrame,rmsAnchor,routeRMSOutput,projectionColor,pairColorsFor:id=>units.get(id)?.pairTones||pairColors,processing,clearProcessing,packet,prepareProjectionPacket,routeProjectionPacket,routePairedPacket,projectionOutlet,projectionRadius,prepareProjectionOutput,routeProjectionOutput,featureColor,rowColor,rowZ,resetUnits,focus(active){context.visible=!active;floor.visible=!active;detailScope=active?'card':'board';if(active)detailModes.card=true;}};
 }
