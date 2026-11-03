@@ -1,5 +1,5 @@
-import {cardFor,exampleFor} from './module-cards.js?v=rms-shelf-1';
-import {createProgress} from './level-progress.js?v=rms-shelf-1';
+import {cardFor,exampleFor} from './module-cards.js?v=level-menu-dismiss-1';
+import {createProgress} from './level-progress.js?v=level-menu-dismiss-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -139,7 +139,20 @@ window.addEventListener?.('hashchange',()=>{
  if(target!==stageId&&busy){busy=paused=false;runId++;world?.clearPackets();}
  switchLevel(target,true);writeLevelHash(stageId,true);
 });
-$('#levels-open').onclick=levelMenu;$('#levels-close').onclick=()=>$('#level-menu').close();
+const levelDialog=$('#level-menu');let levelBackdropStart=null;
+function closeLevelMenu(){levelBackdropStart=null;levelDialog.close();$('#levels-open').focus?.({preventScroll:true});}
+function outsideLevelDialog(e){const r=levelDialog.getBoundingClientRect();return e.target===levelDialog&&(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom);}
+$('#levels-open').onclick=levelMenu;$('#levels-close').onclick=closeLevelMenu;
+levelDialog.addEventListener('pointerdown',e=>{levelBackdropStart=e.button===0&&e.isPrimary!==false&&outsideLevelDialog(e)?{id:e.pointerId,x:e.clientX,y:e.clientY}:null;});
+levelDialog.addEventListener('pointercancel',()=>levelBackdropStart=null);
+levelDialog.addEventListener('click',e=>{
+ const start=levelBackdropStart;levelBackdropStart=null;
+ // Only a complete click on the backdrop dismisses it, never a drag that
+ // began in the list or a click on the dialog's padding or scrollbar.
+ if(start&&outsideLevelDialog(e)&&(e.pointerId==null||e.pointerId===start.id)&&Math.hypot(e.clientX-start.x,e.clientY-start.y)<8){e.preventDefault();e.stopPropagation();closeLevelMenu();}
+});
+levelDialog.addEventListener('cancel',e=>{e.preventDefault();closeLevelMenu();});
+levelDialog.addEventListener('close',()=>levelBackdropStart=null);
 $('#level-list').onclick=e=>{const b=e.target.closest('[data-level]');if(b)switchLevel(b.dataset.level);};
 $('#level-tracks').onclick=e=>{const b=e.target.closest('[data-track]');if(b){menuTrack=b.dataset.track;renderLevelMenu();}};
 $('#next-level').onclick=()=>switchLevel(stage().next);
@@ -211,7 +224,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=rms-shelf-1');
+ const {createSceneArt}=await import('./scene-art.js?v=level-menu-dismiss-1');
  const art=createSceneArt(T,scene,colors,{anisotropy:renderer.capabilities.getMaxAnisotropy()});art.surroundings(samples(),stage());
  const assembly=new T.Group(),wires=new T.Group();scene.add(assembly,wires);const neuronGeo=new T.SphereGeometry(.115,16,12);let elements=[],curves=[],packets=[],drag=null,preview=null,yaw=.05,pitch=.8,zoom=stage().zoom,lastDepth=-1;
  const cameraTarget=new T.Vector3();let focusId=null,shelfFocus=null,shelfModel=null,overview=null,cameraFrame=0,transitioning=false,lastTap=null;
