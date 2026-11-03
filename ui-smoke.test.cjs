@@ -19,7 +19,7 @@ test('all 26 levels automatically display their report beside the run controls',
  for(const id of Object.keys(M.levels)){
   app.eval(`switchLevel('${id}');state=M.solutions(stageId);if(stage().engine)state.settings.precision=16;`);
   assert.ok(app.document.querySelector('.mission h2').textContent.length);
-  const reason=app.document.querySelector('#mission-reason'),example=app.document.querySelector('#mission-reason-example'),hasExample=['gating','residual'].includes(id);
+  const reason=app.document.querySelector('#mission-reason'),example=app.document.querySelector('#mission-reason-example'),hasExample=['gating','residual','ffn'].includes(id);
   assert.equal(reason.hidden,false,id+' explains its purpose');
   for(const field of ['title','text','takeaway'])assert.ok(app.document.querySelector('#mission-reason-'+field).textContent.trim(),id+' '+field);
   assert.equal(example.hidden,!hasExample);assert.equal(example.hasChildNodes(),hasExample,'text-only lessons clear earlier worked examples');
@@ -42,8 +42,8 @@ test('gating rationale uses actual weights to show equal content receiving diffe
   const rows=[...reason.querySelectorAll('tbody tr')],contents=[],factors=[];assert.equal(rows.length,2);
   for(const row of rows){
    const input=JSON.parse(row.querySelector('td').textContent),ev=M.evaluate(M.solutions('gating'),input);
-   for(const [role,key]of [['content','up'],['scale','silu'],['result','multiply']])assert.equal(Number(row.querySelector(`[data-factor="${role}"]`).textContent),round(ev.values[key][2]));
-   contents.push(ev.values.up[2]);factors.push(ev.values.silu[2]);
+   for(const [role,key]of [['content','project'],['scale','silu'],['result','multiply']])assert.equal(Number(row.querySelector(`[data-factor="${role}"]`).textContent),round(ev.values[key][2]));
+   contents.push(ev.values.project[2]);factors.push(ev.values.silu[2]);
   }
   assert.equal(contents[0],contents[1]);assert.ok(factors[0]>0&&factors[0]<1);assert.ok(factors[1]>1);
   assert.equal(app.eval('JSON.stringify(state)'),saved,'the comparison never prewires the player’s circuit');
@@ -68,7 +68,7 @@ test('device assignment saves and undo restores; controls survive reload',()=>{c
 
 test('wire deletion and undo preserve other branches and survive reload',()=>{
  const app=boot();app.eval("switchLevel('gating');state=M.solutions(stageId);chooseInput('multiply',0)");assert.equal(app.eval('selectedWire.from'),'silu');assert.equal(app.eval("state.nodes.find(n=>n.id==='multiply').links[0]"),'silu');
- app.eval('deleteWire()');assert.equal(app.eval("state.nodes.find(n=>n.id==='multiply').links[0]"),null);assert.equal(app.eval("state.nodes.find(n=>n.id==='multiply').links[1]"),'up');
+ app.eval('deleteWire()');assert.equal(app.eval("state.nodes.find(n=>n.id==='multiply').links[0]"),null);assert.equal(app.eval("state.nodes.find(n=>n.id==='multiply').links[1]"),'project');
  const restored=boot(app.storage,'#gating');assert.equal(restored.eval("state.nodes.find(n=>n.id==='multiply').links[0]"),null);app.eval("$('#undo').onclick()");assert.equal(app.eval("state.nodes.find(n=>n.id==='multiply').links[0]"),'silu');
 });
 test('partially constructed tables and older complete saves retain their positions and connections',()=>{
@@ -227,11 +227,65 @@ test('pause is bilingual and a hash change cancels it without carrying pause int
 test('multiple module saves preserve instance identities and undo refunds only the removed copy',()=>{
  const app=boot();assert.equal(app.document.querySelector('#shuffle-layout'),null);
  app.eval("switchLevel('ffn');chooseModule('project');placeModule(-3,-2);chooseModule('project');placeModule(1,-2);chooseOutput('Z');chooseInput('project-2',0)");
- assert.equal(app.eval('selected'),'project-2');assert.equal(app.document.querySelector('[data-add-module="project"]').getAttribute('data-add-disabled'),'true');
+ assert.equal(app.eval('selected'),'project-2');assert.equal(app.document.querySelector('[data-add-module="project"]').getAttribute('data-add-disabled'),'false');assert.equal(app.eval("M.stock(state,'project')"),2);
  const saved=app.eval('JSON.stringify(state)'),reloaded=boot(app.storage,'#ffn');assert.equal(reloaded.eval('JSON.stringify(state)'),saved);
  reloaded.eval("select('project');$('#remove-module').onclick()");assert.equal(reloaded.eval("state.nodes[0].id"),'project-2');assert.equal(reloaded.eval("state.nodes[0].links[0]"),'Z');assert.equal(reloaded.document.querySelector('[data-add-module="project"]').getAttribute('data-add-disabled'),'false');
  reloaded.eval("$('#undo').onclick()");assert.equal(reloaded.eval('JSON.stringify(state)'),saved);
  const corrupt=JSON.parse(saved);corrupt.nodes[1].kind='down';const storage=new Map([['neural-atelier-prologue-v1',JSON.stringify(corrupt)]]);assert.equal(boot(storage,'#ffn').eval('state.nodes.length'),0,'invalid ID/type pair does not become a different operator');
+});
+test('legacy content projections merge without losing coexisting copies, wiring, positions or completion',async()=>{
+ const seed=boot(),M=seed.c.NeuralPrologue;
+ const snapshot=s=>JSON.stringify(s.nodes.map(n=>[n.id,n.x,n.z,n.links]));
+ for(const id of ['gating','ffn']){
+  const solved=M.solutions(id),old=JSON.parse(JSON.stringify(solved));
+  const linear=old.nodes.find(n=>n.id==='project');linear.id='up';linear.kind='up';linear.x=2.345;linear.z=-1.234;
+  for(const n of old.nodes)n.links=n.links.map(k=>k==='project'?'up':k);
+  old.palette=['up',...solved.palette];
+  if(id==='ffn'){
+   // Both earlier stocks can coexist. References to the spare copy must also survive.
+   old.nodes.push({id:'project',kind:'project',x:6,z:3,links:['R']},{id:'up-2',kind:'up',x:6,z:-3,links:['R']});
+   old.nodes.find(n=>n.id==='gate').links=['Z'];
+  }else for(const n of old.nodes)delete n.kind;
+  const key=id==='ffn'?'neural-atelier-prologue-v1':'neural-atelier-level-gating-v1';
+  const store=new Map([[key,JSON.stringify(old)],['neural-atelier-chapters-v1',JSON.stringify({current:id,completed:[id]})],['neural-atelier-language-v1','en'],['neural-atelier-playback-speed-v1','.5']]);
+  const app=boot(store,'#'+id),migrated=app.eval('state'),content=id==='ffn'?'project-2':'project';
+  assert.equal(migrated.nodes.length,old.nodes.length);assert.equal(app.eval('playbackSpeed'),.5);assert.equal(app.eval('progress.completed(stageId)'),true);
+  assert.equal(migrated.nodes.find(n=>n.id===content).x,linear.x);assert.equal(migrated.nodes.find(n=>n.id===content).z,linear.z);
+  assert.equal(migrated.nodes.find(n=>n.id==='multiply').links[1],content);
+  assert.ok(migrated.nodes.every(n=>n.kind!=='up'&&!/^up(?:-|$)/.test(n.id)));
+  assert.equal(migrated.palette.filter(k=>k==='project').length,1);assert.ok(!migrated.palette.includes('up'));
+  if(id==='ffn'){assert.equal(migrated.nodes.find(n=>n.id==='project').links[0],'R');assert.equal(migrated.nodes.find(n=>n.id==='project-3').links[0],'R');assert.equal(app.eval("M.stock(state,'project')"),1);}
+  const saved=snapshot(migrated);await app.eval('run()');assert.ok(app.eval('results.every(r=>r.pass)'));assert.equal(snapshot(app.eval('state')),saved);
+  const reloaded=boot(store,'#'+id);assert.equal(snapshot(reloaded.eval('state')),saved);
+  if(id==='ffn'){
+   reloaded.eval("select('project-2');$('#remove-module').onclick()");assert.equal(reloaded.eval("state.nodes.find(n=>n.id==='multiply').links[1]"),null);assert.equal(reloaded.eval("M.stock(state,'project')"),2);
+   reloaded.eval("$('#undo').onclick()");assert.equal(snapshot(reloaded.eval('state')),saved);
+  }
+ }
+ // All four former copies are retained, including a saved outlet into an old content copy.
+ const full={version:1,levelId:'ffn',palette:['up','project'],sink:'up-2',nodes:['project','up','project-2','up-2'].map((id,i)=>({id,kind:id.startsWith('up')?'up':'project',x:i*3-4,z:1,links:['R']}))};
+ const all=boot(new Map([['neural-atelier-prologue-v1',JSON.stringify(full)]]),'#ffn');
+ assert.deepEqual(Array.from(all.eval('state.nodes'),n=>n.id),['project','project-3','project-2','project-4']);assert.equal(all.eval('state.sink'),'project-4');assert.equal(all.eval("M.stock(state,'project')"),0);
+ all.eval('save()');assert.equal(boot(all.storage,'#ffn').eval('state.sink'),'project-4');
+});
+
+test('SwiGLU objective connects familiar modules to the FFN while keeping residual addition outside it',()=>{
+ const app=boot(new Map(),'#ffn'),doc=app.document,saved=app.eval('JSON.stringify(state)');
+ for(const language of ['zh','en']){
+  app.c.I18n.setPreference(language);
+  const primer=doc.querySelector('.swiglu-primer');assert.ok(primer);assert.match(primer.textContent,/SwiGLU/);assert.match(primer.textContent,/04/);assert.match(primer.textContent,/05/);assert.match(primer.textContent,/SiLU/);
+  assert.equal(primer.querySelectorAll('.swiglu-branches>div').length,2);assert.equal(primer.querySelectorAll('.swiglu-merge b').length,2);
+  assert.match(doc.querySelector('#mission-reason-takeaway').textContent,language==='zh'?/FFN 外/:/outside the FFN/);
+  assert.match(doc.querySelector('#mission-reason-scope').textContent,/Swish/);
+  assert.equal(doc.querySelectorAll('[data-add-module="project"]').length,1);assert.equal(doc.querySelector('[data-add-module="up"]'),null);
+  assert.doesNotMatch(doc.querySelector('#module-shelf').textContent,/内容投影|Content projection/);
+  if(language==='en')assert.doesNotMatch(doc.querySelector('.mission').textContent,/[\u3400-\u9fff]/);
+  assert.equal(app.eval('JSON.stringify(state)'),saved);
+ }
+ app.eval("switchLevel('gating')");assert.equal(doc.querySelector('.swiglu-primer'),null);assert.ok(doc.querySelector('#mission-reason-example table'));
+ app.eval("switchLevel('projection')");assert.equal(doc.querySelector('#mission-reason-example').hidden,true);
+ app.eval("switchLevel('ffn')");assert.ok(doc.querySelector('.swiglu-primer'));assert.equal(app.eval('JSON.stringify(state)'),saved);
+ assert.deepEqual([...app.c.I18n.missing],[]);
 });
 test('the simple placement lesson introduces one familiar module between residuals and the FFN',()=>{
  const app=boot(new Map(),'#workshop',['en-US']);assert.equal(app.eval('state.nodes.length'),0);assert.equal(app.document.querySelectorAll('[data-add-module]').length,1);assert.equal(app.document.querySelector('#module-count').textContent,'0 / 1');assert.equal(app.eval('M.levels.residual.next'),'workshop');assert.equal(app.eval('M.levels.workshop.next'),'ffn');assert.doesNotMatch(app.document.querySelector('#module-shelf').textContent,/[\u3400-\u9fff]/);

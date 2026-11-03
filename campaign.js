@@ -27,7 +27,7 @@ Object.assign(M.definitions,{
  norm:def('RMSNorm',[6],6,'norm',I18n.t("每个位置的向量除以自己的均方根。本例缩放权重设为 1；维度与位置顺序不变。")),
  q:def(I18n.t("Q · 查询投影"),[6],6,'linear',I18n.t("每个位置生成查询。相同的权重用于所有位置。")),
  k:def(I18n.t("K · 键投影"),[6],6,'linear',I18n.t("每个位置生成供查询匹配的键。")),
- v:def(I18n.t("V · 内容投影"),[6],6,'linear',I18n.t("每个位置生成被注意力加权汇合的内容。")),
+ v:def(I18n.t("V · 值投影"),[6],6,'linear',I18n.t("每个位置生成被注意力加权汇合的内容。")),
  score:def(I18n.t("QKᵀ · 打分"),[6,6],9,'score',I18n.t("把每个 Q 与每个 K 点乘，再除以 √2，得到 3 × 3 分数。")),
  mask:def(I18n.t("因果遮罩"),[9],9,'mask',I18n.t("未来位置设为 −∞；Softmax 后这些位置的权重为 0。")),
  softmax:def('Softmax',[9],9,'softmax',I18n.t("每个查询位置的分数转成和为 1 的非负权重。")),
@@ -190,7 +190,8 @@ for(const [id,maxModules]of [['ffn',8],['attention',12],['block',7]]){
  const level=M.levels[id];level.buildable=true;level.maxModules=maxModules;
  level.inventory=Object.fromEntries(level.nodes.map(kind=>[kind,2]));
 }
-M.levels.ffn.inventory.project=2;
+// Combine the two formerly identical stocks without reducing existing circuits' capacity.
+M.levels.ffn.inventory.project=4;
 M.routes={main:{name:I18n.t("主线 · Transformer"),description:I18n.t("从向量与矩阵开始，亲手搭出 Attention、FFN 和逐词生成。"),ids:Object.keys(M.levels).filter(id=>!M.levels[id].engine)},engine:{name:I18n.t("番外 · 端侧推理"),description:I18n.t("以 Qwen 27B、Kapitsa 与 Apple ANE 为背景的独立挑战，使用教学成本模型。"),ids:Object.keys(M.levels).filter(id=>M.levels[id].engine)}};
 for(const [track,route]of Object.entries(M.routes))route.ids.forEach((id,i)=>{M.levels[id].track=track;M.levels[id].next=route.ids[i+1]||null;});
 M.samplesFor=id=>M.levels[id]?.sequence?(M.levels[id].sourceDim===3?idSamples:sequenceSamples):M.samples;
@@ -232,7 +233,7 @@ M.extraExample=(id,levelId)=>{if(!M.operations[id])return null;const s=M.solutio
 // Reference circuits are for automated verification only, never auto-filled by UI.
 M.solutions=id=>{const s=M.initial(id,{complete:true}),links={workshop:{project:['R'],sink:'project'},
  wire:{sink:'R'},projection:{project:['R'],sink:'project'},activation:{project:['R'],silu:['project'],sink:'silu'},
- gating:{gate:['R'],up:['R'],silu:['gate'],multiply:['silu','up'],sink:'multiply'},residual:{project:['R'],down:['project'],add:['R','down'],sink:'add'},ffn:{gate:['Z'],up:['Z'],silu:['gate'],multiply:['silu','up'],down:['multiply'],add:['R','down'],sink:'add'},
+ gating:{gate:['R'],project:['R'],silu:['gate'],multiply:['silu','project'],sink:'multiply'},residual:{project:['R'],down:['project'],add:['R','down'],sink:'add'},ffn:{gate:['Z'],project:['Z'],silu:['gate'],multiply:['silu','project'],down:['multiply'],add:['R','down'],sink:'add'},
  embedding:{embedding:['R'],sink:'embedding'},normalize:{norm:['R'],sink:'norm'},qkv:{q:['R'],k:['R'],v:['R'],sink:'v'},scores:{q:['R'],k:['R'],score:['q','k'],sink:'score'},
  causal:{q:['R'],k:['R'],score:['q','k'],mask:['score'],softmax:['mask'],sink:'softmax'},rope:{q:['R'],k:['R'],ropeq:['q'],ropek:['k'],score:['ropeq','ropek'],sink:'score'},
  attention:{q:['R'],k:['R'],v:['R'],ropeq:['q'],ropek:['k'],score:['ropeq','ropek'],mask:['score'],softmax:['mask'],aggregate:['softmax','v'],output:['aggregate'],sink:'output'},

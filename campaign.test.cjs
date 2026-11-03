@@ -12,7 +12,7 @@ test('random arrangements fit the table, keep modules apart, and do not change t
  }
 });
 test('disconnect removes one selected branch and reconnect restores the computation',()=>{
- const s=M.solutions('gating');assert.ok(M.disconnect(s,'multiply',0));assert.deepEqual(Array.from(s.nodes.find(n=>n.id==='multiply').links),[null,'up']);assert.equal(s.sink,'multiply');assert.equal(M.disconnect(s,'multiply',0),false);
+ const s=M.solutions('gating');assert.ok(M.disconnect(s,'multiply',0));assert.deepEqual(Array.from(s.nodes.find(n=>n.id==='multiply').links),[null,'project']);assert.equal(s.sink,'multiply');assert.equal(M.disconnect(s,'multiply',0),false);
  assert.equal(M.connect(s,'silu','multiply',0),null);assert.ok(close(M.evaluate(s,[1,1]).output,M.reference([1,1],'gating')));
  assert.ok(M.disconnect(s,'sink',0));assert.equal(s.sink,null);assert.equal(s.nodes.find(n=>n.id==='multiply').links[0],'silu');
 });
@@ -34,7 +34,7 @@ for(const id of Object.keys(M.levels))test(id+' reference circuit matches three 
 test('main and bonus tracks are separate, complete and have no dangling links',()=>{const visited=[];for(const [track,route]of Object.entries(M.routes)){let id=route.ids[0],ids=[];while(id){assert.ok(!visited.includes(id));assert.equal(M.levels[id].track,track);visited.push(id);ids.push(id);id=M.levels[id].next;}assert.deepEqual(ids,Array.from(route.ids));}assert.equal(visited.length,Object.keys(M.levels).length);assert.equal(M.levels.autoregressive.next,null);assert.equal(M.routes.main.ids.length,17);assert.equal(M.routes.engine.ids.length,9);for(const id of visited){const s=M.initial(id),allowed=new Set([...s.nodes.map(n=>n.id),...M.levels[id].sources]);for(const n of s.nodes)for(const link of n.links)assert.ok(link===null||allowed.has(link));}});
 test('causal attention cannot read future V',()=>{const s=M.solutions('attention'),a=M.evaluate(s,[1,0,0,1,1,1]),b=M.evaluate(s,[1,0,0,1,-8,3]);assert.ok(close(a.output.slice(0,4),b.output.slice(0,4)));const weights=a.values.softmax;for(let i=0;i<3;i++){assert.ok(Math.abs(weights.slice(i*3,i*3+3).reduce((a,b)=>a+b,0)-1)<1e-12);for(let j=i+1;j<3;j++)assert.equal(weights[i*3+j],0);}});
 test('RoPE preserves each vector norm and position zero',()=>{const x=[2,3,4,5,-1,2],r=M.math.rotate(x);assert.deepEqual(Array.from(r.slice(0,2)),[2,3]);for(let i=0;i<3;i++)assert.ok(Math.abs(r[2*i]**2+r[2*i+1]**2-x[2*i]**2-x[2*i+1]**2)<1e-12);});
-test('same dimensions but wrong activation branch fails',()=>{const s=M.solutions('gating');s.nodes.find(n=>n.id==='silu').links=['up'];s.nodes.find(n=>n.id==='multiply').links=['silu','gate'];assert.ok(M.samples.some(t=>!close(M.evaluate(s,t.v).output,M.reference(t.v,'gating'))));});
+test('same dimensions but wrong activation branch fails',()=>{const s=M.solutions('gating');s.nodes.find(n=>n.id==='silu').links=['project'];s.nodes.find(n=>n.id==='multiply').links=['silu','gate'];assert.ok(M.samples.some(t=>!close(M.evaluate(s,t.v).output,M.reference(t.v,'gating'))));});
 test('wrong features produce computed words, not canned failure text',()=>{const initial=M.evaluate(M.initial('vocabulary'),M.samplesFor('vocabulary')[0].v);assert.equal(M.readTokens(initial.output),'你恨狗');const correct=M.evaluate(M.solutions('vocabulary'),M.samplesFor('vocabulary')[0].v);assert.equal(M.readTokens(correct.output),'我爱猫');});
 test('autoregression appends only the last position prediction',()=>{const s=M.solutions('autoregressive');let input=[0,1,2];input=M.evaluate(s,input).output;assert.deepEqual(Array.from(input),[1,2,0]);input=M.evaluate(s,input).output;assert.deepEqual(Array.from(input),[2,0,1]);});
 test('cycle fails; disconnected branch still runs for visible animation',()=>{const s=M.solutions('attention');s.nodes.find(n=>n.id==='ropeq').links=['ropeq'];assert.ok(M.evaluate(s,M.samplesFor('attention')[0].v).error);const p=M.solutions('projection');p.sink=null;const e=M.evaluate(p,[1,1]);assert.ok(e.error);assert.ok(close(e.values.project,[1,1,1.5,-.5]));});
@@ -63,16 +63,27 @@ test('multiple projection and residual instances have independent edges, values 
  const edges=[['R','project',0],['project','down',0],['down','project-2',0],['project-2','down-2',0],['down','add',0],['down-2','add',1],['add','add-2',0],['R','add-2',1],['add-2','sink',0]];
  for(const edge of edges)assert.equal(M.connect(s,...edge),null);
  const ev=M.evaluate(s,[1,0]);assert.equal(ev.error,null);assert.ok(close(ev.values.down,[.55,.35]));assert.ok(close(ev.values['down-2'],[.3725,.2275]));assert.ok(close(ev.output,[1.9225,.5775]));assert.notDeepEqual(ev.values.project,ev.values['project-2']);
- assert.equal(M.addNode(s,'project',1.9,2),false,'per-kind stock is enforced');
+ assert.equal(M.stock(s,'project'),2,'merged stock leaves two more projections available');
  assert.equal(M.removeNode(s,'down-2'),true);assert.deepEqual(Array.from(s.nodes.find(n=>n.id==='add').links),['down',null]);assert.deepEqual(Array.from(s.nodes.find(n=>n.id==='down').links),['project']);assert.equal(M.stock(s,'down'),1);assert.equal(M.addNode(s,'down',5.2,-2),true);
 });
 test('construction limits count current instances and fixed lessons cannot create modules',()=>{
  for(const id of ['wire','projection','activation','gating','residual'])assert.equal(M.canAdd(M.initial(id),'project'),false);
  const tutorial=M.initial('workshop');assert.equal(M.addNode(tutorial,'project',0,0),true);assert.equal(M.canAdd(tutorial,'project'),false);assert.equal(M.removeNode(tutorial,'project'),true);assert.equal(M.canAdd(tutorial,'project'),true);
- const s=M.initial('ffn'),kinds=['project','project','down','down','add','add','gate','up'];
+ const s=M.initial('ffn'),kinds=['project','project','down','down','add','add','gate','project'];
  kinds.forEach((kind,i)=>assert.equal(M.addNode(s,kind,[-4.7,-1.4,1.9,5.2][i%4],i<4?-2:2),true));
  assert.equal(s.nodes.length,M.moduleLimit(M.levels.ffn));assert.equal(M.stock(s,'silu'),2);assert.equal(M.canAdd(s,'silu'),false,'free stock cannot exceed the table limit');
- M.removeNode(s,'up');assert.equal(M.canAdd(s,'silu'),true);
+ M.removeNode(s,'project');assert.equal(M.canAdd(s,'silu'),true);
+});
+test('one linear projection stock replaces the content operator and keeps the combined copy budget',()=>{
+ const s=M.initial('ffn');assert.equal(M.definitions.up,undefined);assert.equal('up' in M.inventory(M.levels.ffn),false);assert.equal(M.inventory(M.levels.ffn).project,4);
+ const coordinates=[[-4.7,-2],[-1.4,-2],[1.9,-2],[5.2,-2]];
+ for(const point of coordinates)assert.equal(M.addNode(s,'project',...point),true);
+ assert.equal(M.canAdd(s,'project'),false);assert.equal(M.addNode(s,'project',0,2),false);
+ assert.equal(M.removeNode(s,'project-3'),true);assert.equal(M.stock(s,'project'),1);assert.equal(M.addNode(s,'project',1.9,-2),true);
+ for(const id of ['gating','ffn']){
+  const circuit=M.solutions(id);assert.equal(circuit.nodes.filter(n=>n.kind==='project').length,1);assert.ok(!circuit.nodes.some(n=>n.kind==='up'));
+  for(const sample of M.samples){const ev=M.evaluate(circuit,sample.v),input=id==='ffn'?M.norm(sample.v):sample.v;assert.ok(close(ev.values.project,M.linear(input,M.weights.up)));assert.ok(close(ev.output,M.reference(sample.v,id)));}
+ }
 });
 test('an alternate attention instance uses its own operator and its connected attention map',()=>{
  const s=M.solutions('attention'),original=s.nodes.find(n=>n.id==='softmax');original.id='softmax-2';original.kind='softmax';s.nodes.find(n=>n.id==='aggregate').links[0]='softmax-2';

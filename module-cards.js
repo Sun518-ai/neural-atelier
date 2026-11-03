@@ -10,16 +10,9 @@ export const moduleCards = {
   gate: {
     number:'01', seal:I18n.t("门"), english:'GATE PROJECTION', family:I18n.t("投影"), color:'#75628e',
     ability:I18n.t("为内容准备调节系数"), formula:'G = Z × Wg',
-    meaning:I18n.t("和内容投影一样，这里做的是矩阵乘法。同一份输入乘 Wg 得到 G，乘另一套权重 Wu 得到内容特征 U。"),
+    meaning:I18n.t("门投影也做矩阵乘法，但权重 Wg 与线性投影的 W 不同。同一份输入乘 W 得到内容特征 U，乘 Wg 得到 G，供 SiLU 计算调节系数。"),
     purpose:I18n.t("G 还要经过 SiLU，才得到系数 S；S 与 U 的对应位置相乘，形成 H。系数随输入变化，可以缩小、放大或改变特征的符号。"),
     input:I18n.t("归一化输入 Z"), output:I18n.t("门分支 G"), weight:'2 × 4', trait:I18n.t("线性变换"), stage:0
-  },
-  up: {
-    number:'02', seal:I18n.t("展"), english:'UP PROJECTION', family:I18n.t("投影"), color:'#397f71',
-    ability:I18n.t("生成等待调节的特征"), formula:'U = Z × Wu',
-    meaning:I18n.t("本模块把输入乘 Wu，生成 4 个内容特征 U。门投影接收同一份输入，乘另一套权重 Wg，生成 G；两者的计算方式相同，权重和用途不同。"),
-    purpose:I18n.t("U 提供要使用的特征值；门分支经 SiLU 得到系数 S，再与 U 逐项相乘。推理时两套权重固定，换一个输入，特征值和调节系数都会重新计算。"),
-    input:I18n.t("归一化输入 Z"), output:I18n.t("内容分支 U"), weight:'2 × 4', trait:I18n.t("线性变换"), stage:0
   },
   silu: {
     number:'03', seal:I18n.t("启"), english:'SiLU ACTIVATION', family:I18n.t("激活"), color:'#a8793b',
@@ -56,11 +49,16 @@ I18n.prepare(moduleCards);
 export function cardFor(id,levelId){
  if(!moduleCards[id])return null;
  const card={...moduleCards[id]};
+ if(id==='project'&&['gating','ffn'].includes(levelId)){
+  Object.assign(card,{ability:I18n.t("用熟悉的投影产生内容特征"),formula:'U = Z × W',input:I18n.t("归一化输入 Z"),output:I18n.t("内容特征 U"),stage:0,
+   meaning:I18n.t("这就是序章的线性投影，仍用同一套权重 W 做矩阵乘法。这里把输出叫 U，表示待调节的内容特征；门投影使用另一套权重 Wg，产生 G。"),
+   purpose:I18n.t("“内容”描述它在这条支路的用途，运算仍是线性投影。门分支经 SiLU 得到系数 S，再与 U 逐项相乘；同一个内容值会随输入产生的系数而减弱或放大。")});
+ }
  if(levelId==='ffn'){
-  if(id==='gate'||id==='up')card.meaning=I18n.t("输入先归一化为 Z。")+' '+card.meaning;
+  if(id==='gate'||id==='project')card.meaning=I18n.t("输入先归一化为 Z。")+' '+card.meaning;
   return card;
  }
- if(id==='gate'||id==='up'){
+ if(id==='gate'||(id==='project'&&levelId==='gating')){
   card.formula=card.formula.replace('Z','X');
   card.input=I18n.t("输入 X");
  }
@@ -81,15 +79,15 @@ export function cardFor(id,levelId){
 }
 
 export function exampleFor(M,id,levelId='ffn'){
-  const shared=['gating','ffn','residual'].includes(levelId),compare=id==='gate'||id==='up',R=shared?[1,0]:[1,1],Z=levelId==='ffn'?M.norm(R):R,P=M.linear(R,M.weights.project);
+  const shared=['gating','ffn','residual'].includes(levelId),compare=id==='gate'||(id==='project'&&['gating','ffn'].includes(levelId)),R=shared?[1,0]:[1,1],Z=levelId==='ffn'?M.norm(R):R,P=M.linear(R,M.weights.project);
   const meta={sampleIndex:shared?0:2,exampleSource:[levelId==='ffn'?'R':'X',R]};
-  if(id==='project')return {...meta,inputs:[['X',R]],output:['P',P]};
+  if(id==='project'&&!compare)return {...meta,inputs:[['X',R]],output:['P',P]};
   if(levelId==='activation')return {...meta,inputs:[['P',P]],output:['S',P.map(M.silu)],activation:{feature:2}};
   if(levelId==='residual'){
    const F=M.linear(P,M.weights.down);
    return id==='down'?{...meta,inputs:[['P',P]],output:['F',F]}:{...meta,inputs:[['X',R],['F',F]],output:['Y',R.map((x,i)=>x+F[i])],addition:{feature:0}};
   }
   const G=M.linear(Z,M.weights.gate),U=M.linear(Z,M.weights.up),S=G.map(M.silu),H=S.map((x,i)=>x*U[i]),F=M.linear(H,M.weights.down),Y=R.map((x,i)=>x+F[i]),source=levelId==='ffn'?'Z':'X';
-  const paths={gate:[[[source,Z]],['G',G]],up:[[[source,Z]],['U',U]],silu:[[['G',G]],['S',S]],multiply:[[['S',S],['U',U]],['H',H]],down:[[['H',H]],['F',F]],add:[[['R',R],['F',F]],['Y',Y]]};
+  const paths={gate:[[[source,Z]],['G',G]],project:[[[source,Z]],['U',U]],silu:[[['G',G]],['S',S]],multiply:[[['S',S],['U',U]],['H',H]],down:[[['H',H]],['F',F]],add:[[['R',R],['F',F]],['Y',Y]]};
   return {...meta,inputs:paths[id][0],output:paths[id][1],...(compare?{comparison:{input:[source,Z],rows:[['U',U],['G',G],['S',S],['H',H]],feature:2}}:{}),...(id==='silu'?{activation:{feature:2,content:U,product:H}}:{}),...(id==='add'?{addition:{feature:0}}:{})};
 }

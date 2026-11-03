@@ -53,7 +53,9 @@ The later puzzles add memory and execution-cost constraints to the numerical goa
 
 The left shelf starts in its smallest size. Use **− / +** to resize it, **Hide shelf** to collapse it, and **Module shelf** to reopen it. Your chosen size is remembered.
 
-The first five lessons provide fixed modules. **[Take a module](https://hacking.pub/games/neural-atelier/#workshop)** is a short placement tutorial with just one familiar projection. Later construction levels allow multiple copies, each with independent connections. The shelf shows remaining stock and the table limit: **8** modules for the FFN, **12** for Attention, and **7** for the Transformer block. Each module type has two copies; returning one restores its stock.
+The first five lessons provide fixed modules. **[Take a module](https://hacking.pub/games/neural-atelier/#workshop)** is a short placement tutorial with just one familiar projection. Later construction levels allow multiple copies, each with independent connections. The shelf shows remaining stock and the table limit: **8** modules for the FFN, **12** for Attention, and **7** for the Transformer block. Each module type has two copies, except the FFN's four linear projections, which combine the formerly identical linear and content projection stocks. Returning a module restores its stock. Existing saves keep all copies, positions, and wires after the merge.
+
+The FFN reuses **Linear projection** for its content branch; the card explains this role and compares it with the different weights in **Gate projection**. The first full level introduces **SwiGLU** by connecting the prologue's two-branch gating and down projection, with a small diagram and numerical example. Residual addition then adds the FFN update to the original input.
 
 **Settings** brings together language, animation speed, music, and volume. Language follows your browser preference unless you choose one manually. Runs start at **0.25×** by default so the computation is easy to follow; your chosen speed is remembered.
 

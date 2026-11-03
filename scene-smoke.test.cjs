@@ -115,19 +115,20 @@ test('small matrices keep their blocks while numbers return when zoomed in',asyn
  assert.equal(JSON.stringify(app.api.getState()),state);
 });
 
-test('gate and content cards compare the same input with a worked feature in both languages and levels',async()=>{
+test('gate and reused linear projection cards compare the same input with a worked feature in both languages and levels',async()=>{
  const app=await boot(),M=app.c.NeuralPrologue,doc=app.document,round=v=>Number(v.toFixed(2));
  for(const language of ['zh','en']){
   app.c.I18n.setPreference(language);
   for(const level of ['gating','ffn']){
    app.api.switchLevel(level);const state=M.solutions(level);app.api.setState(state);app.api.getWorld().rebuild();
-   const saved=JSON.stringify(state),ev=M.evaluate(state,[1,0]),expected={U:ev.values.up,G:ev.values.gate,S:ev.values.silu,H:ev.values.multiply};let previous=null;
-   for(const kind of ['gate','up']){
+   const saved=JSON.stringify(state),ev=M.evaluate(state,[1,0]),expected={U:ev.values.project,G:ev.values.gate,S:ev.values.silu,H:ev.values.multiply};let previous=null;
+   for(const kind of ['gate','project']){
     app.api.getWorld().focus(kind);assert.equal(doc.querySelector('#module-card').open,true);
     const comparison=doc.querySelector('.card-comparison');assert.ok(comparison);
-    assert.match(doc.querySelector('#card-meaning').textContent,/Wg/);assert.match(doc.querySelector('#card-meaning').textContent,/Wu/);
+    assert.match(doc.querySelector('#card-meaning').textContent,/Wg/);assert.match(doc.querySelector('#card-meaning').textContent,/\bW\b/);
+    assert.equal(doc.querySelector('#card-name').textContent,M.definitions[kind].name);assert.doesNotMatch(doc.querySelector('#module-card').textContent,/内容投影|Content projection/);
     assert.match(doc.querySelector('#card-purpose').textContent,/SiLU/);
-    assert.equal(doc.querySelector('#card-formula').textContent,(kind==='gate'?'G':'U')+' = '+(level==='ffn'?'Z':'X')+' × W'+(kind==='gate'?'g':'u'));
+    assert.equal(doc.querySelector('#card-formula').textContent,(kind==='gate'?'G':'U')+' = '+(level==='ffn'?'Z':'X')+' × W'+(kind==='gate'?'g':''));
     assert.equal(doc.querySelector('#card-example-input').textContent,(level==='ffn'?'Z = [1.41, 0]':'X = [1, 0]'));
     for(const [symbol,values]of Object.entries(expected)){
      const cells=[...comparison.querySelectorAll(`[data-symbol="${symbol}"] i`)];assert.deepEqual(cells.map(c=>Number(c.textContent)),Array.from(values,round));
@@ -163,7 +164,7 @@ test('SiLU cards connect each input to its output and carry the same example int
    assert.equal(round(M.silu(shownInput)),round(output[2]),'the displayed scalar calculation rounds to the displayed output');
    assert.ok(output.some(v=>v<0),'negative SiLU outputs remain visible');
    const product=example.querySelector('.card-gate-result');assert.equal(!!product,level!=='activation');
-   if(product)for(const [role,expected]of [['content',ev.values.up[2]],['scale',output[2]],['result',ev.values.multiply[2]]])assert.equal(Number(product.querySelector(`[data-role="${role}"] b`).textContent),round(expected));
+   if(product)for(const [role,expected]of [['content',ev.values.project[2]],['scale',output[2]],['result',ev.values.multiply[2]]])assert.equal(Number(product.querySelector(`[data-role="${role}"] b`).textContent),round(expected));
    if(language==='en')assert.doesNotMatch(doc.querySelector('#module-card').textContent,/[\u3400-\u9fff]/);
    doc.querySelector('#card-close').onclick();
    if(level!=='activation'){
@@ -227,7 +228,7 @@ test('select a cable, delete it with the visible action or keyboard, and undo it
  const app=await boot();app.document.querySelector('#welcome').close();app.api.switchLevel('gating');app.api.setState(app.c.NeuralPrologue.solutions('gating'));app.api.getWorld().rebuild();
  const selectedPath=()=>app.document.querySelector('.wire-targets path[data-wire-to="multiply"][data-wire-port="0"]');
  selectedPath().dispatchEvent(new app.window.Event('click',{bubbles:true}));assert.ok(app.document.querySelector('[data-delete-wire]'));assert.equal(app.api.getState().nodes.find(n=>n.id==='multiply').links[0],'silu');
- app.document.querySelector('[data-delete-wire]').dispatchEvent(new app.window.Event('click',{bubbles:true}));assert.equal(selectedPath(),null);assert.equal(app.document.querySelector('.wire-actions'),null);assert.equal(app.api.getState().nodes.find(n=>n.id==='multiply').links[1],'up');
+ app.document.querySelector('[data-delete-wire]').dispatchEvent(new app.window.Event('click',{bubbles:true}));assert.equal(selectedPath(),null);assert.equal(app.document.querySelector('.wire-actions'),null);assert.equal(app.api.getState().nodes.find(n=>n.id==='multiply').links[1],'project');
  app.document.querySelector('#undo').onclick();selectedPath().dispatchEvent(new app.window.Event('click',{bubbles:true}));const event=new app.window.Event('keydown',{bubbles:true});event.key='Delete';app.document.dispatchEvent(event);assert.equal(selectedPath(),null);
 });
 test('completed and cancelled wiring clear the dashed drag preview',async()=>{
@@ -375,7 +376,7 @@ test('elementwise multiplication pairs both real inputs and keeps each product u
   if(!app)return;const label=document.querySelector('.processing-packet[data-node="multiply"]');if(!label||label.hidden)return;
   const sample=Number.parseInt(document.querySelector('#pass-count').textContent),M=app.c.NeuralPrologue,ev=M.evaluate(app.api.getState(),M.samples[sample].v);
   const scene=app.scenes.at(-1),unit=scene.children.flatMap(o=>o.children).find(o=>o.userData.node==='multiply'),meshes=[scene.children.find(o=>o.userData.processing==='multiply'),scene.children.find(o=>o.userData.processingSecondary==='multiply')];
-  const inputs=[ev.values.silu,ev.values.up],calc=document.querySelector('.projection-calculation[data-node="multiply"]'),out=scene.children.find(o=>o.userData.processingOutput==='multiply');
+  const inputs=[ev.values.silu,ev.values.project],calc=document.querySelector('.projection-calculation[data-node="multiply"]'),out=scene.children.find(o=>o.userData.processingOutput==='multiply');
   for(const [slot,mesh]of meshes.entries()){
    if(!mesh.visible)continue;
    for(const {bar}of mesh.userData.featureRoutes){
@@ -749,7 +750,7 @@ test('clicking a placed module offers deletion, preserves other wiring and remai
  const saved=JSON.stringify(app.api.getState());event(doc.querySelector('[data-node="down"]'),'click');assert.ok(doc.querySelector('[data-delete-node="down"]'));
  event(doc.querySelector('[data-close-node]'),'click');assert.equal(doc.querySelector('.node-actions'),null);assert.equal(JSON.stringify(app.api.getState()),saved);
  event(doc.querySelector('[data-node="down"]'),'click');event(doc.querySelector('[data-delete-node="down"]'),'click');
- assert.equal(app.api.getState().nodes.some(n=>n.id==='down'),false);assert.deepEqual(Array.from(app.api.getState().nodes.find(n=>n.id==='add').links),['R',null]);assert.equal(app.api.getState().nodes.find(n=>n.id==='multiply').links[1],'up');assert.equal(M.stock(app.api.getState(),'down'),2);
+ assert.equal(app.api.getState().nodes.some(n=>n.id==='down'),false);assert.deepEqual(Array.from(app.api.getState().nodes.find(n=>n.id==='add').links),['R',null]);assert.equal(app.api.getState().nodes.find(n=>n.id==='multiply').links[1],'project');assert.equal(M.stock(app.api.getState(),'down'),2);
  doc.querySelector('#undo').onclick();assert.equal(JSON.stringify(app.api.getState()),saved);
  for(let i=0;i<2;i++){event(doc.querySelector('[data-node="down"]'),'pointerdown',{clientX:650,clientY:350});event(doc,'pointerup',{clientX:650,clientY:350});if(!i)assert.ok(doc.querySelector('.node-actions'));}
  await new Promise(setImmediate);assert.equal(doc.querySelector('#module-card').open,true);assert.equal(doc.querySelector('.node-actions'),null);doc.querySelector('#card-close').onclick();assert.equal(JSON.stringify(app.api.getState()),saved);
