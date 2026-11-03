@@ -8,9 +8,9 @@ const silu=x=>x/(1+Math.exp(-x));
 const definitions={
  project:{name:I18n.t("线性投影"),hint:I18n.t("每一列权重生成一个新特征：一个输入向量中的 2 个数，组合成 4 个数。"),ins:[2],out:4,type:'linear',x:0,z:0},
  gate:{name:I18n.t("门投影"),hint:I18n.t("输入向量中的 2 个特征，乘权重 Wg，展开成 4 个。"),ins:[2],out:4,type:'linear',x:-4.6,z:-2.2},
- silu:{name:'SiLU',hint:I18n.t("对每个数做 x / (1 + exp(−x))，形成门值；不改变维度。"),ins:[4],out:4,type:'activation',x:-.9,z:-2.6},
- multiply:{name:I18n.t("逐元素相乘"),hint:I18n.t("两个 4 维向量，对应位置相乘。门值控制各个内容特征的贡献。"),ins:[4,4],out:4,type:'multiply',x:.1,z:1.8},
- down:{name:I18n.t("降维投影"),hint:I18n.t("4 维向量乘 Wd，压回 2 维，得到 FFN 的变换 F。"),ins:[4],out:2,type:'linear',x:3.5,z:1.5},
+ silu:{name:'SiLU',hint:I18n.t("对每个数做 x / (1 + exp(−x))，改变数值关系，不改变向量维度。"),ins:[4],out:4,type:'activation',x:-.9,z:-2.6},
+ multiply:{name:I18n.t("逐元素相乘"),hint:I18n.t("两个 4 维向量对应位置相乘，得到四个乘积；不把这些乘积相加。"),ins:[4,4],out:4,type:'multiply',x:.1,z:1.8},
+ down:{name:I18n.t("降维投影"),hint:I18n.t("4 维向量乘 4 × 2 权重矩阵 Wd，把四个特征组合成两个。"),ins:[4],out:2,type:'linear',x:3.5,z:1.5},
  add:{name:I18n.t("残差相加"),hint:I18n.t("原有特征加上支路算出的修改量。正的修改量让值增加，负的让值减少，零则保持该值。"),ins:[2,2],out:2,type:'add',x:6.4,z:-1.5}
 };
 const levels={
@@ -27,6 +27,18 @@ const levels={
   mission:I18n.t("改变数值，保留四个特征"),description:I18n.t("投影已经能抵达出口，但目标是每个投影数经过 SiLU 后的结果。改动线路，让三个输入位置都匹配。"),summary:I18n.t("新增 SiLU。维度相同的两份向量，数值不一定相同。"),concept:I18n.t("投影与非线性"),sourceTitle:I18n.t("输入 X"),sourceNote:'',outputTitle:I18n.t("激活特征 S"),boardText:'ACTIVATION / 03',shape:'2 → 4 → 4',next:'gating',
   rationale:{title:I18n.t("为什么矩阵后面还要有 SiLU？"),text:I18n.t("假设串联两个线性投影：A 是输入，B、C 是固定的权重矩阵。\n\n(A × B) × C = A × (B × C)\n\n先把 B、C 相乘得到新矩阵，就能代替这两层；对任何输入 A 都成立。\n\n用一个数举例：先乘 3，再乘 4，等于直接乘 12。\n分开算：(2 × 3) × 4 = 24\n合并算：2 × (3 × 4) = 2 × 12 = 24"),takeaway:I18n.t("所以，光堆线性层，仍然只是一次线性变换。SiLU 让缩放比例随数值变化：1 变为约 0.73，−1 变为约 −0.27。插在两层之间后，通常就不能合并为一个固定矩阵，从而能表达单纯线性变换做不到的关系。")},
   hints:[I18n.t("可以先试跑现有线路，比较出口的实际值与预期值。"),I18n.t("SiLU 对每个数单独计算，不改变向量长度；双击卡片可查看函数。")]},
+ 'down-projection':{id:'down-projection',title:I18n.t("把四个特征收回来"),nodes:['project','down'],sources:['R'],sinkDim:2,sampleCount:3,sourceX:-6,sinkX:6,zoom:.83,boardWidth:17,boardDepth:7,
+  initialLinks:{project:['R']},mission:I18n.t("把已经算出的 4 个特征变回 2 个"),description:I18n.t("输入到线性投影的路已经接好。用新加入的降维投影处理这 4 个特征，让出口得到两个数。"),summary:I18n.t("只加入降维投影，先看清 4 → 2 的矩阵乘法。"),concept:I18n.t("降维投影"),sourceTitle:I18n.t("输入 X"),sourceNote:'',outputTitle:I18n.t("投影结果 F"),shape:'2 → 4 → 2',
+  rationale:{title:I18n.t("为什么要回到两个特征？"),text:I18n.t("后面的模块仍使用两个特征。降维投影用两组权重分别组合前面的四个数，得到两个输出；它不是只留下前两个数。"),takeaway:I18n.t("4 × 2 矩阵的每一列都要乘上输入的四个数，再求和。现在只练这一步，后面再加入激活和残差。")},hints:[]},
+ 'plain-ffn':{id:'plain-ffn',title:I18n.t("先走完一条 FFN"),nodes:['project','silu','down'],sources:['R'],sinkDim:2,sampleCount:3,sourceX:-7.5,sinkX:7.5,zoom:.96,boardWidth:20,boardDepth:8,
+  initialLinks:{project:['R']},mission:I18n.t("展开、激活，再回到原宽度"),description:I18n.t("把前面分别玩过的三个模块串起来。目标是先展开特征，再经过 SiLU，最后得到两个输出。"),summary:I18n.t("组合三个熟悉的模块，完成一段单支路 FFN。"),concept:I18n.t("单支路 FFN"),sourceTitle:I18n.t("输入 X"),sourceNote:'',outputTitle:I18n.t("FFN 输出 F"),shape:'2 → 4 → 4 → 2',
+  rationale:{title:I18n.t("这三步合起来有什么用？"),text:I18n.t("第一块矩阵把输入组合成更多特征，激活改变这些特征的数值关系，最后一块矩阵再将它们组合回原宽度。中间有非线性，整段通常不能合并成一块固定矩阵。"),takeaway:I18n.t("FFN 对每个 token 的特征分别加工；这一段没有从其他 token 取信息，也还没有残差相加。"),scope:I18n.t("本关是使用 SiLU 的单支路教学版。2017 年原始 Transformer 的 FFN 使用 ReLU；后面再学习双路的 SwiGLU。")},hints:[]},
+ 'gate-projection':{id:'gate-projection',title:I18n.t("换一套权重看看"),nodes:['gate'],sources:['R'],sinkDim:4,sampleCount:3,sourceX:-5,sinkX:5.2,zoom:.75,boardWidth:15,boardDepth:7,
+  mission:I18n.t("用另一套权重产生四个特征"),description:I18n.t("门投影仍然做熟悉的 2 → 4 矩阵乘法。本关只算它的输出 G，先不加入 SiLU 或相乘。"),summary:I18n.t("认识第二套投影权重，先不搭双路网络。"),concept:I18n.t("同种运算，不同权重"),sourceTitle:I18n.t("输入 X"),sourceNote:'',outputTitle:I18n.t("门投影结果 G"),shape:'2 → 4',
+  rationale:{title:I18n.t("为什么还要另一套投影？"),text:I18n.t("内容特征和调节它的系数可以依赖不同的输入组合。因此两条支路各有一套权重；同一份输入经过它们，会得到不同的数。"),takeaway:I18n.t("例如输入 [1, 0]，熟悉的投影得到 [1, 0, 1, 0.5]，门投影得到 [1, −1, 0.5, 0]。G 之后经过 SiLU 才会用于门控，本关先学会把 G 算出来。"),scope:I18n.t("从这里开始学习 SwiGLU 这种现代 FFN 设计。它增加了门分支，2017 年原始 Transformer 的 FFN 没有这一支路。")},hints:[]},
+ pairwise:{id:'pairwise',title:I18n.t("先把两组数配对"),nodes:['project','gate','multiply'],sources:['R'],sinkDim:4,sampleCount:3,sourceX:-7.5,sinkX:7.5,zoom:.96,boardWidth:20,boardDepth:9,
+  initialLinks:{project:['R'],gate:['R']},mission:I18n.t("得到两组数对应位置的乘积"),description:I18n.t("两块投影已各自接到输入。只需把它们算出的两组数交给逐元素相乘，得到四个乘积。"),summary:I18n.t("只新增逐元素相乘，暂时没有 SiLU。"),concept:I18n.t("对应位置相乘"),sourceTitle:I18n.t("输入 X"),sourceNote:'',outputTitle:I18n.t("相乘结果 H"),shape:'2 → 4 + 4 → 4',
+  rationale:{title:I18n.t("相乘到底改变了什么？"),text:I18n.t("每一项都有自己的乘数：乘 0 会消去这一项，乘 0.5 会减半，乘 2 会加倍。四对数分别相乘，不把不同位置的乘积加起来。"),takeaway:I18n.t("例如 [2, 4, 1, −2] 与 [0.5, 0, 2, 1] 相乘，得到 [1, 0, 2, −2]。先看懂配对，下一关再让一条支路经过 SiLU。"),scope:I18n.t("本关直接相乘两组投影结果，是逐元素运算练习，还不是 SwiGLU。")},hints:[]},
  gating:{id:'gating',chapter:I18n.t("序章 / 04"),title:I18n.t("让两路相遇"),nodes:['gate','project','silu','multiply'],sources:['R'],sinkDim:4,sampleCount:5,sourceX:-8,sinkX:8,zoom:1,boardWidth:21,boardDepth:10,
   positions:{gate:[-4,-2],project:[-4,2],silu:[0,-2],multiply:[3.5,1.2]},initialLinks:{gate:['R'],project:['R']},
   mission:I18n.t("把两组数一一相乘"),description:I18n.t("两块投影接收同一份输入，分别算出 4 个数。用 SiLU 处理其中一组，再让两组数一一相乘。接好模块，让 5 组输入都得到目标结果。"),summary:I18n.t("新增两路分支和逐元素相乘。自己决定哪条支路经过激活。"),concept:I18n.t("两路门控"),sourceTitle:I18n.t("输入 X"),sourceNote:'',outputTitle:I18n.t("门控特征 H"),boardText:'GATING / 04',shape:'2 → 4 + 4 → 4',next:'residual',
@@ -37,6 +49,9 @@ const levels={
   mission:I18n.t("在原有特征上做调整"),description:I18n.t("桌上两块投影算出 2 维修改量 F。出口要得到 X + F，在原有特征 X 的基础上完成一次调整。接好模块，让 5 组输入都匹配目标。"),summary:I18n.t("用残差学习修改量：在已有特征上增加或减少，而无需重新复制每个原值。"),concept:I18n.t("降维与残差"),sourceTitle:I18n.t("输入 X"),sourceNote:'',outputTitle:I18n.t("残差特征 Y"),boardText:'RESIDUAL / 05',shape:'2 → 4 → 2 + 2',next:'ffn',
   rationale:{kind:'residual',title:I18n.t("为什么要加回输入？"),input:[1,0],text:I18n.t("假如这一层只需要调整部分特征，支路就只需学习“加多少或减多少”。无需修改的值沿直连路径继续传递，支路不用再学一遍如何复制它们。"),takeaway:I18n.t("修改量为 0 时，输出就是原输入；修改量为负时，对应的值会减小。相加后的数值仍可能改变，甚至抵消到 0。"),scope:I18n.t("真实模型通过训练学习修改量。直连路径也为训练信号提供回传路线，有助于训练更深的网络。本关的矩阵是固定的。")},
   hints:[I18n.t("一个圆形输出口可以连接多条线，不会消耗原来的向量。"),I18n.t("相加的两份向量需要同样长度；一份是原输入，一份是刚算出的变化。")]},
+ swiglu:{id:'swiglu',title:I18n.t("给门控接上出口"),nodes:['gate','project','silu','multiply','down'],sources:['R'],sinkDim:2,sampleCount:3,sourceX:-8.5,sinkX:8.5,zoom:1.05,boardWidth:23,boardDepth:11,
+  initialLinks:{gate:['R'],project:['R'],silu:['gate'],multiply:['silu','project']},mission:I18n.t("让门控特征回到原宽度"),description:I18n.t("上关的两路门控已经接好。把四个门控特征组合成两个输出，先完成 FFN 本身。"),summary:I18n.t("把已完成的门控接到熟悉的降维投影，还不加残差。"),concept:I18n.t("SwiGLU FFN"),sourceTitle:I18n.t("输入 X"),sourceNote:'',outputTitle:I18n.t("FFN 输出 F"),shape:'2 → 4 + 4 → 4 → 2',
+  rationale:{title:I18n.t("这一步为什么才是完整 FFN？"),text:I18n.t("门控先调整展开后的四个特征；降维投影再把它们组合成后续网络需要的两个特征。双路投影、SiLU、相乘和降维合起来，就是这里的 SwiGLU FFN。"),takeaway:I18n.t("先前的单支路 FFN 直接激活内容特征；这里用另一条支路产生系数来调节内容。残差相加在 FFN 外，下一步再把输出用作修改量。"),scope:I18n.t("SwiGLU 是 FFN 的一种现代实现，不是整个 Transformer，也不是 2017 年原始 FFN 的固定结构。")},hints:[]},
  workshop:{id:'workshop',chapter:I18n.t("序章 / 06"),title:I18n.t("从架上拿一块"),nodes:['project'],inventory:{project:1},maxModules:1,buildable:true,placementTutorial:true,sources:['R'],sinkDim:4,sampleCount:3,sourceX:-5.5,sinkX:5.5,zoom:.8,boardWidth:16,boardDepth:7,
   mission:I18n.t("拖进一块投影，再接上线"),description:I18n.t("台面上少了一块熟悉的投影。从组件架拖一块进来，连接输入和出口，然后试跑。"),summary:I18n.t("只学一个新操作：从组件架拖入模块。"),concept:I18n.t("自己放置组件"),sourceTitle:I18n.t("输入 X"),sourceNote:'',outputTitle:I18n.t("投影特征 P"),boardText:'WORKSHOP / 06',shape:'2 → 4',next:'ffn',
   rationale:{title:I18n.t("为什么开始自己拿组件？"),text:I18n.t("后面的完整网络会有分支和合流，需要你决定使用哪些模块、各放几块以及如何取数。本关先用熟悉的投影练习放置，为独立搭建计算图做准备。"),takeaway:I18n.t("台面上的摆放位置方便你组织线路；真正决定计算结果的是模块的运算、权重和接线。")},
@@ -81,10 +96,14 @@ function reference(v,levelId='ffn'){
  const p=linear(v,weights.project);
  if(levelId==='projection'||levelId==='workshop')return p;
  if(levelId==='activation')return p.map(silu);
+ if(levelId==='down-projection')return linear(p,weights.down);
+ if(levelId==='plain-ffn')return linear(p.map(silu),weights.down);
+ if(levelId==='gate-projection')return linear(v,weights.gate);
+ if(levelId==='pairwise'){const g=linear(v,weights.gate);return p.map((x,i)=>x*g[i]);}
  if(levelId==='residual')return linear(p,weights.down).map((x,i)=>x+v[i]);
- const z=levelId==='gating'?v:norm(v),g=linear(z,weights.gate).map(silu),u=linear(z,weights.up),h=g.map((x,i)=>x*u[i]);
+ const z=['gating','swiglu'].includes(levelId)?v:norm(v),g=linear(z,weights.gate).map(silu),u=linear(z,weights.up),h=g.map((x,i)=>x*u[i]);
  if(levelId==='gating')return h;
- const f=linear(h,weights.down);return v.map((x,i)=>x+f[i]);
+ const f=linear(h,weights.down);return levelId==='swiglu'?f:v.map((x,i)=>x+f[i]);
 }
 function evaluate(state,v){const level=levelFor(state),context={state,level,input:v},values=Object.fromEntries(level.sources.map(id=>[id,id==='Z'?norm(v):v])),depths=Object.fromEntries(level.sources.map(id=>[id,0])),visiting=new Set(),order=[];let error=null,bad=null;
  function run(id){if(id==null)throw {message:I18n.t("有一个输入口还没有接线。")};if(values[id])return values[id];const node=state.nodes.find(n=>n.id===id),kind=nodeKind(node),d=definitions[kind];if(!node||!d)throw {message:I18n.t("线路指向了不存在的模块。")};if(visiting.has(id))throw {message:I18n.t("线路绕成了环，数值走不出来。"),node:id};visiting.add(id);

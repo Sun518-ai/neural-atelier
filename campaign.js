@@ -18,6 +18,7 @@ function logits(v){return flat(rows(v).map(r=>M.linear(r,head).map((x,i)=>x+bias
 function sample(v){return rows(v,6).map(r=>r.indexOf(Math.max(...r)));}
 const decode=v=>sample(logits(v));
 const attention=x=>mat(mix(probabilities(causal(scores(rotate(mat(x,Wq)),rotate(mat(x,Wk))))),mat(x,Wv)),Wo);
+const attentionWeights=x=>probabilities(causal(scores(rotate(mat(x,Wq)),rotate(mat(x,Wk)))));
 const block=x=>{const a=attention(normalize(x)),r=x.map((v,i)=>v+a[i]),f=ffn(r);return r.map((v,i)=>v+f[i]);};
 const serial=(ids,source='R')=>Object.fromEntries(ids.map((id,i)=>[id,[i?ids[i-1]:source]]));
 const def=(name,ins,out,type,hint)=>({name,ins,out,type,hint,x:0,z:0});
@@ -34,6 +35,7 @@ Object.assign(M.definitions,{
  ropeq:def(I18n.t("RoPE · 旋转 Q"),[6],6,'rope',I18n.t("位置 p 的向量旋转 p 弧度。真实模型有多对特征和不同频率。")),
  ropek:def(I18n.t("RoPE · 旋转 K"),[6],6,'rope',I18n.t("K 使用与 Q 相同的按位置旋转规则；V 保持原样。")),
  aggregate:def(I18n.t("AV · 汇合内容"),[9,6],6,'mix',I18n.t("每个查询位置用注意力权重对各位置的 V 加权求和，得到该位置的输出向量。")),
+ attentionweights:def(I18n.t("已完成的注意力权重"),[6],9,'attention',I18n.t("把前面学过的 Q/K 投影、RoPE、打分、遮罩和 Softmax 收在一起，输出 3 × 3 权重。每个查询位置的三个权重之和为 1。")),
  output:def(I18n.t("输出投影 Wo"),[6],6,'linear',I18n.t("汇合结果再乘 Wo，映射回残差流的特征宽度。")),
  attention:def(I18n.t("已完成的 Attention"),[6],6,'attention',I18n.t("内部包括 Q/K/V、RoPE、因果注意力与输出投影。双击可查看。")),
  residual1:def(I18n.t("Attention 残差"),[6,6],6,'residual',I18n.t("把 Attention 的变化量逐项加到原输入。")),
@@ -52,9 +54,11 @@ Object.assign(M.definitions,{
  enhead:def(I18n.t("词表与采样"),[6],6,'vocabulary',I18n.t("得到词表分数并取最高分；调度任务仍返回数值，结果区显示预测。"))
 });
 M.extraColors={embedding:0x7d9ea5,norm:0xb8a36a,q:0x789abf,k:0xa394bd,v:0x5da995,score:0x879bb3,mask:0xb4a27d,softmax:0xc9a068,ropeq:0x789abf,ropek:0xa394bd,aggregate:0x64a68f,output:0x6c9a92,attention:0x729ca3,residual1:0xc3a26f,ffnblock:0x9a94b4,residual2:0xc3a26f,lmhead:0xb79b6b,pick:0x639b7a,invert:0xb88475,step:0x7f9aa7,feedback:0xb49769,load:0xa8a18c,enembed:0x7d9ea5,enqkv:0x789abf,enattn:0xa394bd,enffn:0x5da995,enhead:0xb79b6b};
+M.extraColors.attentionweights=0xc9a068;
 const next=[1,2,0,4,5,3];
 M.operations={embedding:([ids])=>flat(ids.map(i=>{if(!emb[i])throw {message:I18n.t("词表中没有这个 ID。")};return emb[i];})),norm:([v])=>normalize(v),q:([x])=>mat(x,Wq),k:([x])=>mat(x,Wk),v:([x])=>mat(x,Wv),score:([q,k])=>scores(q,k),mask:([s])=>causal(s),softmax:([s])=>probabilities(s),ropeq:([q])=>rotate(q),ropek:([k])=>rotate(k),aggregate:([a,v])=>mix(a,v),output:([x])=>mat(x,Wo),attention:([x])=>attention(x),residual1:([a,b])=>a.map((x,i)=>x+b[i]),ffnblock:([x])=>ffn(x),residual2:([a,b])=>a.map((x,i)=>x+b[i]),lmhead:([x])=>logits(x),pick:([x])=>sample(x),invert:([x])=>x.map(n=>-n),step:([ids])=>flat(ids.map(i=>vocab.map((_,j)=>j===next[i]?4:-1))),feedback:([ids],ctx)=>[...ctx.input.slice(1),ids[2]],load:([x])=>x,enembed:([x])=>x,enqkv:([x])=>{const z=normalize(x);return [...mat(z,Wq),...mat(z,Wk),...mat(z,Wv)];},enattn:([x])=>mat(mix(probabilities(causal(scores(rotate(x.slice(0,6)),rotate(x.slice(6,12))))),x.slice(12,18)),Wo),enffn:([x])=>x.map((v,i)=>v+ffn(x)[i]),enhead:([x])=>x};
 const sequenceSamples=[{word:I18n.t("我 / 爱 / 猫"),v:[1,0,0,1,1,1]},{word:I18n.t("你 / 恨 / 狗"),v:[-1,0,0,-1,-1,-1]},{word:I18n.t("猫 / 我 / 爱"),v:[1,1,1,0,0,1]}];
+M.operations.attentionweights=([x])=>attentionWeights(x);
 const idSamples=[{word:I18n.t("我 / 爱 / 猫"),v:[0,1,2]},{word:I18n.t("你 / 恨 / 狗"),v:[3,4,5]},{word:I18n.t("猫 / 我 / 爱"),v:[2,0,1]}];
 const extra={};
 function add(id,number,title,nodes,mission,description,options={}){
@@ -72,6 +76,10 @@ add('attention',7,I18n.t("把关注变成内容"),['q','k','v','ropeq','ropek','
 add('block',8,I18n.t("让一层接起来"),['norm','attention','residual1','ffnblock','residual2'],I18n.t("Attention 与 FFN 都要接回原路"),I18n.t("用已经完成的模块搭一层。Attention 先接收归一化输入，FFN 模块内部已含自己的归一化。两次残差要找对各自的原输入。"),{initialLinks:{norm:['R'],attention:['norm']},outputTitle:I18n.t("本层特征 Y")});
 add('vocabulary',9,I18n.t("让特征真正变成词"),['lmhead','pick','invert'],I18n.t("让词表分数读出「我爱猫」"),I18n.t("这一关才把特征变成文字。词表投影为每个候选词算分，取最高分。改变特征会改变文字；词一样也不保证全部数值正确。"),{initialLinks:{invert:['R'],lmhead:['invert'],pick:['lmhead']},initialSink:'pick',sinkDim:3,outputTitle:I18n.t("预测 Token ID"),shape:'3 × 2 → 3 × 6 → 3',tokenOutput:true});
 add('autoregressive',10,I18n.t("把刚生成的词送回来"),['step','pick','feedback'],I18n.t("让上下文前进一步"),I18n.t("小模型已为下一词算分。输出应是追加新词后的最后三个位置，而不是三个独立预测。连续试跑可以看见解码循环。"),{sourceDim:3,initialLinks:{step:['R'],pick:['step']},initialSink:'pick',sinkDim:3,outputTitle:I18n.t("更新后的上下文"),shape:I18n.t("上下文 → 下一词 → 追加"),tokenOutput:true});
+add('softmax',4,I18n.t("把分数变成比例"),['q','k','score','softmax'],I18n.t("让每组匹配分数变成和为 1 的权重"),I18n.t("Q/K 和打分已经接好。本关只加入 Softmax，把可能为负的分数变成非负比例，先不遮住未来位置。"),{initialLinks:{q:['R'],k:['R'],score:['q','k']},initialSink:'score',sinkDim:9,outputTitle:I18n.t("注意力权重 A"),shape:'3 × 3 → 3 × 3',attentionReadout:true});
+add('rotation',6,I18n.t("先转动一份 Q"),['q','ropeq'],I18n.t("让不同位置的 Q 转过不同角度"),I18n.t("Q 投影已经接好。先观察一个二维向量怎样旋转：第一个位置不转，后两个位置分别转 1、2 弧度。这一关只处理 Q。"),{initialLinks:{q:['R']},initialSink:'q',outputTitle:I18n.t("旋转后的 Q"),shape:'3 × 2 → 3 × 2',boardWidth:18,boardDepth:8,sourceX:-6.5,sinkX:6.5,zoom:.9});
+add('aggregation',8,I18n.t("按比例汇入内容"),['attentionweights','v','aggregate'],I18n.t("把三个位置的 V 按权重加起来"),I18n.t("前几关算出的权重已封装好，V 投影也已接到输入。本关只练加权汇合，让每个位置得到新的两个特征。"),{initialLinks:{attentionweights:['R'],v:['R']},outputTitle:I18n.t("汇合特征 O"),shape:'3 × 3 + 3 × 2 → 3 × 2',attentionReadout:true,boardWidth:20,boardDepth:9,sourceX:-7.5,sinkX:7.5,zoom:.96});
+add('vocabulary-scores',11,I18n.t("先给候选词打分"),['lmhead'],I18n.t("让每个位置得到六个候选词分数"),I18n.t("词表投影仍然是矩阵运算，只是每个输出对应一个候选词。先看清这些分数，下一关再决定选哪个词。"),{sinkDim:18,outputTitle:I18n.t("词表分数 L"),shape:'3 × 2 → 3 × 6',boardWidth:18,boardDepth:8,sourceX:-6.5,sinkX:6.5,zoom:.9});
 const engineNodes=['load','enembed','enqkv','enattn','enffn','enhead'];
 const engineBase={engine:true,sequence:true,initialLinks:serial(engineNodes),initialSink:'enhead',devices:{load:'cpu',enembed:'cpu',enqkv:'gpu',enattn:'gpu',enffn:'gpu',enhead:'cpu'},settings:{},sampleCount:3,boardWidth:25,boardDepth:13,zoom:1.2,sourceX:-10.5,sinkX:10.5,outputTitle:I18n.t("输出特征 / 预测词"),sourceTitle:I18n.t("提示词特征"),sourceNote:I18n.t("调度不同，计算目标相同"),shape:'CPU · GPU · ANE',tokenReadout:true};
 function engine(id,num,title,mission,description,options){add(id,num,title,engineNodes,mission,description,{...engineBase,...options});extra[id].chapter=I18n.t("番外 / ")+String(num).padStart(2,'0');extra[id].boardText='ENGINE / '+String(num).padStart(2,'0');}
@@ -85,6 +93,10 @@ engine('parallel',7,I18n.t("GPU 与 ANE 一起工作"),I18n.t("首词 ≤ 78 ms�
 engine('session',8,I18n.t("下一轮不用从头读"),I18n.t("第二轮首词 ≤ 60 ms，内存 ≤ 24 GB"),I18n.t("两轮提示共用一段前缀。复用匹配的前缀状态，只计算新增部分；更长上下文会增加 KV 内存。"),{controls:['prefix','context','precision'],settings:{batch:16,layout:'channels',precision:8,cache:true,fusion:true,resident:true,split:40,prefix:false,context:2048},limits:{second:60,memory:24,error:.30}});
 engine('capstone',9,I18n.t("让引擎真的跑得动"),I18n.t("通过两种负载的验收"),I18n.t("长提示和多轮长上下文都要通过。检查正确性、内存、首词与解码速度；完成后可继续试更快的方案。"),{controls:['layout','batch','cache','precision','fusion','resident','split','prefix','context'],settings:{batch:1,layout:'sequence',precision:16,cache:false,fusion:false,resident:false,split:0,prefix:false,context:2048},limits:{ttft:110,tps:45,memory:24,error:.30,second:65,aneMin:15,scratch:650},workloads:[{prompt:128,context:2048},{prompt:256,context:4096}],devices:Object.fromEntries(engineNodes.map(k=>[k,'cpu']))});
 const rationales={
+ softmax:{title:I18n.t("为什么分数不能直接当比例？"),text:I18n.t("打分可能为负，大小和总和也不固定。Softmax 先把它们变成正数，再除以总和，让每个查询位置的权重加起来为 1。"),takeaway:I18n.t("相同的三个分数会得到各约 1/3；其中一个更高，它分到的比例就更大。这里只学分配比例，下一关才限制哪些位置可以参与。")},
+ rotation:{title:I18n.t("旋转给向量带来了什么？"),text:I18n.t("旋转保留向量长度，却改变方向。例如 [1, 0] 转过 90° 会成为 [0, 1]。按位置使用不同角度，可以让同样的特征带上位置差异。"),takeaway:I18n.t("本关只看旋转本身。下一关同时旋转 Q 和 K，它们的夹角差才会把相对位置带入匹配分数。"),scope:I18n.t("RoPE 是后来的位置编码方法。2017 年原始 Transformer 使用加到词向量上的正弦位置编码。")},
+ aggregation:{title:I18n.t("有了比例，为什么还要汇合？"),text:I18n.t("权重只回答“各取多少”，V 才提供要取的特征。把每份 V 乘上它的权重，再将这些向量相加，当前位置才能收到其他位置带来的内容。"),takeaway:I18n.t("例如取 [2, 0] 的 25%，再取 [0, 4] 的 75%，得到 [0.5, 3]。这里需要把不同来源加起来，和前面只配对、不求和的逐元素相乘不同。")},
+ 'vocabulary-scores':{title:I18n.t("为什么要先得到整组候选分数？"),text:I18n.t("网络中的两个特征还不是文字。词表投影为每个候选词准备一组权重，计算这个特征向量对各个候选词的分数。"),takeaway:I18n.t("六个分数对应“我、爱、猫、你、恨、狗”六个候选。分数可以为负，尚未做选择，也还不是概率。")},
  embedding:{
   title:I18n.t("为什么编号要换成向量？"),
   text:I18n.t("Token ID 只是查表地址，编号相邻不代表含义相近。词向量表把编号换成可参与矩阵计算的特征，后面的层才能处理这些特征之间的关系。"),
@@ -192,7 +204,27 @@ for(const [id,maxModules]of [['ffn',8],['attention',12],['block',7]]){
 }
 // Combine the two formerly identical stocks without reducing existing circuits' capacity.
 M.levels.ffn.inventory.project=4;
+// Teach individual operations before assembling modern FFNs and Attention.
+// Level IDs and saved circuits remain stable when their chapter changes.
+const chapters=[
+ {prefix:I18n.t("序章 / "),board:'PROLOGUE',ids:['wire','projection','activation','down-projection','plain-ffn','residual','workshop']},
+ {prefix:I18n.t("FFN 进阶 / "),board:'FFN',ids:['gate-projection','pairwise','gating','swiglu','normalize','ffn']},
+ {prefix:I18n.t("网络 / "),board:'NETWORK',ids:['embedding','qkv','scores','softmax','causal','rotation','rope','aggregation','attention','block','vocabulary-scores','vocabulary','autoregressive']}
+];
+chapters.forEach(({prefix,board,ids})=>ids.forEach((id,i)=>{M.levels[id].chapter=prefix+String(i+1).padStart(2,'0');M.levels[id].boardText=board+' / '+String(i+1).padStart(2,'0');}));
+M.levels.residual.concept=I18n.t("在已有结果上加入残差");
+M.levels.residual.description=I18n.t("前面已经练过降维，桌上的两块投影也已接好并算出修改量 F。本关只加入残差相加，让出口得到 X + F。五组输入都要匹配。");
+M.levels.residual.rationale.scope=I18n.t("本关用接好的线性支路提供修改量，专门练 X + F；也可以把这条支路换成上一关的 FFN。真实网络中的直连路径还有助于训练信号回传。");
+M.levels.gating.summary=I18n.t("相乘已经学会，现在把熟悉的 SiLU 加到门支路。这里只组合已学运算。");
+M.levels.gating.description=I18n.t("两种投影和逐元素相乘都已练过。本关让门投影的 G 经过 SiLU 变成系数，再调节另一条支路的内容。连接熟悉的模块，让五组输入都匹配。");
+M.levels.normalize.description=I18n.t("前面逐个试跑的向量，这里放在一起展示；仍各自除以自己的均方根，维度与位置顺序不变。本关的缩放权重设为 1。");
+M.levels.normalize.rationale.scope=I18n.t("这里学的是 RMSNorm，方便理解下一关的 Z 从哪里来。2017 年原始 Transformer 使用 LayerNorm，两者不是同一个运算。");
+M.levels.ffn.description=I18n.t("把已学过的 SwiGLU、归一化和残差组合起来。R 是原输入，Z = RMSNorm(R) 已由上游准备好；从组件架搭建，让出口得到更新后的特征。");
+M.levels.ffn.sourceNote=I18n.t("R 是原输入，Z 是它归一化后的结果");
+M.levels.ffn.rationale.text=I18n.t("先用归一化输入加工出 FFN 的修改量，再加回原输入。这里将前几关各自完成的计算接起来；后面学习 Attention 后，还会把这段放进完整网络层。");
 M.routes={main:{name:I18n.t("主线 · Transformer"),description:I18n.t("从向量与矩阵开始，亲手搭出 Attention、FFN 和逐词生成。"),ids:Object.keys(M.levels).filter(id=>!M.levels[id].engine)},engine:{name:I18n.t("番外 · 端侧推理"),description:I18n.t("以 Qwen 27B、Kapitsa 与 Apple ANE 为背景的独立挑战，使用教学成本模型。"),ids:Object.keys(M.levels).filter(id=>M.levels[id].engine)}};
+M.routes.main.ids=chapters.flatMap(chapter=>chapter.ids);
+M.routes.main.description=I18n.t("先练单路计算与残差，再进入 SwiGLU 进阶，最后组装 Attention 与逐词生成。每段先学单个运算，再做综合关。");
 for(const [track,route]of Object.entries(M.routes))route.ids.forEach((id,i)=>{M.levels[id].track=track;M.levels[id].next=route.ids[i+1]||null;});
 M.samplesFor=id=>M.levels[id]?.sequence?(M.levels[id].sourceDim===3?idSamples:sequenceSamples):M.samples;
 const oldReference=M.reference;
@@ -203,11 +235,15 @@ M.reference=(v,id)=>{
  if(id==='normalize')return normalize(v);
  if(id==='qkv')return vv;
  if(id==='scores')return scores(q,k);
+ if(id==='softmax')return probabilities(scores(q,k));
  if(id==='causal')return probabilities(causal(scores(q,k)));
+ if(id==='rotation')return rotate(q);
  if(id==='rope')return scores(rotate(q),rotate(k));
+ if(id==='aggregation')return mix(attentionWeights(v),vv);
  if(id==='attention')return attention(v);
  if(id==='block')return block(v);
  if(id==='vocabulary')return decode(v);
+ if(id==='vocabulary-scores')return logits(v);
  if(id==='autoregressive')return [...v.slice(1),next[v[2]]];
  if(M.levels[id].engine){const a=attention(normalize(v));return a.map((x,i)=>x+ffn(a)[i]);}
  throw new Error('Unknown level '+id);
@@ -233,9 +269,11 @@ M.extraExample=(id,levelId)=>{if(!M.operations[id])return null;const s=M.solutio
 // Reference circuits are for automated verification only, never auto-filled by UI.
 M.solutions=id=>{const s=M.initial(id,{complete:true}),links={workshop:{project:['R'],sink:'project'},
  wire:{sink:'R'},projection:{project:['R'],sink:'project'},activation:{project:['R'],silu:['project'],sink:'silu'},
+ 'down-projection':{project:['R'],down:['project'],sink:'down'},'plain-ffn':{project:['R'],silu:['project'],down:['silu'],sink:'down'},'gate-projection':{gate:['R'],sink:'gate'},pairwise:{project:['R'],gate:['R'],multiply:['gate','project'],sink:'multiply'},swiglu:{gate:['R'],project:['R'],silu:['gate'],multiply:['silu','project'],down:['multiply'],sink:'down'},
  gating:{gate:['R'],project:['R'],silu:['gate'],multiply:['silu','project'],sink:'multiply'},residual:{project:['R'],down:['project'],add:['R','down'],sink:'add'},ffn:{gate:['Z'],project:['Z'],silu:['gate'],multiply:['silu','project'],down:['multiply'],add:['R','down'],sink:'add'},
  embedding:{embedding:['R'],sink:'embedding'},normalize:{norm:['R'],sink:'norm'},qkv:{q:['R'],k:['R'],v:['R'],sink:'v'},scores:{q:['R'],k:['R'],score:['q','k'],sink:'score'},
  causal:{q:['R'],k:['R'],score:['q','k'],mask:['score'],softmax:['mask'],sink:'softmax'},rope:{q:['R'],k:['R'],ropeq:['q'],ropek:['k'],score:['ropeq','ropek'],sink:'score'},
+ softmax:{q:['R'],k:['R'],score:['q','k'],softmax:['score'],sink:'softmax'},rotation:{q:['R'],ropeq:['q'],sink:'ropeq'},aggregation:{attentionweights:['R'],v:['R'],aggregate:['attentionweights','v'],sink:'aggregate'},'vocabulary-scores':{lmhead:['R'],sink:'lmhead'},
  attention:{q:['R'],k:['R'],v:['R'],ropeq:['q'],ropek:['k'],score:['ropeq','ropek'],mask:['score'],softmax:['mask'],aggregate:['softmax','v'],output:['aggregate'],sink:'output'},
  block:{norm:['R'],attention:['norm'],residual1:['R','attention'],ffnblock:['residual1'],residual2:['residual1','ffnblock'],sink:'residual2'},
  vocabulary:{lmhead:['R'],pick:['lmhead'],invert:['R'],sink:'pick'},autoregressive:{step:['R'],pick:['step'],feedback:['pick'],sink:'feedback'}};

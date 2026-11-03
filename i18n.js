@@ -11,7 +11,7 @@
  function t(source){
   if(!active||language()==='zh'||typeof source!=='string')return source;
   if(Object.prototype.hasOwnProperty.call(catalog,source))return catalog[source];
-  const chapter=source.match(/^(序章|正式关卡|网络|引擎|番外) \/ (\d+)$/);
+  const chapter=source.match(/^(序章|正式关卡|网络|引擎|番外|FFN 进阶) \/ (\d+)$/);
   if(chapter)return t(chapter[1])+' / '+chapter[2];
   if(/[\u3400-\u9fff]/.test(source))missing.add(source);
   return source;

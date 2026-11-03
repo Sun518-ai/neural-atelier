@@ -8,7 +8,7 @@
 
 **[Play in your browser →](https://hacking.pub/games/neural-atelier/)** · [Run locally](#run-locally) · [How to play](#how-to-play)
 
-26 levels · Desktop / WebGL 2 · English + Chinese · No account required
+35 levels · Desktop / WebGL 2 · English + Chinese · No account required
 
 ## Inside the workshop
 
@@ -24,13 +24,16 @@ The circuit you build determines the result. Run it to see data move through the
 
 ## From the first wire to an inference engine
 
-The **17-level main track** covers Transformer fundamentals. A separate **9-level bonus track** explores on-device inference inspired by Qwen 27B, Kapitsa, and Apple ANE. Finishing the main track does not send you into the bonus track; choose either from the level menu.
+The **26-level main track** teaches basic operations before combining them into modern Transformer designs. A separate **9-level bonus track** explores on-device inference inspired by Qwen 27B, Kapitsa, and Apple ANE. Finishing the main track does not send you into the bonus track; choose either from the level menu.
 
 | Stage | What you build and explore |
 | --- | --- |
-| **Foundations · 7 levels** | Route a vector, apply a matrix, add activation and gating, reconnect a residual path, and assemble an FFN. |
-| **Transformer · 10 levels** | Connect embeddings, normalization, Q/K/V, attention scores, causal masking, RoPE, and attention. Assemble a block, predict a token, and feed it back into the context. |
+| **Prologue · 7 levels** | Route a vector, project, activate, down-project, assemble a single-branch FFN, add a residual, and practice placing modules. |
+| **FFN advanced · 6 levels** | Explore different weights, multiply matching entries, add gating, finish SwiGLU, learn RMSNorm, and assemble the full residual update. |
+| **Network · 13 levels** | Learn Q/K/V, scores, softmax, masking, rotation, and weighted aggregation separately before building Attention. Score candidate tokens before selecting and feeding them back. |
 | **On-device inference · 9 levels** | Place work on CPU, GPU, and ANE; explore tensor layouts, batching, KV caching, quantization, fusion, parallel execution, and prefix reuse. |
+
+The teaching order is not a reconstruction of the 2017 architecture. The single-branch lesson uses SiLU instead of the original ReLU; SwiGLU, RMSNorm, and RoPE are identified as later designs.
 
 The later puzzles add memory and execution-cost constraints to the numerical goals. A correct circuit is the starting point; choosing where and how it runs becomes part of the puzzle.
 
@@ -53,9 +56,9 @@ The later puzzles add memory and execution-cost constraints to the numerical goa
 
 The left shelf starts in its smallest size. Use **− / +** to resize it, **Hide shelf** to collapse it, and **Module shelf** to reopen it. Your chosen size is remembered.
 
-The first five lessons provide fixed modules. **[Take a module](https://hacking.pub/games/neural-atelier/#workshop)** is a short placement tutorial with just one familiar projection. Later construction levels allow multiple copies, each with independent connections. The shelf shows remaining stock and the table limit: **8** modules for the FFN, **12** for Attention, and **7** for the Transformer block. Each module type has two copies, except the FFN's four linear projections, which combine the formerly identical linear and content projection stocks. Returning a module restores its stock. Existing saves keep all copies, positions, and wires after the merge.
+The first six lessons provide fixed modules. **[Take a module](https://hacking.pub/games/neural-atelier/#workshop)** is a short placement tutorial with just one familiar projection. Later construction levels allow multiple copies, each with independent connections. The shelf shows remaining stock and the table limit: **8** modules for the FFN, **12** for Attention, and **7** for the Transformer block. Each module type has two copies, except the FFN's four linear projections, which combine the formerly identical linear and content projection stocks. Returning a module restores its stock. Existing saves keep all copies, positions, and wires after the merge.
 
-The FFN reuses **Linear projection** for its content branch; the card explains this role and compares it with the different weights in **Gate projection**. The first full level introduces **SwiGLU** by connecting the prologue's two-branch gating and down projection, with a small diagram and numerical example. Residual addition then adds the FFN update to the original input.
+The FFN reuses **Linear projection** for its content branch; the card explains this role and compares it with the different weights in **Gate projection**. The advanced FFN chapter introduces **SwiGLU** only after single-branch computation and residuals. Separate lessons cover different weights, elementwise multiplication, gating, and down projection; RMSNorm is taught before the final puzzle uses normalized input. Existing level links, circuits, and completion records stay valid after reordering.
 
 **Settings** brings together language, animation speed, music, and volume. Language follows your browser preference unless you choose one manually. Runs start at **0.25×** by default so the computation is easy to follow; your chosen speed is remembered.
 
@@ -96,7 +99,7 @@ Neural Atelier is a **static frontend** written in HTML, CSS, and JavaScript, wi
 | --- | --- |
 | `index.html`, `style.css` | Page structure and styling |
 | `game.js` | Interaction, scene, wiring, run animation, and level navigation |
-| `model.js` | Core arithmetic, circuit validation, and the first six levels |
+| `model.js` | Scalar operators, circuit validation, and introductory FFN levels |
 | `campaign.js` | Later levels and miniature Transformer calculations |
 | `engine-model.js` | Teaching cost model for scheduling, memory, and quantization |
 | `scene-art.js`, `module-cards.js` | 3D module artwork and illustrated cards |

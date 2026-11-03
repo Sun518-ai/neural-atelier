@@ -31,7 +31,7 @@ for(const id of Object.keys(M.levels))test(id+' reference circuit matches three 
  const s=M.solutions(id);if(M.levels[id].engine)s.settings.precision=16;
  for(const t of M.samplesFor(id).slice(0,M.levels[id].sampleCount)){const e=M.evaluate(s,t.v);assert.equal(e.error,null);assert.ok(close(e.output,M.reference(t.v,id)),id+': '+e.output+' ≠ '+M.reference(t.v,id));}
 });
-test('main and bonus tracks are separate, complete and have no dangling links',()=>{const visited=[];for(const [track,route]of Object.entries(M.routes)){let id=route.ids[0],ids=[];while(id){assert.ok(!visited.includes(id));assert.equal(M.levels[id].track,track);visited.push(id);ids.push(id);id=M.levels[id].next;}assert.deepEqual(ids,Array.from(route.ids));}assert.equal(visited.length,Object.keys(M.levels).length);assert.equal(M.levels.autoregressive.next,null);assert.equal(M.routes.main.ids.length,17);assert.equal(M.routes.engine.ids.length,9);for(const id of visited){const s=M.initial(id),allowed=new Set([...s.nodes.map(n=>n.id),...M.levels[id].sources]);for(const n of s.nodes)for(const link of n.links)assert.ok(link===null||allowed.has(link));}});
+test('main and bonus tracks are separate, complete and have no dangling links',()=>{const visited=[];for(const [track,route]of Object.entries(M.routes)){let id=route.ids[0],ids=[];while(id){assert.ok(!visited.includes(id));assert.equal(M.levels[id].track,track);visited.push(id);ids.push(id);id=M.levels[id].next;}assert.deepEqual(ids,Array.from(route.ids));}assert.equal(visited.length,Object.keys(M.levels).length);assert.equal(M.levels.autoregressive.next,null);assert.equal(M.routes.main.ids.length,26);assert.equal(M.routes.engine.ids.length,9);for(const id of visited){const s=M.initial(id),allowed=new Set([...s.nodes.map(n=>n.id),...M.levels[id].sources]);for(const n of s.nodes)for(const link of n.links)assert.ok(link===null||allowed.has(link));}});
 test('causal attention cannot read future V',()=>{const s=M.solutions('attention'),a=M.evaluate(s,[1,0,0,1,1,1]),b=M.evaluate(s,[1,0,0,1,-8,3]);assert.ok(close(a.output.slice(0,4),b.output.slice(0,4)));const weights=a.values.softmax;for(let i=0;i<3;i++){assert.ok(Math.abs(weights.slice(i*3,i*3+3).reduce((a,b)=>a+b,0)-1)<1e-12);for(let j=i+1;j<3;j++)assert.equal(weights[i*3+j],0);}});
 test('RoPE preserves each vector norm and position zero',()=>{const x=[2,3,4,5,-1,2],r=M.math.rotate(x);assert.deepEqual(Array.from(r.slice(0,2)),[2,3]);for(let i=0;i<3;i++)assert.ok(Math.abs(r[2*i]**2+r[2*i+1]**2-x[2*i]**2-x[2*i+1]**2)<1e-12);});
 test('same dimensions but wrong activation branch fails',()=>{const s=M.solutions('gating');s.nodes.find(n=>n.id==='silu').links=['project'];s.nodes.find(n=>n.id==='multiply').links=['silu','gate'];assert.ok(M.samples.some(t=>!close(M.evaluate(s,t.v).output,M.reference(t.v,'gating'))));});
@@ -88,4 +88,37 @@ test('one linear projection stock replaces the content operator and keeps the co
 test('an alternate attention instance uses its own operator and its connected attention map',()=>{
  const s=M.solutions('attention'),original=s.nodes.find(n=>n.id==='softmax');original.id='softmax-2';original.kind='softmax';s.nodes.find(n=>n.id==='aggregate').links[0]='softmax-2';
  const ev=M.evaluate(s,M.samplesFor('attention')[0].v);assert.equal(ev.error,null);assert.ok(close(ev.output,M.reference(M.samplesFor('attention')[0].v,'attention')));assert.equal(M.valueForKind(s,ev,'softmax'),ev.values['softmax-2']);
+});
+
+test('bridge lessons precede compositions and each starts with a real unsolved task',()=>{
+ const order=Array.from(M.routes.main.ids),before=(a,b)=>assert.ok(order.indexOf(a)<order.indexOf(b),a+' must precede '+b);
+ for(const chain of [['activation','down-projection','plain-ffn','residual','workshop','gate-projection','pairwise','gating','swiglu','normalize','ffn'],['scores','softmax','causal','rotation','rope','aggregation','attention'],['vocabulary-scores','vocabulary','autoregressive']])for(let i=1;i<chain.length;i++)before(chain[i-1],chain[i]);
+ for(const id of ['down-projection','plain-ffn','gate-projection','pairwise','swiglu','softmax','rotation','aggregation','vocabulary-scores']){
+  const s=M.initial(id);assert.ok(!M.levels[id].buildable,id+' teaches with fixed modules');
+  assert.ok(M.samplesFor(id).slice(0,M.levels[id].sampleCount).some(t=>{const ev=M.evaluate(s,t.v);return ev.error||!close(ev.output,M.reference(t.v,id));}),id+' should not start solved');
+ }
+});
+
+test('FFN bridge lessons distinguish activation, pairing, and normalized residual updates',()=>{
+ for(const t of M.samples.slice(0,3)){
+  const x=t.v,p=M.linear(x,M.weights.project),g=M.linear(x,M.weights.gate);
+  assert.ok(close(M.reference(x,'pairwise'),p.map((v,i)=>v*g[i])));
+  const swapped=M.solutions('pairwise');swapped.nodes.find(n=>n.id==='multiply').links.reverse();assert.ok(close(M.evaluate(swapped,x).output,M.reference(x,'pairwise')),'pairing is commutative');
+  const update=M.reference(M.norm(x),'swiglu');assert.ok(close(update.map((v,i)=>v+x[i]),M.reference(x,'ffn')),'normalization and residual finish the same SwiGLU computation');
+ }
+ const skipped=M.solutions('plain-ffn');skipped.nodes.find(n=>n.id==='down').links=['project'];
+ assert.ok(M.samples.some(t=>!close(M.evaluate(skipped,t.v).output,M.reference(t.v,'plain-ffn'))),'bypassing activation must not solve the single-branch lesson');
+ const self=M.solutions('pairwise');self.nodes.find(n=>n.id==='multiply').links=['project','project'];
+ assert.ok(M.samples.some(t=>!close(M.evaluate(self,t.v).output,M.reference(t.v,'pairwise'))),'squaring one branch must not solve the pairing lesson');
+});
+
+test('attention bridge output matches the corresponding computations inside full Attention',()=>{
+ for(const t of M.samplesFor('attention')){
+  const full=M.evaluate(M.solutions('attention'),t.v),gather=M.evaluate(M.solutions('aggregation'),t.v),weights=gather.values.attentionweights;
+  assert.ok(close(weights,full.values.softmax));assert.ok(close(gather.output,full.values.aggregate));
+  assert.ok(close(M.linear(gather.output.slice(0,2),M.weights.output),full.output.slice(0,2)));
+  const a=M.reference(t.v,'softmax');
+  for(let i=0;i<3;i++){assert.ok(a.slice(i*3,i*3+3).every(v=>v>0),'unmasked softmax keeps all positions');assert.ok(Math.abs(a.slice(i*3,i*3+3).reduce((sum,v)=>sum+v,0)-1)<1e-12);}
+  const l=M.reference(t.v,'vocabulary-scores');assert.equal(l.length,18);assert.ok(close(M.operations.pick([l]),M.reference(t.v,'vocabulary')));
+ }
 });

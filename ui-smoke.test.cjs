@@ -14,7 +14,7 @@ function boot(storage=new Map(),hash='',languages=['zh-CN']){
  vm.runInContext(code+`\nworld={relocalize(){},labels(){},rebuild(){},beforeStage(){},setStage(){},clearPackets(){},focused(){return null},async animate(){}};refresh();`,c);
  return {c,document,window,storage,location,navigation,hashchange,eval:code=>vm.runInContext(code,c)};
 }
-test('all 26 levels automatically display their report beside the run controls',async()=>{
+test('all levels automatically display their report beside the run controls',async()=>{
  const app=boot(),M=app.c.NeuralPrologue;
  for(const id of Object.keys(M.levels)){
   app.eval(`switchLevel('${id}');state=M.solutions(stageId);if(stage().engine)state.settings.precision=16;`);
@@ -79,7 +79,7 @@ test('partially constructed tables and older complete saves retain their positio
  const legacy=boot(new Map([['neural-atelier-prologue-v1',JSON.stringify(old)]]));assert.equal(legacy.eval('stageId'),'ffn');assert.equal(legacy.eval('state.nodes.length'),6);assert.equal(legacy.eval('state.nodes[0].x'),1.234);assert.equal(legacy.eval('state.sink'),'add');
 });
 test('bonus levels are accessible separately and never follow the main finale',()=>{
- const app=boot(new Map(),'', ['en-US']);app.eval('levelMenu()');assert.equal(app.document.querySelectorAll('[data-level]').length,17);assert.equal(app.document.querySelector('[data-level="placement"]'),null);
+ const app=boot(new Map(),'', ['en-US']);app.eval('levelMenu()');assert.equal(app.document.querySelectorAll('[data-level]').length,26);assert.equal(app.document.querySelector('[data-level="placement"]'),null);
  app.document.querySelector('[data-track="engine"]').dispatchEvent(new app.window.Event('click',{bubbles:true}));assert.equal(app.document.querySelectorAll('[data-level]').length,9);assert.ok(app.document.querySelector('[data-level="placement"]'));assert.doesNotMatch(app.document.querySelector('#level-menu').textContent,/[\u3400-\u9fff]/);
  app.eval("switchLevel('autoregressive');progress.complete(stageId);refresh()");assert.equal(app.document.querySelector('#next-level').hidden,true);app.eval("switchLevel('kv-cache');levelMenu()");assert.equal(app.eval('menuTrack'),'engine');
 });
@@ -102,7 +102,7 @@ function completedCircuit(M,id){
 
 test('completion waits for every input, replay preserves the circuit and undo, and next loads the saved destination',async()=>{
  const app=boot(),dialog=app.document.querySelector('#level-complete');app.document.querySelector('#run').focus=()=>{};
- app.eval("switchLevel('ffn');state=M.solutions(stageId);state.nodes[0].x+=.2;save();window.destination=JSON.stringify(state);switchLevel('workshop');state=M.solutions(stageId);checkpoint();state.nodes[0].z+=.25;save();setPlaybackSpeed(.5)");
+ app.eval("switchLevel(M.levels.workshop.next);state=M.solutions(stageId);state.nodes[0].x+=.2;save();window.destination=JSON.stringify(state);switchLevel('workshop');state=M.solutions(stageId);checkpoint();state.nodes[0].z+=.25;save();setPlaybackSpeed(.5)");
  const before=app.eval('JSON.stringify(state)'),undo=app.eval('JSON.stringify(history)');
  let runs=0;
  app.eval('world.animate=async()=>{window.checkAnimation()}');
@@ -115,7 +115,7 @@ test('completion waits for every input, replay preserves the circuit and undo, a
  assert.equal(dialog.open,false);assert.equal(app.eval('busy'),false);assert.equal(runs,app.eval('stage().sampleCount'));assert.equal(app.eval('results.length'),0);assert.equal(app.document.querySelector('#run-report').hidden,true);
  assert.equal(app.eval('JSON.stringify(state)'),before);assert.equal(app.eval('JSON.stringify(history)'),undo);assert.equal(app.eval('playbackSpeed'),.5);
  await app.eval('run()');assert.equal(dialog.open,true);assert.equal(runs,2*app.eval('stage().sampleCount'));
- app.document.querySelector('#complete-next').onclick();assert.equal(dialog.open,false);assert.equal(app.location.hash,'#ffn');assert.equal(app.eval('JSON.stringify(state)'),app.c.destination);
+ app.document.querySelector('#complete-next').onclick();assert.equal(dialog.open,false);assert.equal(app.location.hash,'#'+app.c.NeuralPrologue.levels.workshop.next);assert.equal(app.eval('JSON.stringify(state)'),app.c.destination);
  app.eval("switchLevel('workshop')");assert.equal(app.eval('JSON.stringify(state)'),before);
 });
 
@@ -273,7 +273,7 @@ test('SwiGLU objective connects familiar modules to the FFN while keeping residu
  const app=boot(new Map(),'#ffn'),doc=app.document,saved=app.eval('JSON.stringify(state)');
  for(const language of ['zh','en']){
   app.c.I18n.setPreference(language);
-  const primer=doc.querySelector('.swiglu-primer');assert.ok(primer);assert.match(primer.textContent,/SwiGLU/);assert.match(primer.textContent,/04/);assert.match(primer.textContent,/05/);assert.match(primer.textContent,/SiLU/);
+  const primer=doc.querySelector('.swiglu-primer');assert.ok(primer);assert.match(primer.textContent,/SwiGLU/);assert.match(primer.textContent,language==='zh'?/归一化输入和残差/:/normalized input and residual/);assert.match(primer.textContent,/SiLU/);
   assert.equal(primer.querySelectorAll('.swiglu-branches>div').length,2);assert.equal(primer.querySelectorAll('.swiglu-merge b').length,2);
   assert.match(doc.querySelector('#mission-reason-takeaway').textContent,language==='zh'?/FFN 外/:/outside the FFN/);
   assert.match(doc.querySelector('#mission-reason-scope').textContent,/Swish/);
@@ -287,8 +287,42 @@ test('SwiGLU objective connects familiar modules to the FFN while keeping residu
  app.eval("switchLevel('ffn')");assert.ok(doc.querySelector('.swiglu-primer'));assert.equal(app.eval('JSON.stringify(state)'),saved);
  assert.deepEqual([...app.c.I18n.missing],[]);
 });
-test('the simple placement lesson introduces one familiar module between residuals and the FFN',()=>{
- const app=boot(new Map(),'#workshop',['en-US']);assert.equal(app.eval('state.nodes.length'),0);assert.equal(app.document.querySelectorAll('[data-add-module]').length,1);assert.equal(app.document.querySelector('#module-count').textContent,'0 / 1');assert.equal(app.eval('M.levels.residual.next'),'workshop');assert.equal(app.eval('M.levels.workshop.next'),'ffn');assert.doesNotMatch(app.document.querySelector('#module-shelf').textContent,/[\u3400-\u9fff]/);
+test('the simple placement lesson introduces one familiar module before the advanced FFN chapter',()=>{
+ const app=boot(new Map(),'#workshop',['en-US']);assert.equal(app.eval('state.nodes.length'),0);assert.equal(app.document.querySelectorAll('[data-add-module]').length,1);assert.equal(app.document.querySelector('#module-count').textContent,'0 / 1');assert.equal(app.eval('M.levels.residual.next'),'workshop');assert.equal(app.eval('M.levels.workshop.next'),'gate-projection');assert.doesNotMatch(app.document.querySelector('#module-shelf').textContent,/[\u3400-\u9fff]/);
+});
+
+test('reordered chapters preserve old circuits and completion while new lessons start fresh',()=>{
+ const storage=new Map(),app=boot(storage),kept=new Map();
+ for(const id of ['activation','gating','residual','workshop','ffn','normalize','attention']){
+  app.eval(`switchLevel('${id}');state=M.solutions(stageId);state.nodes[0].x+=.17;save();progress.complete(stageId)`);
+  kept.set(id,app.eval('JSON.stringify(state)'));
+ }
+ const reopened=boot(storage,'#gating');assert.equal(reopened.location.hash,'#gating');
+ for(const [id,circuit]of kept){reopened.eval(`switchLevel('${id}')`);assert.equal(reopened.eval('JSON.stringify(state)'),circuit);assert.equal(reopened.eval('progress.completed(stageId)'),true);}
+ reopened.eval("switchLevel('down-projection')");assert.equal(reopened.eval('progress.completed(stageId)'),false);assert.equal(reopened.eval('state.sink'),null);
+ reopened.eval('levelMenu()');assert.match(reopened.document.querySelector('[data-level="gating"]').textContent,/FFN 进阶/);
+ reopened.c.I18n.setPreference('en');assert.doesNotMatch(reopened.document.querySelector('#level-list').textContent,/[\u3400-\u9fff]/);
+ assert.deepEqual([...reopened.c.I18n.missing],[]);
+});
+
+test('bridge cards explain only their actual inputs and calculations in both languages',()=>{
+ const app=boot(),M=app.c.NeuralPrologue;
+ for(const language of ['zh','en']){
+  app.c.I18n.setPreference(language);
+  for(const id of ['down-projection','plain-ffn','gate-projection','pairwise','swiglu']){
+   app.eval(`switchLevel('${id}')`);const s=M.solutions(id);
+   for(const n of s.nodes){
+    const c=app.eval(`cardFor('${n.kind}','${id}')`),e=app.eval(`exampleFor(M,'${n.kind}','${id}')`),ev=M.evaluate(s,e.exampleSource[1]);
+    assert.deepEqual(Array.from(e.output[1]),Array.from(ev.values[n.id]));
+    e.inputs.forEach((input,i)=>assert.deepEqual(Array.from(input[1]),Array.from(ev.values[n.links[i]])));
+    if(language==='en')assert.doesNotMatch(c.meaning+c.purpose,/[\u3400-\u9fff]/);
+    if(id==='pairwise'||id==='gate-projection'){assert.equal(e.comparison,undefined);assert.equal(e.activation,undefined);}
+    if(id==='plain-ffn'&&n.kind==='down')assert.equal(c.formula,'F = S × Wd');
+    if(id==='down-projection'&&n.kind==='down')assert.equal(c.formula,'F = P × Wd');
+   }
+  }
+ }
+ assert.deepEqual([...app.c.I18n.missing],[]);
 });
 test('shelf sizing persists independently of circuits, language and the current level',()=>{
  const app=boot(new Map(),'#ffn',['en-US']),shelf=app.document.querySelector('#module-shelf');
