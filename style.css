@@ -61,6 +61,7 @@ body{min-width:1080px}#game{max-width:1920px;padding:18px 24px}main{grid-templat
 .module-card .card-silu-use{font-size:10px;margin:9px 0 5px;color:#857756}
 #mission-reason[hidden],#mission-reason [hidden]{display:none}#mission-reason{margin-top:13px;padding-top:11px;border-top:1px solid #cbd6c5}
 #mission-reason h3{font-size:12px;font-weight:600;color:#365a4d}#mission-reason p{font-size:11px;line-height:1.65;margin-top:6px}
+#mission-reason-text{white-space:pre-line}
 #mission-reason-example{margin-top:9px}#mission-reason-example table{width:100%;border-collapse:collapse}
 #mission-reason-example caption{text-align:left;margin-bottom:7px;font-size:10px;line-height:1.6;color:#60736c}
 #mission-reason-example th{text-align:left;font-size:9px;font-weight:500;color:#718477;padding-bottom:5px}#mission-reason-example td{padding:5px 0;border-top:1px solid #d3decd;font:10px/1.5 ui-monospace,monospace;white-space:nowrap}

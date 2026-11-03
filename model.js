@@ -25,7 +25,7 @@ const levels={
  activation:{id:'activation',chapter:I18n.t("序章 / 03"),title:I18n.t("让数值有弯曲"),nodes:['project','silu'],sources:['R'],sinkDim:4,sampleCount:3,sourceX:-6,sinkX:6,zoom:.83,boardWidth:17,boardDepth:7,
   positions:{project:[-2,0],silu:[2,0]},initialLinks:{project:['R']},initialSink:'project',
   mission:I18n.t("改变数值，保留四个特征"),description:I18n.t("投影已经能抵达出口，但目标是每个投影数经过 SiLU 后的结果。改动线路，让三个输入位置都匹配。"),summary:I18n.t("新增 SiLU。维度相同的两份向量，数值不一定相同。"),concept:I18n.t("投影与非线性"),sourceTitle:I18n.t("输入 X"),sourceNote:'',outputTitle:I18n.t("激活特征 S"),boardText:'ACTIVATION / 03',shape:'2 → 4 → 4',next:'gating',
-  rationale:{title:I18n.t("为什么矩阵后面还要有 SiLU？"),text:I18n.t("如果只是连续做矩阵乘法，多次计算仍能合并成一次矩阵乘法。SiLU 按每个数值改变缩放比例，让后续投影能够表达单纯线性组合做不到的关系。"),takeaway:I18n.t("例如 1 经过 SiLU 约为 0.73，−1 约为 −0.27；两者没有被同一个固定比例缩放。这就是这里的非线性。")},
+  rationale:{title:I18n.t("为什么矩阵后面还要有 SiLU？"),text:I18n.t("假设串联两个线性投影：A 是输入，B、C 是固定的权重矩阵。\n\n(A × B) × C = A × (B × C)\n\n先把 B、C 相乘得到新矩阵，就能代替这两层；对任何输入 A 都成立。\n\n用一个数举例：先乘 3，再乘 4，等于直接乘 12。\n分开算：(2 × 3) × 4 = 24\n合并算：2 × (3 × 4) = 2 × 12 = 24"),takeaway:I18n.t("所以，光堆线性层，仍然只是一次线性变换。SiLU 让缩放比例随数值变化：1 变为约 0.73，−1 变为约 −0.27。插在两层之间后，通常就不能合并为一个固定矩阵，从而能表达单纯线性变换做不到的关系。")},
   hints:[I18n.t("可以先试跑现有线路，比较出口的实际值与预期值。"),I18n.t("SiLU 对每个数单独计算，不改变向量长度；双击卡片可查看函数。")]},
  gating:{id:'gating',chapter:I18n.t("序章 / 04"),title:I18n.t("让两路相遇"),nodes:['gate','project','silu','multiply'],sources:['R'],sinkDim:4,sampleCount:5,sourceX:-8,sinkX:8,zoom:1,boardWidth:21,boardDepth:10,
   positions:{gate:[-4,-2],project:[-4,2],silu:[0,-2],multiply:[3.5,1.2]},initialLinks:{gate:['R'],project:['R']},
