@@ -6,6 +6,7 @@ export function createProgress(M,storage){
  const saved=read(metaKey),meta={current:M.levels[saved?.current]?saved.current:(read(legacy)?'ffn':'wire'),completed:(Array.isArray(saved?.completed)?saved.completed:[]).filter(id=>M.levels[id]),practiceRuns:{}};
  for(const [id,run]of Object.entries(saved?.practiceRuns||{}))if(M.levels[id]?.practice&&run&&typeof run.finished==='boolean'&&(!run.finished||typeof run.circuit==='string'))meta.practiceRuns[id]={finished:run.finished,...(run.finished?{circuit:run.circuit}:{})};
  const completedKey=id=>key(id)+'-completed';
+ const placementKey=id=>key(id)+'-before-placement';
  const circuitKey=(s,positions=false)=>JSON.stringify([s.sink,[...s.nodes].sort((a,b)=>a.id.localeCompare(b.id)).map(n=>[n.id,M.nodeKind(n),n.links,...(positions?[n.x,n.z]:[])])]);
  function mergeProjections(s){
   if(s?.version!==1||!Array.isArray(s.nodes))return s;
@@ -39,7 +40,16 @@ export function createProgress(M,storage){
   });
  }
  function load(id){
-  const s=validated(read(key(id)),id)||M.initial(id);if(!M.levels[id].practice)return s;
+  const l=M.levels[id];let s=validated(read(key(id)),id)||M.initial(id);
+  if(l.requirePlacement&&s.placementRevision!==1){
+   // Only the former auto-filled, still-unwired starting set is retired.
+   // Keep a recoverable copy, and never clear a connected or completed board.
+   const prepared=l.migratePreparedStart&&!meta.completed.includes(id)&&s.sink===null&&s.nodes.length===l.nodes.length&&s.nodes.every(n=>l.nodes.includes(n.id)&&M.nodeKind(n)===n.id&&n.links.every(x=>x===null));
+   if(prepared){if(!write(placementKey(id),s))return s;s=M.initial(id);}
+   else s={...s,placementRevision:1};
+   write(key(id),s);
+  }
+  if(!l.practice)return s;
   const run=meta.practiceRuns[id],finished=run?run.finished&&run.circuit===circuitKey(s):meta.completed.includes(id)&&solved(s,id);
   if(finished){
    // Keep the only copy if browser storage cannot archive it.
@@ -56,11 +66,11 @@ export function createProgress(M,storage){
   }
   write(key(id),state);
  }
- const previous=id=>M.levels[id]?.practice?validated(read(completedKey(id)),id):null;
+ const previous=id=>M.levels[id]?.practice?validated(read(completedKey(id)),id):M.levels[id]?.requirePlacement?validated(read(placementKey(id)),id):null;
  return {current:()=>meta.current,completed:id=>meta.completed.includes(id),load,
   save,
   canRestore(id,state){const s=previous(id);return !!s&&(!state||circuitKey(s,true)!==circuitKey(state,true));},
-  restore(id){const s=previous(id);if(!s)return null;meta.practiceRuns[id]={finished:false};write(metaKey,meta);write(key(id),s);return s;},
+  restore(id){let s=previous(id);if(!s)return null;if(M.levels[id].practice)meta.practiceRuns[id]={finished:false};if(M.levels[id].requirePlacement)s={...s,placementRevision:1};write(metaKey,meta);write(key(id),s);return s;},
   select(id){meta.current=id;write(metaKey,meta);},
   complete(id,state){
    if(!meta.completed.includes(id))meta.completed.push(id);

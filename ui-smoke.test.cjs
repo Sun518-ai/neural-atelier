@@ -293,10 +293,11 @@ test('the simple placement lesson introduces one familiar module before the orig
  const app=boot(new Map(),'#workshop',['en-US']);assert.equal(app.eval('state.nodes.length'),0);assert.equal(app.document.querySelectorAll('[data-add-module]').length,1);assert.equal(app.document.querySelector('#module-count').textContent,'0 / 1');assert.equal(app.eval('M.levels.residual.next'),'workshop');assert.equal(app.eval('M.levels.workshop.next'),'embedding');assert.doesNotMatch(app.document.querySelector('#module-shelf').textContent,/[\u3400-\u9fff]/);
 });
 
-test('the shelf remains usable after the placement tutorial on every track without discarding prepared boards',()=>{
+test('the shelf remains usable after the placement tutorial and original lessons begin empty',()=>{
  const app=boot(),M=app.c.NeuralPrologue,shelf=app.document.querySelector('#module-shelf');
  for(const [index,id]of M.routes.main.ids.entries()){
   app.eval(`switchLevel('${id}')`);assert.equal(shelf.hidden,index<6,id+' shelf visibility');
+  if(index>=6){assert.equal(app.eval('state.nodes.length'),0,id+' requires taking modules from the shelf');assert.equal(app.eval('state.sink'),null);}
  }
  for(const id of [...M.routes.modern.ids,...M.routes.engine.ids]){
   app.eval(`switchLevel('${id}')`);assert.equal(shelf.hidden,false,id);
@@ -305,6 +306,47 @@ test('the shelf remains usable after the placement tutorial on every track witho
  app.eval("switchLevel('normalize')");assert.equal(app.eval('state.nodes.length'),1,'prepared arithmetic lessons keep their starting modules');
  shelf.removeAttribute('open');app.eval("switchLevel('embedding');switchLevel('normalize')");assert.equal(shelf.hidden,false);assert.equal(shelf.hasAttribute('open'),false,'the player can still collapse the persistent shelf');
  app.eval("switchLevel('workshop')");assert.equal(app.eval('state.nodes.length'),0,'the placement tutorial still requires taking a module');
+});
+
+test('a single-stock original lesson requires placement and keeps a manually placed unconnected module on reload',()=>{
+ const app=boot(new Map(),'#layernorm'),M=app.c.NeuralPrologue;
+ assert.equal(app.eval('state.nodes.length'),0);assert.equal(app.document.querySelectorAll('[data-add-module]').length,1);
+ assert.equal(app.document.querySelector('#module-count').textContent,'0 / 1');
+ app.eval("chooseModule('layernorm2');placeModule(0,0)");assert.equal(app.eval('state.nodes.length'),1);assert.equal(app.eval("M.canAdd(state,'layernorm2')"),false);
+ const saved=app.eval('JSON.stringify(state)'),reopened=boot(app.storage,'#layernorm');assert.equal(reopened.eval('JSON.stringify(state)'),saved);
+ reopened.document.querySelector('#reset').onclick();assert.equal(reopened.eval('state.nodes.length'),0);assert.equal(reopened.eval("M.stock(state,'layernorm2')"),1);
+});
+
+test('old auto-filled original starts are archived once and can be restored without running',()=>{
+ const fixture=boot(),M=fixture.c.NeuralPrologue;
+ for(const id of ['embedding','positions','layernorm','softmax','vocabulary-scores']){
+  const legacy=M.initial(id,{complete:true,random:()=>.5});delete legacy.placementRevision;
+  const key='neural-atelier-level-'+id+'-v1',raw=JSON.stringify(legacy),storage=new Map([[key,raw]]),app=boot(storage,'#'+id);
+  assert.equal(app.eval('state.nodes.length'),0,id);assert.equal(storage.get(key+'-before-placement'),raw);
+  const restore=app.document.querySelector('#restore-layout');assert.equal(restore.hidden,false);restore.onclick();
+  assert.equal(app.eval('busy'),false);assert.equal(app.eval('JSON.stringify(state.nodes)'),JSON.stringify(legacy.nodes));
+  const reopened=boot(storage,'#'+id);assert.equal(reopened.eval('state.nodes.length'),legacy.nodes.length,'explicitly restored layouts are not retired again');
+  app.document.querySelector('#undo').onclick();assert.equal(app.eval('state.nodes.length'),0,'restoring remains undoable');
+ }
+});
+
+test('original placement migration preserves wired, completed and partly built saves',()=>{
+ const fixture=boot(),M=fixture.c.NeuralPrologue;
+ for(const mode of ['wired','completed','partial']){
+  const state=mode==='wired'?M.solutions('positions'):M.initial('positions',{complete:true});delete state.placementRevision;
+  if(mode==='partial')state.nodes.pop();
+  const key='neural-atelier-level-positions-v1',storage=new Map([[key,JSON.stringify(state)]]);
+  if(mode==='completed')storage.set('neural-atelier-chapters-v1',JSON.stringify({current:'positions',completed:['positions']}));
+  const app=boot(storage,'#positions');assert.equal(app.eval('JSON.stringify(state.nodes)'),JSON.stringify(state.nodes),mode);assert.equal(app.eval('state.sink'),state.sink);assert.equal(storage.has(key+'-before-placement'),false);
+  if(mode==='completed')assert.equal(app.eval("progress.completed('positions')"),true);
+ }
+});
+
+test('a failed archive write leaves the former original board intact',()=>{
+ const app=boot(),legacy=app.eval("M.initial('embedding',{complete:true})");delete legacy.placementRevision;
+ const key='neural-atelier-level-embedding-v1',raw=JSON.stringify(legacy),storage=new Map([[key,raw]]);
+ app.c.limitedStorage={getItem:k=>storage.get(k)||null,setItem:(k,v)=>{if(k.endsWith('-before-placement'))throw new Error('full');storage.set(k,v);}};
+ assert.equal(app.eval("JSON.stringify(createProgress(M,limitedStorage).load('embedding').nodes)"),JSON.stringify(legacy.nodes));assert.equal(storage.get(key),raw);
 });
 
 test('formerly fixed saved modules can be returned, placed and reconnected with undo and engine defaults',()=>{

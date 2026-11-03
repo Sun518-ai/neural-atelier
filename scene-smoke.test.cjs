@@ -154,6 +154,78 @@ test('original LayerNorm animates centering and scaling on four features and cle
  app.api.getWorld().focus('ln-attn');assert.match(app.document.querySelector('#card-example-values').textContent,/μ =/);assert.doesNotMatch(app.document.querySelector('.card-example-title').textContent,/“我”/);
  app.document.querySelector('#card-close').onclick();
 });
+test('LayerNorm moves actual features through mean, centering, squared deviations and division, including zero variance',async()=>{
+ let app;const seen=new Set(),paths=new Map();
+ app=await boot({reduced:false,frameMs:80,onFrame:({document})=>{
+  if(!app)return;const formula=document.querySelector('.layernorm-calculation:not([hidden])');if(formula)seen.add(formula.dataset.normStage);
+  const word=document.querySelector('#sample-name').textContent;
+  app.scenes.at(-1).traverseVisible(o=>{
+   const flow=o.userData.layerNorm;
+   if(flow){assert.equal(flow.groups.length,1);const g=flow.groups[0],mean=(g.values[0]+g.values[1])/2,variance=g.values.reduce((s,x)=>s+(x-mean)**2,0)/2;
+    assert.equal(g.mean,mean);assert.equal(g.variance,variance);assert.equal(g.divisor,Math.sqrt(variance+1e-6));g.output.forEach((v,i)=>assert.ok(Math.abs(v-(g.values[i]-mean)/g.divisor)<1e-12));
+    if(!variance){seen.add('zero variance');assert.equal(g.divisor,.001);if(formula?.dataset.normStage==='variance')assert.match(formula.textContent,/0\.001/);}
+   }
+   const d=o.userData;
+   if(d.lnMean&&o.visible){assert.equal(d.value,d.input);seen.add('mean contributions');}
+   if(d.lnShift&&o.visible){assert.equal(d.value,-d.mean);seen.add('mean broadcast');}
+   if(d.lnSquare&&o.visible){assert.equal(d.value,d.centered**2);if(d.centered<0)seen.add('negative centered squared');if(d.value===0)assert.equal(o.material.wireframe,true);}
+   if(d.lnInput&&o.material.opacity>.01){
+    const key=word+'|'+d.feature;if(!paths.has(key))paths.set(key,[]);paths.get(key).push(o.getWorldPosition(new app.c.T.Vector3()));
+    if(d.centering===1&&d.scaling===0){assert.ok(Math.abs(d.displayValue-d.centered)<1e-12);seen.add('centered held');}
+    if(d.scaling===1){assert.ok(Math.abs(d.displayValue-d.centered/d.divisor)<1e-12);seen.add('scaled');}
+    if(d.displayValue===0){seen.add('zero carrier');assert.equal(o.material.wireframe,true);}
+   }
+   if(d.processingOutput==='layernorm2'&&o.visible&&o.userData.gather>0){assert.equal(o.children.filter(c=>c.userData.feature!=null&&c.visible&&c.material.opacity>.99).length,2);seen.add('gather');}
+  });
+ }});
+ app.api.switchLevel('layernorm');app.api.setState(app.c.NeuralPrologue.solutions('layernorm'));app.api.getWorld().rebuild();await app.api.run();
+ for(const mark of ['mean','center','variance','scale','mean contributions','mean broadcast','negative centered squared','centered held','scaled','zero variance','zero carrier','gather'])assert.ok(seen.has(mark),mark);
+ for(const points of paths.values())assert.ok(points.every((p,i)=>!i||p.distanceTo(points[i-1])<.6),'features do not teleport between calculations');
+ assert.equal(app.document.querySelectorAll('#test-results .pass').length,app.c.NeuralPrologue.samplesFor('layernorm').length);assert.equal(app.document.querySelectorAll('.layernorm-calculation,.projection-result,.packet').length,0);
+ app.scenes.at(-1).traverse(o=>{assert.equal(o.userData.layerNorm,undefined);if(o.userData.lnMean||o.userData.lnShift||o.userData.lnSquare)assert.equal(o.visible,false);});
+});
+
+test('four-feature LayerNorm handles every token at the same pace and duplicate nodes use their actual input',async()=>{
+ let app;const seen=new Set(),starts=new Map();
+ app=await boot({reduced:false,frameMs:110,onFrame:({now,document})=>{
+  if(!app)return;const M=app.c.NeuralPrologue,state=app.api.getState(),sample=M.samplesFor('encoder-layer').find(s=>s.word===document.querySelector('#sample-name').textContent);if(!sample)return;
+  const ev=M.evaluate(state,sample.v);
+  for(const formula of document.querySelectorAll('.layernorm-calculation:not([hidden])')){const key=formula.dataset.node+'|'+sample.word+'|'+formula.dataset.normRow;if(!starts.has(key))starts.set(key,now);}
+  app.scenes.at(-1).traverseVisible(o=>{
+   const f=o.userData.layerNorm;if(!f)return;const node=state.nodes.find(n=>n.id===o.userData.node),input=ev.values[node.links[0]];
+   assert.equal(f.groups.length,3);assert.deepEqual([...f.groups.flatMap(g=>g.values)],[...input]);seen.add(node.id);
+   for(const g of f.groups){assert.equal(g.values.length,4);const mean=g.values.reduce((s,x)=>s+x,0)/4,variance=g.values.reduce((s,x)=>s+(x-mean)**2,0)/4;assert.equal(g.mean,mean);assert.equal(g.variance,variance);assert.ok(Math.abs(g.centered.reduce((a,b)=>a+b,0))<1e-12);}
+   if(node.id==='ln-attn-2'){assert.ok(Math.abs(f.groups[0].mean)<1e-12);seen.add('already normalized');}
+  });
+ }});
+ const M=app.c.NeuralPrologue;app.api.switchLevel('encoder-layer');const state=M.initial('encoder-layer');assert.ok(M.addNode(state,'ln-attn',-2.3,0));assert.ok(M.addNode(state,'ln-attn',2.3,0));
+ assert.equal(M.connect(state,'R','ln-attn',0),null);assert.equal(M.connect(state,'ln-attn','ln-attn-2',0),null);assert.equal(M.connect(state,'ln-attn-2','sink',0),null);app.api.setState(state);app.api.getWorld().rebuild();await app.api.run();
+ for(const mark of ['ln-attn','ln-attn-2','already normalized'])assert.ok(seen.has(mark),mark);assert.equal(starts.size,6);
+ // This deliberately incomplete encoder stops after the first sample fails,
+ // but both modules must finish all three tokens before showing the verdict.
+ for(const node of state.nodes){const sample=M.samplesFor('encoder-layer')[0],a=starts.get(node.id+'|'+sample.word+'|0'),b=starts.get(node.id+'|'+sample.word+'|1'),c=starts.get(node.id+'|'+sample.word+'|2');assert.ok(b>a&&c>b);assert.ok(Math.abs((b-a)-(c-b))<=220);}
+ assert.equal(app.document.querySelectorAll('#test-results .fail').length,1);
+ assert.ok(!app.document.querySelector('#level-complete').open,'two normalizations do not replace the encoder');assert.equal(app.document.querySelectorAll('.layernorm-calculation,.packet,.projection-result').length,0);
+});
+
+test('paused LayerNorm keeps its arithmetic and camera controls while language, speed and stop remain usable',async()=>{
+ let app,phase=0,frames=0,stop,before,original;
+ app=await boot({reduced:false,frameMs:90,onFrame:({document})=>{
+  if(!app)return;const formula=document.querySelector('.layernorm-calculation:not([hidden])');
+  if(!phase&&formula?.dataset.normStage==='variance'){app.api.togglePause();before=formula.textContent;original=JSON.stringify(app.api.getState());phase=1;}
+  else if(phase===1&&++frames===3){
+   assert.equal(formula.textContent,before);const scale=Number(formula.style.getPropertyValue('--calculation-scale')),wheel=new app.window.Event('wheel',{bubbles:true,cancelable:true});wheel.deltaY=2000;document.querySelector('#scene').dispatchEvent(wheel);
+   assert.ok(Number(formula.style.getPropertyValue('--calculation-scale'))<scale);assert.equal(formula.dataset.detail,'abstract');
+   app.c.I18n.setPreference('en');assert.match(formula.querySelector('.projection-equation').textContent,/I · s =/);
+   const speed=document.querySelector('#playback-speed');speed.value='1';speed.dispatchEvent(new app.window.Event('input'));assert.equal(formula.dataset.normStage,'variance');
+   app.api.togglePause();phase=2;
+  }else if(phase===2&&formula?.dataset.normStage==='scale'){stop=app.api.run();phase=3;}
+ }});
+ app.document.querySelector('#welcome').close();app.api.switchLevel('layernorm');app.api.setState(app.c.NeuralPrologue.solutions('layernorm'));app.api.getWorld().rebuild();await app.api.run();await stop;
+ assert.equal(phase,3);assert.equal(JSON.stringify(app.api.getState()),original);assert.equal(app.document.querySelectorAll('.packet,.layernorm-calculation,.projection-result').length,0);assert.ok(!app.document.querySelector('#level-complete').open);
+ app.scenes.at(-1).traverse(o=>{assert.equal(o.userData.layerNorm,undefined);if(o.userData.lnMean||o.userData.lnShift||o.userData.lnSquare)assert.equal(o.visible,false);});assert.deepEqual([...app.c.I18n.missing],[]);
+});
+
 test('RMSNorm visibly reduces and rescales each token independently with equal timing and signed values',async()=>{
  let app;const seen=new Set(),starts=new Map();
  app=await boot({reduced:false,frameMs:80,onFrame:({now,document})=>{

@@ -1,5 +1,5 @@
-import {cardFor,exampleFor} from './module-cards.js?v=embedding-position-1';
-import {createProgress} from './level-progress.js?v=embedding-position-1';
+import {cardFor,exampleFor} from './module-cards.js?v=layernorm-placement-1';
+import {createProgress} from './level-progress.js?v=layernorm-placement-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -224,7 +224,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=embedding-position-1');
+ const {createSceneArt}=await import('./scene-art.js?v=layernorm-placement-1');
  const art=createSceneArt(T,scene,colors,{anisotropy:renderer.capabilities.getMaxAnisotropy()});art.surroundings(samples(),stage());
  const assembly=new T.Group(),wires=new T.Group();scene.add(assembly,wires);const neuronGeo=new T.SphereGeometry(.115,16,12);let elements=[],curves=[],packets=[],drag=null,preview=null,yaw=.05,pitch=.8,zoom=stage().zoom,lastDepth=-1;
  const cameraTarget=new T.Vector3();let focusId=null,shelfFocus=null,shelfModel=null,overview=null,cameraFrame=0,transitioning=false,lastTap=null;
@@ -320,7 +320,7 @@ try{
  }
  function fadePort(el,x,y,footprints,width,height){
   let fade=0;const halfWidth=(width||27)/2,halfHeight=(height||27)/2;
-  for(const p of packets)if((p.worked||p.tokenOperation)&&(p.node.id===el.dataset.output||(p.paired||p.tokenOperation)&&el.dataset.input?.startsWith(p.node.id+':')))fade=Math.max(fade,p.portFade||0);
+  for(const p of packets)if((p.worked||p.tokenOperation||p.centering)&&(p.node.id===el.dataset.output||(p.paired||p.tokenOperation||p.centering)&&el.dataset.input?.startsWith(p.node.id+':')))fade=Math.max(fade,p.portFade||0);
   for(const p of footprints){
    const gap=Math.hypot(Math.max(0,Math.abs(x-p.x)-halfWidth),Math.max(0,Math.abs(y-p.y)-halfHeight))-p.r;
    const t=Math.max(0,Math.min(1,gap/24)),ease=t*t*(3-2*t);
@@ -334,7 +334,7 @@ try{
   Object.assign(camera,{left:-width/2,right:width/2,top:height/2,bottom:-height/2});
   camera.position.set(cameraTarget.x+Math.sin(yaw)*24,cameraTarget.y+Math.sin(pitch)*24,cameraTarget.z+Math.cos(yaw)*Math.cos(pitch)*24);
   camera.lookAt(cameraTarget);camera.updateProjectionMatrix();art.updateDetail(camera,w,h);
-  for(const p of packets)if(p.tokenOperation)for(const {label}of p.mesh.userData.featureRoutes)label.visible=label.material.opacity>0&&art.detailsVisible();
+  for(const p of packets)if(p.tokenOperation||p.centering)for(const {label}of p.mesh.userData.featureRoutes)label.visible=label.material.opacity>0&&art.detailsVisible();
   renderer.render(scene,camera);
   syncConnectionGuide(w,h);syncPlacementGuide(w,h);syncWireTargets(w,h);
   const flow=flowFootprints(w/width);
@@ -353,17 +353,18 @@ try{
     const scale=w/width/60;
     p.equationVisible=art.detailsVisible();
     p.calculation.dataset.detail=p.equationVisible?'full':'abstract';p.calculation.style.setProperty('--calculation-scale',String(scale));
-    const anchor=p.tokenOperation?art.tokenAnchor(p.node.id,p.tokenRow,p.input,p.progress??0):p.normalizing?art.rmsAnchor(p.node.id,p.rmsRow):art.projectionOutlet(p.node.id,p.column);
+    const anchor=p.tokenOperation?art.tokenAnchor(p.node.id,p.tokenRow,p.input,p.progress??0):p.centering?art.layerNormAnchor(p.node.id,p.rmsRow,p.progress??0):p.normalizing?art.rmsAnchor(p.node.id,p.rmsRow):art.projectionOutlet(p.node.id,p.column);
     const [cx,cy]=project(anchor),cw=(p.equationVisible?(p.calculation.offsetWidth||p.equation.textContent.length*7+14):24)*scale;
     const radius=(p.normalizing||p.tokenOperation?.2:art.projectionRadius(p.node.id,p.column))*w/width,offset=radius+9*scale,side=cx+offset+cw<w-12?'right':'left';
     p.calculation.dataset.side=side;
     p.calculation.style.left=(side==='right'?cx+offset:cx-offset)+'px';p.calculation.style.top=cy+'px';
-    const accent=colorHex(p.tokenOperation?art.rowColor(p.tokenRow):p.normalizing?art.rowColor(p.rmsRow):p.paired?nodeColor(p.node.id):art.projectionColor);
+    const accent=colorHex(p.tokenOperation?art.rowColor(p.tokenRow):p.centering&&!stage().sequence?p.color:p.normalizing?art.rowColor(p.rmsRow):p.paired?nodeColor(p.node.id):art.projectionColor);
     p.calculation.style.setProperty('--calculation-color',accent);p.calculation.style.setProperty('--calculation-halo',accent+'33');
     p.calculation.style.setProperty('--calculation-focus',String(p.focus||0));
     for(const {el,bar}of p.outputLabels){
      const [rx,ry]=project(bar.getWorldPosition(new T.Vector3())),[sx,sy]=project(art.projectionOutlet(p.node.id,bar.userData.feature)),g=p.outputMesh.userData.gather;
-     el.style.left=((sx+(p.tokenOperation?0:28)*scale)*(1-g)+(rx-(p.tokenOperation?0:7)*scale)*g)+'px';el.style.top=((sy-(p.tokenOperation?16:0)*scale)*(1-g)+(ry-12*scale)*g)+'px';
+     const aligned=p.tokenOperation||p.centering;
+     el.style.left=((sx+(aligned?0:28)*scale)*(1-g)+(rx-(aligned?0:7)*scale)*g)+'px';el.style.top=((sy-(aligned?16:0)*scale)*(1-g)+(ry-12*scale)*g)+'px';
      el.style.setProperty('--calculation-scale',String(scale));el.style.visibility=p.equationVisible?'':'hidden';
     }
    }
@@ -450,6 +451,7 @@ try{
  function nodeTap(id,e){const now=performance.now();if(lastTap?.id===id&&now-lastTap.time<380&&Math.hypot(e.clientX-lastTap.x,e.clientY-lastTap.y)<10){lastTap=null;focus(id);}else{lastTap={id,time:now,x:e.clientX,y:e.clientY};select(id);}}
  function worldPoint(x,y){const r=host.getBoundingClientRect();cursor.set((x-r.left)/r.width*2-1,-((y-r.top)/r.height*2-1));ray.setFromCamera(cursor,camera);const p=new T.Vector3();return ray.ray.intersectPlane(plane,p)?p:null;}
  function clearPackets(){packets.forEach(p=>{p.el.remove();p.calculation?.remove();p.outputLabels?.forEach(({el})=>el.remove());for(const mesh of [p.mesh,p.otherMesh,p.outputMesh].filter(Boolean)){scene.remove(mesh);mesh.traverse(o=>{o.geometry?.dispose();o.material?.map?.dispose();o.material?.dispose();});}});packets=[];art.clearProcessing();render();}
+ const normalizationFrame=(time,centering)=>art[centering?'layerNormFrame':'rmsFrame'](time,stage().sequence?3:1);
  function animate(ev,ms,id){
   clearPackets();lastDepth=-1;const reduced=matchMedia('(prefers-reduced-motion:reduce)').matches;if(reduced)ms=70;
   let previous=animationTime(),elapsed=0;
@@ -459,7 +461,10 @@ try{
   // Travel is 1.5× faster than before; every operator keeps its original clock.
   const travelDuration=2/3;
   for(let depth=1;depth<=lastWave;depth++){
-   const durations=readyNodes.filter(n=>ev.depths[n.id]===depth).map(n=>art.tokenOperation(definition(n.id))?art.tokenFrame(0,art.tokenOperation(definition(n.id))).duration:definition(n.id).type==='norm'?art.rmsFrame(0,seq?3:1).duration:!seq&&['linear','multiply','add'].includes(definition(n.id).type)?art.projectionFrame(0,ev.values[n.id].length).duration:1);
+   const durations=readyNodes.filter(n=>ev.depths[n.id]===depth).map(n=>{
+    const d=definition(n.id),tokenOperation=art.tokenOperation(d);
+    return tokenOperation?art.tokenFrame(0,tokenOperation).duration:['norm','layernorm'].includes(d.type)?normalizationFrame(0,d.type==='layernorm').duration:!seq&&['linear','multiply','add'].includes(d.type)?art.projectionFrame(0,ev.values[n.id].length).duration:1;
+   });
    starts[depth]=ends[depth-1]+travelDuration;ends[depth]=starts[depth]+Math.max(1,...durations);
   }
   const max=ends[lastWave]+travelDuration;
@@ -489,9 +494,9 @@ try{
    const input=ev.values[n.links[0]],output=ev.values[n.id],p=movingPacket(input,n.id,n.id,'process');
    p.el.classList.add('processing-packet');p.el.dataset.node=n.id;p.mesh.userData.processing=n.id;
    const detailed=!seq&&definition(n.id).type==='linear',paired=pairedNode(n.id),worked=detailed||paired,other=paired?ev.values[n.links[1]]:null;
-   const operation=definition(n.id).type,tokenOperation=art.tokenOperation(definition(n.id)),normalizing=operation==='norm',pairTones=paired?art.pairColorsFor(n.id):null,operator=operation==='add'?'+':'×';
-   Object.assign(p,{detailed,paired,worked,other,normalizing,tokenOperation});
-   if(worked||tokenOperation)art.prepareProjectionPacket(p.mesh,paired?()=>pairTones[0]:undefined);
+   const operation=definition(n.id).type,tokenOperation=art.tokenOperation(definition(n.id)),centering=operation==='layernorm',normalizing=operation==='norm'||centering,pairTones=paired?art.pairColorsFor(n.id):null,operator=operation==='add'?'+':'×';
+   Object.assign(p,{detailed,paired,worked,other,normalizing,centering,tokenOperation});
+   if(worked||tokenOperation||centering)art.prepareProjectionPacket(p.mesh,paired?()=>pairTones[0]:undefined);
    if(paired){
     const otherMesh=art.packet(other,p.color);otherMesh.userData={processingSecondary:n.id,row:p.el.dataset.row};otherMesh.visible=false;scene.add(otherMesh);
     art.prepareProjectionPacket(otherMesh,()=>pairTones[1]);fadeMaterials(otherMesh);p.otherMesh=otherMesh;
@@ -505,7 +510,7 @@ try{
    if(worked||normalizing||tokenOperation){
     art.prepareProjectionOutput(outputMesh);
     p.outputLabels=output.map((value,j)=>{
-     const el=document.createElement('span');el.className='projection-result'+(tokenOperation?' token-result':'');el.hidden=true;el.textContent=fmt(value);el.dataset.node=n.id;el.dataset.column=String(j);el.dataset.row=p.el.dataset.row;overlay.appendChild(el);
+     const el=document.createElement('span');el.className='projection-result'+(tokenOperation||centering?' token-result':'');el.hidden=true;el.textContent=fmt(value);el.dataset.node=n.id;el.dataset.column=String(j);el.dataset.row=p.el.dataset.row;overlay.appendChild(el);
      return {el,bar:outputMesh.children.find(o=>o.userData.feature===j)};
     });
    }
@@ -541,7 +546,7 @@ try{
     Object.assign(p,{calculation,equation,words,updateToken,tokenRow:0});updateToken(art.tokenFrame(0,tokenOperation));
    }
    if(normalizing){
-    const calculation=document.createElement('span');calculation.className='projection-calculation rms-calculation';calculation.hidden=true;calculation.dataset.node=n.id;calculation.dataset.operation='rmsnorm';
+    const calculation=document.createElement('span');calculation.className='projection-calculation '+(centering?'layernorm-calculation':'rms-calculation');calculation.hidden=true;calculation.dataset.node=n.id;calculation.dataset.operation=centering?'layernorm':'rmsnorm';
     const equation=document.createElement('span');equation.className='projection-equation';
     const token=document.createElement('b'),formula=document.createElement('span');equation.append(token,formula);calculation.append(equation);
     const abstract=document.createElement('span');abstract.className='projection-sum-symbol';abstract.textContent='÷r';abstract.setAttribute('aria-hidden','true');calculation.append(abstract);overlay.append(calculation);
@@ -550,10 +555,15 @@ try{
      const key=I18n.language()+':'+timing.row+':'+timing.stage;if(p.rmsEquationKey===key)return;p.rmsEquationKey=key;
      const row=timing.row,values=input.slice(row*width,(row+1)*width),squares=values.map(x=>x*x),r=Math.sqrt(squares.reduce((a,b)=>a+b,0)/width+1e-6);
      const word=seq?samples()[sample].word.split(' / ')[row]:samples()[sample].word;
-     token.textContent=word+' · ';formula.textContent=timing.stage==='squares'?vector(values)+'² → '+vector(squares):timing.stage==='rms'?'r = √(('+values.map(x=>factor(x)+'²').join(' + ')+') / '+width+' + ε) ≈ '+fmt(r):vector(values)+' / '+Number(r.toFixed(4))+' ≈ '+vector(output.slice(row*width,(row+1)*width));
+     token.textContent=word+' · ';
+     if(centering){
+      const stats=art.layerNormStats(values),divisor=Number(stats.divisor.toFixed(4)),stage=timing.stage;
+      formula.textContent=stage==='mean'?'μ = ('+values.map(factor).join(' + ')+') / '+width+' ≈ '+fmt(stats.mean):stage==='center'?vector(values)+' − '+factor(stats.mean)+' ≈ '+vector(stats.centered):stage==='variance'?'s = √(('+stats.centered.map(x=>factor(x)+'²').join(' + ')+') / '+width+' + ε) ≈ '+divisor:vector(stats.centered)+' / '+divisor+' ≈ '+vector(output.slice(row*width,(row+1)*width));
+      abstract.textContent=stage==='mean'?'μ':stage==='center'?'−μ':stage==='variance'?'√v':'÷s';
+     }else formula.textContent=timing.stage==='squares'?vector(values)+'² → '+vector(squares):timing.stage==='rms'?'r = √(('+values.map(x=>factor(x)+'²').join(' + ')+') / '+width+' + ε) ≈ '+fmt(r):vector(values)+' / '+Number(r.toFixed(4))+' ≈ '+vector(output.slice(row*width,(row+1)*width));
      calculation.dataset.normRow=String(row);calculation.dataset.normStage=timing.stage;p.rmsRow=row;
     };
-    Object.assign(p,{calculation,equation,updateRMS,rmsRow:0});updateRMS(art.rmsFrame(0,seq?3:1));
+    Object.assign(p,{calculation,equation,updateRMS,rmsRow:0});updateRMS(normalizationFrame(0,centering));
    }
    if(worked){
     const calculation=document.createElement('span');calculation.className='projection-calculation';calculation.hidden=true;calculation.dataset.node=n.id;calculation.dataset.operation=operation;
@@ -585,7 +595,7 @@ try{
    if(level!==lastDepth){lastDepth=level;labels();inspect();}
    art.pulseSource(reduced?1:t);
    packets.forEach(p=>{
-    const tt=t-p.start,timing=p.tokenOperation?art.tokenFrame(tt,p.tokenOperation):p.normalizing?art.rmsFrame(tt,seq?3:1):p.worked?art.projectionFrame(tt,p.output.length):null,progress=timing?timing.phase:clamp(tt/(p.motion==='wire'?travelDuration:1));
+    const tt=t-p.start,timing=p.tokenOperation?art.tokenFrame(tt,p.tokenOperation):p.normalizing?normalizationFrame(tt,p.centering):p.worked?art.projectionFrame(tt,p.output.length):null,progress=timing?timing.phase:clamp(tt/(p.motion==='wire'?travelDuration:1));
     if(p.motion==='process'){
      p.progress=tt;
      const visible=tt>=0&&t<p.end&&(!focusId||focusId===p.node.id),blend=ramp(progress,p.worked?.76:.55,p.worked?.9:.83);
@@ -626,14 +636,15 @@ try{
       p.outputLabels.forEach(({el},j)=>{const ready=timing.start+(Math.floor(j/width)+.84)*timing.step,alpha=ramp(tt,ready,ready+.04)*(1-ramp(progress,.9,.98));el.hidden=!visible||alpha<=0;el.style.opacity=String(alpha);});
      }
      if(p.normalizing){
-      p.el.hidden=!visible||(progress>.18&&progress<.88);p.mesh.visible=visible&&progress<.3;
-      p.materials.forEach(m=>m.opacity=1-ramp(progress,.15,.3));
-      art.routeRMSOutput(p.node.id,p.outputMesh,tt,p.p);p.outputMesh.visible=visible&&tt>=timing.start+.82*timing.step;
+      p.el.hidden=!visible||(progress>.18&&progress<.88);
+      if(p.centering){p.mesh.visible=visible&&tt<timing.end;art.routeLayerNormInput(p.node.id,p.mesh,tt,p.p,p.path.getPoint(.04),p.input,p.output);art.routeLayerNormOutput(p.node.id,p.outputMesh,tt,p.p);}
+      else{p.mesh.visible=visible&&progress<.3;p.materials.forEach(m=>m.opacity=1-ramp(progress,.15,.3));art.routeRMSOutput(p.node.id,p.outputMesh,tt,p.p);}
+      p.outputMesh.visible=visible&&tt>=timing.start+(p.centering?.89:.82)*timing.step;
       p.portFade=visible?ramp(progress,.18,.3):0;p.focus=visible&&timing.local>=.05&&timing.local<.94?1:0;
       p.updateRMS(timing);p.calculation.hidden=!visible||tt<timing.start||tt>=timing.end;p.calculation.style.opacity=String(ramp(timing.local,0,.06)*(1-ramp(timing.local,.94,1)));
       const width=p.output.length/(seq?3:1);
       p.outputLabels.forEach(({el},j)=>{
-       const ready=timing.start+Math.floor(j/width)*timing.step+.84*timing.step,alpha=ramp(tt,ready,ready+.05)*(1-ramp(progress,.9,.98));
+       const ready=timing.start+(Math.floor(j/width)+(p.centering?.94:.84))*timing.step,alpha=ramp(tt,ready,ready+.05)*(1-ramp(progress,.9,.98));
        el.hidden=!visible||alpha<=0;el.style.opacity=String(alpha);
       });
      }
@@ -689,6 +700,6 @@ try{
  $('#scene-expand').onclick=()=>{const expanded=document.body.classList.toggle('scene-expanded');$('#scene-expand').textContent=expanded?I18n.t("显示观察窗"):I18n.t("放大场景");$('#scene-expand').setAttribute('aria-pressed',String(expanded));render();};
  function beforeStage(){if(focusId)leaveFocus();cancelAnimationFrame(cameraFrame);transitioning=false;host.setAttribute('aria-busy','false');drag=lastTap=null;clearPreview();clearPlacement();clearPackets();elements=[];overlay.replaceChildren();}
  function setStage(){art.surroundings(samples(),stage());yaw=.05;pitch=.8;zoom=stage().zoom;cameraTarget.set(0,0,0);rebuild();}
- function relocalize(){art.surroundings(samples(),stage());rebuild();packets.forEach(p=>{p.el.querySelector('.packet-title').textContent=packetIdentity(p.el.dataset.from);if(p.normalizing&&p.progress!=null)p.updateRMS(art.rmsFrame(p.progress,stage().sequence?3:1));if(p.tokenOperation&&p.progress!=null)p.updateToken(art.tokenFrame(p.progress,p.tokenOperation));if(p.motion==='process'&&p.progress!=null)art.processing(p.node.id,p.progress,p.input,p.output,p.color,{sequence:!!stage().sequence,detailed:p.detailed,paired:p.paired,other:p.other,words:p.words?.()});});render();}
+ function relocalize(){art.surroundings(samples(),stage());rebuild();packets.forEach(p=>{p.el.querySelector('.packet-title').textContent=packetIdentity(p.el.dataset.from);if(p.normalizing&&p.progress!=null)p.updateRMS(normalizationFrame(p.progress,p.centering));if(p.tokenOperation&&p.progress!=null)p.updateToken(art.tokenFrame(p.progress,p.tokenOperation));if(p.motion==='process'&&p.progress!=null)art.processing(p.node.id,p.progress,p.input,p.output,p.color,{sequence:!!stage().sequence,detailed:p.detailed,paired:p.paired,other:p.other,words:p.words?.()});});render();}
  new ResizeObserver(render).observe(host);world={relocalize,labels,rebuild,animate,clearPackets,clearPreview,clearPlacement,previewAt,previewPlacement,focus,focusShelf,focused:()=>focusId,beforeStage,setStage,syncShelf:()=>syncPlacementGuide(host.clientWidth,host.clientHeight)};$('#loading').hidden=true;rebuild();refresh();
 }catch(e){$('#loading').innerHTML=I18n.t("<strong>3D 台面没有加载成功，请刷新重试。</strong>");say(I18n.t("页面尚未开始运行。"),'error');console.error(e);}

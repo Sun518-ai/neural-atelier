@@ -110,7 +110,7 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   slab(g,2.05,2.4,.26,0,.07,0,color);slab(g,1.91,2.26,.08,0,.36,0,0xf4f5e9);
   const glow=box(g,1.6,.035,.055,0,.41,1.13,color,{emissive:color,emissiveIntensity:.18});
   const border=new T.Group();g.add(border);[[[-.96,.49,-1.12],[-.96,.49,-.78]],[[-.96,.49,-1.12],[-.62,.49,-1.12]],[[.96,.49,1.12],[.96,.49,.78]],[[.96,.49,1.12],[.62,.49,1.12]]].forEach(points=>tube(border,points,color,.018));
-  let outputs=[],inputs=[],connections=[],weightCells=[],activationChannels=[],columnCues=[],pairChannels=[],normalizationStages=[],rmsRows=[],tokenRows=[],lookupRows=[],positionWaves=[];
+  let outputs=[],inputs=[],connections=[],weightCells=[],activationChannels=[],columnCues=[],pairChannels=[],normalizationStages=[],rmsRows=[],lnRows=[],tokenRows=[],lookupRows=[],positionWaves=[];
   const tokenKind=tokenOperation(d),tokenWidth=d.out/3;
   if(d.type==='linear'){
    const w=weights[n.kind||n.id],a=w.length,b=w[0].length,cw=1.5/b,ch=1.5/a;
@@ -246,13 +246,22 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
    }
    textTile(g,'x² → r → x/r',1.55,.23,0,.53,1.02,{size:60,color:'#74602f',bg:'#f2e7c7'});
   }else if(d.type==='layernorm'){
-   ['− μ','÷ σ','γ · + β'].forEach((word,i)=>{
-    const x=(i-1)*.53,tile=box(g,.46,.12,1.1,x,.65,0,color);
-    textTile(g,word,.43,.5,x,.725,0,{size:58});normalizationStages.push(tile);
-    outputs.push(neuron(g,x,1.18,.65,color));
-   });
-   tube(g,[[-.8,1.05,0],[0,1.05,0],[.8,1.05,0]],color,.025);
-   textTile(g,'LayerNorm',1.5,.27,0,.5,1.02,{size:60});
+   const count=d.out>4?3:1,width=d.out/count,spacing=width===2?.88:.43;
+   for(let row=0;row<count;row++){
+    const z=(row-(count-1)/2)*.7,tone=rowColor(row),features=[];
+    const band=box(g,1.7,.025,count===1?1.5:.58,0,.47,z,tone,{transparent:true,opacity:.1,depthWrite:false});
+    const meanHub=neuron(g,0,1.05,z-.17,0xb68036),scaleHub=neuron(g,0,1.45,z+.14,0x8862aa);
+    const meanLabel=textTile(g,'μ',.75,.26,0,1.22,z-.17,{size:80,color:'#876732',bg:'#f2e7c7'}),scaleLabel=textTile(g,'s',.8,.26,0,1.62,z+.14,{size:80,color:'#695182',bg:'#ece6f2'});
+    for(let j=0;j<width;j++){
+     const x=(j-(width-1)/2)*spacing,input=neuron(g,x,.72,z,featureColor(j)),center=new T.Vector3(x,1.04,z),output=neuron(g,x,1.88,z,tone),gate=ring(g,.13,x,1.56,z,tone,.022);
+     inputs.push(input);outputs.push(output);
+     const meanPath=tube(g,[[x,.72,z],[x*.55,.96,z-.12],[0,1.05,z-.17]],featureColor(j),.019,.18),squarePath=tube(g,[[x,1.04,z],[x*.55,1.3,z+.1],[0,1.45,z+.14]],featureColor(j),.02,.18),scalePath=tube(g,[[x,1.04,z],[x,1.56,z],[x,1.88,z]],tone,.024,.18);
+     const spark=(flag,tint,boxShape=false)=>{const mesh=new T.Mesh(boxShape?new T.BoxGeometry(.13,.13,.13):sharedSphere,mat(tint,{emissive:tint,emissiveIntensity:1.4,transparent:true,depthWrite:false}));mesh.visible=false;mesh.userData[flag]=true;g.add(mesh);return mesh;};
+     features.push({index:j,input,center,output,gate,meanPath,squarePath,scalePath,meanSpark:spark('lnMean',featureColor(j)),shift:spark('lnShift',0xb68036),square:spark('lnSquare',featureColor(j),true)});
+    }
+    lnRows.push({row,z,tone,band,meanHub,scaleHub,meanLabel,scaleLabel,features});
+   }
+   textTile(g,'− μ → ÷ s',1.5,.23,0,.52,1.03,{size:65,color:'#74602f',bg:'#f2e7c7'});
   }else if(['embedding','vocabulary','pick','storage','cache','decode','ffn','invert'].includes(d.type)){
    const words=d.glyphs||(d.type==='vocabulary'||d.type==='pick'?[I18n.t("我"),I18n.t("爱"),I18n.t("猫"),I18n.t("你"),I18n.t("恨"),I18n.t("狗")]:d.type==='cache'?['K','V','+1']:d.type==='norm'?['x','RMS','÷']:d.type==='storage'?['W','W','W']:d.type==='ffn'?['G','×','U']:['0','1','2']);
    words.forEach((t,i)=>{const x=words.length>3?(i%2-.5)*.7:0,z=words.length>3?(Math.floor(i/2)-1)*.55:(i-1)*.58;box(g,.55,.09,.44,x,.55,z,color);textTile(g,t,.5,.38,x,.605,z,{size:64,bg:'#e9edde',color:'#496253'});});
@@ -265,7 +274,7 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   }
   d.ins.forEach((dim,i)=>{const z=d.ins.length===2?(i?.55:-.55):0;box(g,.21,.17,.27,-1.08,.58,z,0x6e887c);for(let j=0;j<Math.min(dim,4);j++)box(g,.12,.02,.035,-1.08,.68,z+(j-(Math.min(dim,4)-1)/2)*.055,0xc6d7c3);});
   const sock=new T.Mesh(new T.CylinderGeometry(.15,.15,.18,20),mat(color));sock.rotation.z=Math.PI/2;sock.position.set(1.05,.68,0);g.add(sock);
-  if(register)units.set(n.id,{g,glow,outputs,inputs,connections,weightCells,activationChannels,columnCues,pairChannels,pairTones,pairOperation,normalizationStages,rmsRows,tokenKind,tokenWidth,tokenRows,lookupRows,positionWaves,links:n.links,color});return g;
+  if(register)units.set(n.id,{g,glow,outputs,inputs,connections,weightCells,activationChannels,columnCues,pairChannels,pairTones,pairOperation,normalizationStages,rmsRows,lnRows,tokenKind,tokenWidth,tokenRows,lookupRows,positionWaves,links:n.links,color});return g;
  }
  function sync(values,depths,depth,selected,activeSample,results,busy,layout={},output=null){
   if(!busy)clearProcessing();
@@ -364,6 +373,49 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
    for(const f of row.features){f.carrier.visible=false;if(f.code){f.code.visible=false;f.input.material.emissiveIntensity=f.marker.material.emissiveIntensity=.08;f.scaleGate.material.emissiveIntensity=f.join.material.emissiveIntensity=0;f.join.scale.setScalar(1);}}
   }
  }
+ function layerNormFrame(time,count=3){
+  const start=.22,step=1.9,end=start+count*step,duration=end+.35;
+  const row=Math.max(0,Math.min(count-1,Math.floor((time-start)/step))),local=Math.max(0,Math.min(1,(time-start-row*step)/step));
+  const phase=time<start?time/start*.18:time<end?.18+(time-start)/(count*step)*.62:.8+(time-end)/.35*.2;
+  return {row,local,start,step,end,duration,phase:Math.max(0,Math.min(1,phase)),stage:local<.23?'mean':local<.46?'center':local<.7?'variance':local<.92?'scale':'ready'};
+ }
+ function layerNormStats(values){
+  const mean=values.reduce((a,b)=>a+b,0)/values.length,centered=values.map(x=>x-mean),squares=centered.map(x=>x*x),variance=squares.reduce((a,b)=>a+b,0)/values.length;
+  return {values,mean,centered,squares,variance,divisor:Math.sqrt(variance+1e-6)};
+ }
+ function processingLayerNorm(u,time,input,output,color){
+  const count=u.lnRows.length,width=input.length/count,timing=layerNormFrame(time,count),active=time>=0&&time<timing.duration;
+  u.g.userData.processing=active;
+  if(!active){clearLayerNorm(u);return;}
+  u.glow.material.emissiveIntensity=1.2;const groups=[];
+  for(const row of u.lnRows){
+   const stats=layerNormStats(input.slice(row.row*width,(row.row+1)*width)),local=(time-timing.start-row.row*timing.step)/timing.step,focus=local>=0&&local<1,done=local>=.9;
+   const {mean,centered,squares,divisor}=stats;if(count===1)row.tone=color;row.band.material.color.set(row.tone);
+   row.band.material.opacity=focus?.35:done?.18:.1;
+   row.meanHub.material.emissiveIntensity=focus&&local<.46?1.4:.08;row.scaleHub.material.emissiveIntensity=focus&&local>=.46&&local<.9?1.4:.08;
+   row.meanLabel.write(local>=.18?'μ '+Number(mean.toFixed(3)):'μ');row.scaleLabel.write(local>=.67?'s '+Number(divisor.toFixed(4)):'s');
+   for(const f of row.features){
+    const j=f.index,value=input[row.row*width+j],result=output[row.row*width+j];
+    f.input.material.emissiveIntensity=focus&&local<.46?1:.08;f.output.material.emissiveIntensity=focus&&local>=.7?1.2:done?.35:.08;
+    f.output.scale.setScalar(done?.65+Math.min(2,Math.abs(result))*.25:1);f.output.material.color.set(done&&result<0?0xc79868:row.tone);
+    f.gate.material.emissive.set(row.tone);f.gate.material.emissiveIntensity=focus&&local>=.7&&local<.9?1.5:0;f.gate.scale.setScalar(focus&&local>=.7?1+.18*Math.sin(Math.PI*ramp(local,.7,.9)):1);
+    for(const [path,from,to]of [[f.meanPath,0,.46],[f.squarePath,.46,.7],[f.scalePath,.7,.92]]){const lit=focus&&local>=from&&local<to;path.material.opacity=lit?.85:.18;path.material.emissive.set(row.tone);path.material.emissiveIntensity=lit?.65:0;}
+    for(const [mesh,from,to,v]of [[f.meanSpark,.03,.21,value],[f.shift,.25,.44,-mean],[f.square,.48,.69,squares[j]]]){
+     mesh.visible=focus&&local>=from&&local<to;Object.assign(mesh.userData,{row:row.row,feature:j,value:v,input:value,mean,centered:centered[j],divisor});
+     if(!mesh.visible)continue;
+     const k=ramp(local,from,to-.02),point=mesh===f.meanSpark?f.meanPath.geometry.parameters.path.getPoint(k):mesh===f.square?f.squarePath.geometry.parameters.path.getPoint(k):row.meanHub.position.clone().lerp(f.center,k);
+     mesh.position.copy(point);mesh.scale.setScalar(.55+Math.min(2,Math.abs(v))*.24);mesh.material.wireframe=Math.abs(v)<1e-9;mesh.material.color.set(v<0?0xc79868:mesh===f.shift?0xb68036:featureColor(j));mesh.material.opacity=ramp(local,from,from+.025)*(1-ramp(local,to-.025,to));
+    }
+   }
+   groups.push({row:row.row,...stats,output:output.slice(row.row*width,(row.row+1)*width)});
+  }
+  u.g.userData.layerNorm={row:timing.row,stage:timing.stage,local:timing.local,groups};
+  u.g.userData.normalization={...groups[timing.row],phase:timing.local<.46?0:timing.local<.7?1:2};
+ }
+ function clearLayerNorm(u){
+  delete u.g.userData.layerNorm;delete u.g.userData.normalization;
+  for(const row of u.lnRows){row.band.material.opacity=.1;row.meanHub.material.emissiveIntensity=row.scaleHub.material.emissiveIntensity=.08;row.meanLabel.write('μ');row.scaleLabel.write('s');for(const f of row.features){f.meanSpark.visible=f.shift.visible=f.square.visible=false;f.gate.scale.setScalar(1);f.gate.material.emissiveIntensity=0;f.input.material.emissiveIntensity=.08;for(const path of [f.meanPath,f.squarePath,f.scalePath]){path.material.opacity=.18;path.material.emissiveIntensity=0;}}}
+ }
  function rmsFrame(time,count=3){
   const start=.22,step=.9,end=start+count*step,duration=end+.3;
   const row=Math.max(0,Math.min(count-1,Math.floor((time-start)/step))),local=Math.max(0,Math.min(1,(time-start-row*step)/step));
@@ -398,6 +450,7 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
  }
  function processing(id,progress,input,output,color,{sequence=false,detailed=false,paired=false,other=null,words=[]}={}){
   const u=units.get(id);if(!u)return;
+  if(u.lnRows.length){processingLayerNorm(u,progress,input,output,color);return;}
   if(u.tokenKind){processingToken(u,progress,input,output,words);return;}
   if(u.rmsRows.length){processingRMS(u,progress,input,output,sequence);return;}
   const worked=detailed||paired,timing=worked?projectionFrame(progress,output.length):null,active=progress>=0&&progress<(timing?.duration||1),p=timing?timing.phase:Math.max(0,Math.min(1,progress));u.g.userData.processing=active;
@@ -450,7 +503,7 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
    for(const f of row.features){f.label.write('x');f.square.visible=f.scaled.visible=false;f.squarePath.material.opacity=f.scalePath.material.opacity=.2;f.input.scale.setScalar(1);f.output.scale.setScalar(1);f.input.material.emissiveIntensity=f.output.material.emissiveIntensity=.08;}
   }
  }
- function clearProcessing(){for(const u of units.values()){clearRMS(u);clearToken(u);u.g.userData.processing=false;u.g.userData.activeColumn=u.g.userData.activePair=null;delete u.g.userData.normalization;u.normalizationStages.forEach(tile=>tile.material.emissiveIntensity=0);u.columnCues.forEach(({cue})=>cue.visible=false);u.outputs.forEach(o=>{o.material.emissive.set(u.color);o.material.emissiveIntensity=.08;});if(u.connections.length)u.inputs.forEach(o=>{o.material.color.set(0x6c9eb1);o.material.emissive.set(0x6c9eb1);o.material.emissiveIntensity=.08;});u.connections.forEach(c=>c.spark.visible=false);u.activationChannels.forEach(({spark,gate,channel})=>{spark.visible=false;gate.scale.setScalar(1);gate.material.emissiveIntensity=0;channel.material.emissiveIntensity=0;});u.pairChannels.forEach(({left,right,leftPath,rightPath,outPath,gate,carrier})=>{carrier.visible=false;gate.scale.setScalar(1);[leftPath,rightPath,outPath,gate].forEach(o=>o.material.emissiveIntensity=0);[left,right].forEach(o=>{o.scale.setScalar(1);o.material.emissiveIntensity=.08;});});u.weightCells.forEach(({tile,face})=>{tile.material.emissiveIntensity=0;face.material.color.set(0xffffff);});}}
+ function clearProcessing(){for(const u of units.values()){clearRMS(u);clearToken(u);clearLayerNorm(u);u.g.userData.processing=false;u.g.userData.activeColumn=u.g.userData.activePair=null;delete u.g.userData.normalization;u.normalizationStages.forEach(tile=>tile.material.emissiveIntensity=0);u.columnCues.forEach(({cue})=>cue.visible=false);u.outputs.forEach(o=>{o.material.emissive.set(u.color);o.material.emissiveIntensity=.08;});if(u.connections.length)u.inputs.forEach(o=>{o.material.color.set(0x6c9eb1);o.material.emissive.set(0x6c9eb1);o.material.emissiveIntensity=.08;});u.connections.forEach(c=>c.spark.visible=false);u.activationChannels.forEach(({spark,gate,channel})=>{spark.visible=false;gate.scale.setScalar(1);gate.material.emissiveIntensity=0;channel.material.emissiveIntensity=0;});u.pairChannels.forEach(({left,right,leftPath,rightPath,outPath,gate,carrier})=>{carrier.visible=false;gate.scale.setScalar(1);[leftPath,rightPath,outPath,gate].forEach(o=>o.material.emissiveIntensity=0);[left,right].forEach(o=>{o.scale.setScalar(1);o.material.emissiveIntensity=.08;});});u.weightCells.forEach(({tile,face})=>{tile.material.emissiveIntensity=0;face.material.color.set(0xffffff);});}}
  // A single colour pulse identifies the departing row without moving its tray.
  function pulseSource(progress=1){
   const pulse=Math.pow(1-Math.min(1,Math.max(0,progress)/.65),2);
@@ -532,6 +585,40 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
    Object.assign(bar.userData,{tokenInput:true,tokenRow:row,lookupId:lookup?value:null,mappingProgress:to,displayValue:shown});
   }
  }
+ function routeLayerNormInput(id,mesh,time,origin,anchor,input,output){
+  const u=units.get(id),count=u.lnRows.length,width=input.length/count,timing=layerNormFrame(time,count),fan=ramp(timing.phase,.04,.17);
+  mesh.userData.routing=fan>0;mesh.children.find(o=>o.userData.packetTray).material.opacity=1-fan;
+  const stats=u.lnRows.map(row=>layerNormStats(input.slice(row.row*width,(row.row+1)*width)));
+  for(const {bar,pad,label,write,home,padHome,labelHome} of mesh.userData.featureRoutes){
+   const index=bar.userData.feature,row=Math.floor(index/width),j=index%width,f=u.lnRows[row].features[j],s=stats[row],local=(time-timing.start-row*timing.step)/timing.step;
+   const centering=ramp(local,.24,.43),scaling=ramp(local,.73,.89),alpha=1-ramp(local,.89,.95),centered=input[index]-s.mean*centering,shown=centered+(output[index]-centered)*scaling;
+   const height=Math.abs(shown)<1e-9?.035:.08+Math.min(Math.abs(shown),2)*.24;
+   const target=f.input.position.clone().lerp(f.center,centering).lerp(f.output.position.clone().add(new T.Vector3(0,.1+height/2,0)),scaling).add(u.g.position);
+   for(const [object,start]of [[bar,home],[pad,padHome],[label,labelHome]]){
+    const end=target.clone().add(new T.Vector3(0,object===label?.3:start.y*(1-scaling),0));
+    if(object===bar&&scaling===1)end.copy(target);
+    object.position.copy(timing.phase<.04?origin:anchor).add(start).lerp(end,fan).sub(origin);
+   }
+   const tone=shown<0?0xc79868:featureColor(j);bar.scale.y=1+(height/bar.geometry.parameters.height-1)*fan;bar.material.color.set(tone);bar.material.emissive.set(tone);bar.material.emissiveIntensity=local>=0&&local<.9?1:.3;bar.material.opacity=alpha;bar.material.wireframe=Math.abs(shown)<1e-9;
+   pad.material.opacity=(1-fan)*alpha;label.material.opacity=fan*alpha;label.visible=fan>0&&alpha>0&&detailModes[detailScope];write(String(Number(shown.toFixed(3))));
+   Object.assign(bar.userData,{lnInput:true,row,displayValue:shown,mean:s.mean,centered:s.centered[j],divisor:s.divisor,centering,scaling});
+  }
+ }
+ function layerNormAnchor(id,row,time){
+  const u=units.get(id),r=u.lnRows[row],local=layerNormFrame(time,u.lnRows.length).local;
+  return r.meanHub.position.clone().lerp(r.scaleHub.position,ramp(local,.43,.68)).lerp(new T.Vector3(0,1.9,r.z),ramp(local,.73,.9)).add(new T.Vector3(0,.18,0)).add(u.g.position);
+ }
+ function routeLayerNormOutput(id,mesh,time,origin){
+  const u=units.get(id),count=u.lnRows.length,width=u.outputs.length/count,timing=layerNormFrame(time,count),gather=ramp(timing.phase,.8,.97);
+  mesh.userData.gather=gather;mesh.userData.routing=gather<1;
+  mesh.children.forEach((o,i)=>{
+   if(o.userData.packetTray){o.material.opacity=ramp(timing.phase,.8,.94);return;}
+   const feature=o.userData.feature??o.userData.featurePad,row=Math.floor(feature/width),home=mesh.userData.outputHomes[i],ready=timing.start+(row+.89)*timing.step,alpha=ramp(time,ready,ready+.07);
+   o.visible=alpha>0;o.material.opacity=alpha;
+   const start=projectionOutlet(id,feature).add(new T.Vector3(0,home.y+.04,0)),target=origin.clone().add(home);
+   o.position.copy(gather===1?home:start.lerp(target,gather).sub(origin));
+  });
+ }
  function tokenAnchor(id,row,input,time){
   const u=units.get(id),r=u.tokenRows[row],target=new T.Vector3(0,1.75,r.z);
   if(u.tokenKind==='lookup')target.copy(u.lookupRows[input[row]].address).lerp(new T.Vector3(0,1.75,r.z),ramp(tokenFrame(time,u.tokenKind).local,.3,.84));
@@ -581,5 +668,5 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   });
  }
  function resetUnits(){units.clear();}
- return {surroundings,module,sync,updateDetail,detailsVisible:()=>detailModes[detailScope],pulseSource,tokenOperation,tokenFrame,tokenAnchor,routeTokenInput,routeTokenOutput,projectionFrame,rmsFrame,rmsAnchor,routeRMSOutput,projectionColor,pairColorsFor:id=>units.get(id)?.pairTones||pairColors,processing,clearProcessing,packet,prepareProjectionPacket,routeProjectionPacket,routePairedPacket,projectionOutlet,projectionRadius,prepareProjectionOutput,routeProjectionOutput,featureColor,rowColor,rowZ,resetUnits,focus(active){context.visible=!active;floor.visible=!active;detailScope=active?'card':'board';if(active)detailModes.card=true;}};
+ return {surroundings,module,sync,updateDetail,detailsVisible:()=>detailModes[detailScope],pulseSource,layerNormFrame,layerNormStats,layerNormAnchor,routeLayerNormInput,routeLayerNormOutput,tokenOperation,tokenFrame,tokenAnchor,routeTokenInput,routeTokenOutput,projectionFrame,rmsFrame,rmsAnchor,routeRMSOutput,projectionColor,pairColorsFor:id=>units.get(id)?.pairTones||pairColors,processing,clearProcessing,packet,prepareProjectionPacket,routeProjectionPacket,routePairedPacket,projectionOutlet,projectionRadius,prepareProjectionOutput,routeProjectionOutput,featureColor,rowColor,rowZ,resetUnits,focus(active){context.visible=!active;floor.visible=!active;detailScope=active?'card':'board';if(active)detailModes.card=true;}};
 }

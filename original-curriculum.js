@@ -238,7 +238,8 @@ for(const [track,route]of Object.entries(M.routes))route.ids.forEach((id,i)=>{M.
 // Preserve each lesson's prepared table and existing inventory; removing a
 // module makes that copy available to place again without changing the puzzle.
 for(const level of Object.values(M.levels))if(!level.practice&&!level.buildable){level.buildable=true;level.startWithModules=true;}
-M.levels.qkv.description=L('三块投影尚未接线，同一份输入可产生 Q、K、V。本关出口需要 V；后面分别用 Q/K 打分，再用 V 取内容。','The three projections start disconnected. One input can produce Q, K and V. This outlet needs V; later lessons use Q/K for scoring and V for content.');
+for(const id of originalNetwork){const l=M.levels[id];l.migratePreparedStart=!!l.startWithModules;l.startWithModules=false;l.requirePlacement=true;}
+M.levels.qkv.description=L('从组件架取出 Q、K、V 投影，同一份输入可产生三种特征。本关出口需要 V；后面分别用 Q/K 打分，再用 V 取内容。','Take Q, K and V projections from the shelf. One input can produce three feature sets. This outlet needs V; later lessons use Q/K for scoring and V for content.');
 M.levels.softmax.description=L('将已学过的 Q/K 投影和打分接起来，再把分数交给 Softmax。每组权重的和应为 1，本关不遮住未来位置。','Connect the familiar Q/K projections and scoring, then feed the scores to Softmax. Each weight row should sum to 1; this level has no future mask.');
 M.levels.residual.rationale.scope=L('这里先用线性支路练习残差。进入原版基础章后，会把它包在 ReLU FFN 和 Attention 外，再加入 LayerNorm。','Practice the residual with a linear branch here. The original chapter then wraps ReLU FFNs and Attention with residuals and LayerNorm.');
 M.levels.ffn.description=L('将已学的 SwiGLU 和残差组合起来。R 是原输入，Z = RMSNorm(R) 已准备好；这里比较现代 Pre-LN 与原版先相加后归一化的区别。','Combine SwiGLU with a residual. R is the original input and Z = RMSNorm(R) is ready. Compare modern Pre-LN with the original’s addition before normalization.');
