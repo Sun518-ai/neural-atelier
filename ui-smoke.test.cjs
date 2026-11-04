@@ -95,9 +95,28 @@ test('partially constructed tables and older complete saves retain their positio
  const old=app.eval("M.solutions('ffn')");delete old.palette;old.nodes[0].x=1.234;
  const legacy=boot(new Map([['neural-atelier-prologue-v1',JSON.stringify(old)]]));assert.equal(legacy.eval('stageId'),'ffn');assert.equal(legacy.eval('state.nodes.length'),6);assert.equal(legacy.eval('state.nodes[0].x'),1.234);assert.equal(legacy.eval('state.sink'),'add');
 });
-test('bonus levels are accessible separately and never follow the main finale',()=>{
- const app=boot(new Map(),'', ['en-US']);app.eval('levelMenu()');assert.equal(app.document.querySelectorAll('[data-level]').length,29);assert.equal(app.document.querySelector('[data-level="placement"]'),null);
- app.document.querySelector('[data-track="engine"]').dispatchEvent(new app.window.Event('click',{bubbles:true}));assert.equal(app.document.querySelectorAll('[data-level]').length,9);assert.ok(app.document.querySelector('[data-level="placement"]'));assert.doesNotMatch(app.document.querySelector('#level-menu').textContent,/[\u3400-\u9fff]/);
+test('learning stages preserve level navigation and keep the other tracks separate',()=>{
+ const app=boot(new Map(),'', ['en-US']),doc=app.document,M=app.c.NeuralPrologue;app.eval('levelMenu()');assert.equal(doc.querySelectorAll('#level-list [data-level]').length,29);assert.equal(doc.querySelector('#level-list [data-level="placement"]'),null);
+ assert.deepEqual([...doc.querySelectorAll('#level-list [data-level]')].map(e=>e.dataset.level),Array.from(M.routes.main.ids),'grouping keeps every existing level exactly once and in order');
+ assert.equal(doc.querySelectorAll('[data-level-group]').length,6);
+ for(const [id,group]of [['multihead','attention'],['wider-features','encoder'],['encoder-layer','encoder'],['causal','decoder'],['cross-attention','decoder']])assert.equal(doc.querySelector(`#level-list [data-level="${id}"]`).closest('[data-level-group]').dataset.levelGroup,group);
+ assert.equal(doc.querySelector('#level-list [data-level="wider-features"] .level-purpose').textContent,'Prepare input');
+ assert.equal(doc.querySelectorAll('.level-dependencies').length,2);assert.doesNotMatch(doc.querySelector('#level-menu').textContent,/[\u3400-\u9fff]/);
+ const before=app.eval('JSON.stringify(state)'),hash=app.location.hash;let scrolled=false;
+ doc.querySelector('#level-group-main-decoder').scrollIntoView=()=>{scrolled=true;};
+ doc.querySelector('[data-level-group-target="level-group-main-decoder"]').dispatchEvent(new app.window.Event('click',{bubbles:true}));
+ assert.ok(scrolled);assert.equal(app.eval('JSON.stringify(state)'),before);assert.equal(app.location.hash,hash);assert.equal(doc.querySelector('#level-menu').open,true,'browsing a stage does not enter or reset a level');
+ doc.querySelector('#level-list [data-level="encoder-layer"]').dispatchEvent(new app.window.Event('click',{bubbles:true}));
+ assert.equal(app.eval('stageId'),'encoder-layer');assert.equal(app.location.hash,'#encoder-layer');assert.equal(doc.querySelector('#level-menu').open,false);
+ app.eval("progress.complete('wider-features');levelMenu()");
+ assert.equal(doc.querySelector('.level-stage-nav [aria-current="step"]').dataset.levelGroupTarget,'level-group-main-encoder');
+ assert.match(doc.querySelector('#level-group-main-encoder .level-group-heading small').textContent,/1 \/ 2/);
+ const state=app.eval('JSON.stringify(state)');
+ for(const language of ['zh','en']){app.c.I18n.setPreference(language);assert.equal(doc.querySelectorAll('#level-list [data-level]').length,29);assert.equal(app.eval('JSON.stringify(state)'),state);if(language==='en')assert.doesNotMatch(doc.querySelector('#level-menu').textContent,/[\u3400-\u9fff]/);}
+ app.document.querySelector('[data-track="engine"]').dispatchEvent(new app.window.Event('click',{bubbles:true}));assert.equal(app.document.querySelectorAll('#level-list [data-level]').length,9);assert.ok(app.document.querySelector('#level-list [data-level="placement"]'));assert.doesNotMatch(app.document.querySelector('#level-menu').textContent,/[\u3400-\u9fff]/);
+ assert.equal(doc.querySelector('[data-level-group]'),null);assert.equal(doc.querySelector('#level-list').classList.contains('grouped-levels'),false);
+ doc.querySelector('[data-track="modern"]').dispatchEvent(new app.window.Event('click',{bubbles:true}));assert.equal(doc.querySelectorAll('#level-list [data-level]').length,13);assert.equal(doc.querySelector('[data-level-group]'),null);
+ assert.deepEqual([...app.c.I18n.missing],[]);
  app.eval("switchLevel('autoregressive');progress.complete(stageId);refresh()");assert.equal(app.document.querySelector('#next-level').hidden,true);app.eval("switchLevel('kv-cache');levelMenu()");assert.equal(app.eval('menuTrack'),'engine');
 });
 
