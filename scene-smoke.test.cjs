@@ -15,6 +15,63 @@ async function boot({reduced=true,frameMs=1000,onFrame=()=>{},languages=['zh-CN'
  await vm.runInContext('(async()=>{'+src+'})()',c);
  assert.ok(c.testAPI.getWorld(),'3D boot failed');return {c,document,window,api:c.testAPI,scenes,time:()=>now,view:()=>view,camera:()=>renderedCamera};
 }
+test('a solved network gathers into its matching component and flies into the shelf before completion',async()=>{
+ let app,root,assembly,originalDisposals=0,temporaryDisposals=0,landed=false;const phases=new Set();
+ const resources=group=>{const set=new Set();group.traverse(o=>{if(o.geometry)set.add(o.geometry);for(const material of o.material?(Array.isArray(o.material)?o.material:[o.material]):[]){set.add(material);if(material.map)set.add(material.map);}});return set;};
+ app=await boot({reduced:false,frameMs:120,onFrame:({document})=>{
+  if(!app)return;const scene=app.scenes.at(-1),effect=scene.children.find(o=>o.userData.fusion);if(!effect)return;
+  const shelf=document.querySelector('[data-add-module="single-attention"]');shelf.getBoundingClientRect=()=>({left:24,top:150,width:104,height:60});
+  assert.equal(document.querySelector('#component-fusion').hidden,false);assert.ok(!document.querySelector('#level-complete').open);
+  assert.equal(document.querySelectorAll('#test-results .pass').length,app.c.NeuralPrologue.levels['self-attention'].sampleCount);
+  assert.equal(document.querySelector('#module-shelf').hasAttribute('open'),true);
+  phases.add(effect.userData.fusion.stage);
+  if(!root){
+   root=effect;assembly=scene.children.find(o=>o.children.some(child=>child.userData.node==='q'));
+   const original=resources(assembly);for(const resource of original)resource.addEventListener('dispose',()=>originalDisposals++);
+   for(const resource of resources(root))if(!original.has(resource))resource.addEventListener('dispose',()=>temporaryDisposals++);
+   assert.equal(root.userData.fusion.count,app.api.getState().nodes.length);
+   assert.equal(root.children[0].children[0].children.length,assembly.children.length,'the snapshot contains the player’s actual board');
+  }
+  assert.equal(assembly.visible,false);const packed=effect.children.find(o=>o.userData.node==='fusion-preview');assert.ok(packed);
+  if(effect.userData.fusion.phase>.93){
+   const screen=packed.position.clone().project(app.camera()),x=(screen.x+1)*700,y=(1-screen.y)*380;
+   assert.ok(Math.abs(x-76)<2&&Math.abs(y-180)<2,'the new component reaches the real shelf tile');landed=true;
+   assert.ok(shelf.classList.contains('fusion-arrival'));assert.match(document.querySelector('#fusion-stage').textContent,/可拖出使用/);
+  }
+ }});
+ const doc=app.document;doc.querySelector('#welcome').close();app.api.switchLevel('self-attention');app.api.setState(app.c.NeuralPrologue.solutions('self-attention'));app.api.getWorld().rebuild();
+ doc.querySelector('#playback-speed').value='3';doc.querySelector('#playback-speed').dispatchEvent(new app.window.Event('input'));
+ doc.querySelector('#module-shelf').removeAttribute('open');const saved=JSON.stringify(app.api.getState());await app.api.run();
+ assert.deepEqual([...phases],['gather','formed','shelf']);assert.ok(landed);assert.equal(root.parent,null);assert.equal(assembly.visible,true);
+ assert.equal(originalDisposals,0,'the celebration must never dispose live board resources');assert.ok(temporaryDisposals>0,'temporary celebration resources are released');
+ assert.equal(doc.querySelector('#component-fusion').hidden,true);assert.equal(doc.body.classList.contains('synthesizing-component'),false);assert.equal(doc.querySelectorAll('.fusion-awaiting,.fusion-arrival').length,0);
+ assert.equal(doc.querySelector('#level-complete').open,true);assert.equal(JSON.stringify(app.api.getState()),saved);
+});
+test('fusion supports pause, camera movement, language changes and skipping; stop removes every transient effect',async()=>{
+ let app,phase=0,pausedAt,pausedFrames=0,stopping=false,stopped,skipped=false,root;
+ app=await boot({reduced:false,frameMs:120,onFrame:({document,window})=>{
+  if(!app)return;const scene=app.scenes.at(-1),effect=scene.children.find(o=>o.userData.fusion);if(!effect)return;root=effect;
+  if(stopping){app.api.togglePause();stopped=app.api.run();app.api.switchLevel('weighted-sum');return;}
+  if(!phase&&effect.userData.fusion.phase>.1){pausedAt=effect.userData.fusion.phase;app.api.togglePause();phase=1;return;}
+  if(phase===1){
+   if(!pausedFrames)pausedAt=effect.userData.fusion.phase;else assert.equal(effect.userData.fusion.phase,pausedAt,'pause freezes the synthesis');
+   if(!pausedFrames){
+    const before=app.view().position.slice();const event=(type,x,y)=>Object.assign(new window.Event(type,{bubbles:true}),{clientX:x,clientY:y});
+    document.querySelector('#scene').dispatchEvent(event('pointerdown',600,300));document.dispatchEvent(event('pointermove',675,325));document.dispatchEvent(event('pointerup',675,325));assert.notDeepEqual(app.view().position,before);
+    app.c.I18n.setPreference('en');assert.match(document.querySelector('#fusion-name').textContent,/Single-head self-attention/);assert.equal(effect.parent,scene,'relocalizing the original board does not dispose its celebration snapshot');
+   }
+   if(++pausedFrames===3){app.api.togglePause();phase=2;}return;
+  }
+  if(phase===2&&effect.userData.fusion.phase>.7){document.querySelector('#fusion-skip').onclick();skipped=true;phase=3;}
+ }});
+ const doc=app.document;doc.querySelector('#welcome').close();app.api.switchLevel('self-attention');app.api.setState(app.c.NeuralPrologue.solutions('self-attention'));app.api.getWorld().rebuild();
+ doc.querySelector('#playback-speed').value='3';doc.querySelector('#playback-speed').dispatchEvent(new app.window.Event('input'));
+ const saved=JSON.stringify(app.api.getState());await app.api.run();assert.ok(skipped);assert.equal(doc.querySelector('#level-complete').open,true);assert.equal(root.parent,null);assert.equal(JSON.stringify(app.api.getState()),saved);
+ stopping=true;await app.api.run();await stopped;
+ assert.equal(app.api.getState().levelId,'weighted-sum');assert.equal(doc.querySelector('#component-fusion').hidden,true);assert.equal(root.parent,null);assert.equal(doc.body.classList.contains('synthesizing-component'),false);
+ assert.equal(doc.querySelector('#level-complete').open,false);assert.equal(doc.querySelector('#pause').getAttribute('aria-pressed'),'false');assert.equal(doc.querySelectorAll('.fusion-awaiting,.fusion-arrival,.packet').length,0);
+ assert.ok(app.scenes.at(-1).children.filter(o=>o.children.some(n=>n.userData.node)).every(o=>o.visible));assert.deepEqual([...app.c.I18n.missing],[]);
+});
 test('A × V animates actual coefficients, V columns and stored sums at the projection pace',async()=>{
  let app,level='weighted-sum';const seen=new Set(),starts=new Map(),checks=new Set();
  const factor=v=>v<0?'('+Number(v.toFixed(2))+')':String(Number(v.toFixed(2)));
@@ -1335,6 +1392,7 @@ test('shelf cards inspect every available kind without placing a node, including
  for(const level of ['workshop','scores','pack-ffn','pack-scores','multihead','encoder-layer','encoder-decoder','ffn','attention','block']){
   app.api.switchLevel(level);const saved=JSON.stringify(app.api.getState()),view=app.view();
   for(const kind of Object.keys(M.inventory(M.levels[level]))){
+   if(!doc.querySelector(`[data-add-module="${kind}"]`)){assert.equal(M.fusions[level]?.kind,kind,'only this lesson’s unearned composite is hidden');continue;}
    const card=doc.querySelector(`[data-add-module="${kind}"]`);event(card,'click');event(card,'dblclick');await new Promise(setImmediate);
    assert.equal(doc.querySelector('#module-card').open,true,kind);assert.equal(doc.querySelector('#card-name').textContent,M.definitions[kind].name);
    assert.doesNotMatch(doc.querySelector('#module-card').textContent,/[\u3400-\u9fff]/,kind);

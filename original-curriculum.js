@@ -62,6 +62,9 @@ Object.assign(M.definitions,{
  'relu-ffn':def(labels.ffn,[2],2,'ffn',ffnHint,{glyphs:['W1','ReLU','W2']}),
  position:def(labels.position,[6],6,'position',positionHint),
  'original-weights':def(L('已学的打分与 Softmax','Scores and Softmax'),[6],9,'attention',L('把 Q/K 投影、缩放点积和 Softmax 封装起来。三个位置彼此可见，没有 RoPE 和因果遮罩。','Packages Q/K projections, scaled dot products and Softmax. All three positions are visible, without RoPE or a causal mask.')),
+ 'single-attention':def(L('单头自注意力','Single-head self-attention'),[6],6,'attention',L('完整保留本关的 Q/K/V、打分、Softmax、A × V 和 Wo。每个词仍有两个特征，与七块组件的接法计算相同；不含残差、归一化或 FFN。','Contains this lesson’s Q/K/V, scoring, Softmax, A × V and Wo. Every token still has two features, with the same computation as the seven separate modules. Residuals, normalization and FFNs remain outside.')),
+ 'two-head-attention':def(L('双头自注意力 · 两维','Two-head self-attention · two features'),[6],6,'attention',L('两个头各算一个特征，再拼接并乘 Wo。与两维的双头关卡使用同样的权重；完整编码器里的四维版本另有四维端口。','Each head computes one feature; concatenate the heads and apply Wo. Uses the same weights as the two-feature lesson. The four-feature version in the complete encoder has separate four-feature ports.')),
+ 'single-cross-attention':def(L('单头交叉注意力','Single-head cross-attention'),[12,12],12,'attention',L('第一个入口提供目标特征，第二个入口提供编码器的源特征。内部保留四维 Q/K/V、打分、Softmax、A × V 和 Wo，与刚搭好的单头交叉注意力一致。','The first input supplies target features; the second supplies source features from the encoder. Contains four-feature Q/K/V, scoring, Softmax, A × V and Wo, matching the single-head cross-attention circuit.')),
  'head-a':def(L('注意力头 A','Attention head A'),[6],3,'attention',L('用第一组 Q/K/V 权重各投影到一个特征，独立打分、Softmax 和汇合；每个位置输出一个数。','Use the first set of Q/K/V weights to project to one feature, then independently score, apply Softmax and aggregate. Outputs one value per position.'),{glyphs:['Q₁','K₁','V₁']}),
  'head-b':def(L('注意力头 B','Attention head B'),[6],3,'attention',L('用第二组 Q/K/V 权重做独立注意力。输入相同，权重不同，因此可以得到另一种信息组合。','Use a second set of Q/K/V weights for independent attention. The same input with different weights can yield a different combination of information.'),{glyphs:['Q₂','K₂','V₂']}),
  concat:def(L('按特征拼接','Concatenate features'),[3,3],6,'concat',L('把同一位置的头 A、头 B 输出并排放成两个特征。保留三个 token 的顺序，不相加、不把 token 接到序列尾部。','Place head A and head B side by side at each position. Keep token order; do not add the heads or append tokens to the sequence.')),
@@ -98,7 +101,7 @@ for(const [kind,name]of [['q',L('Q · 查询投影','Q · query projection')],['
 M.weights['original-head']=wide.vocabulary;
 Object.assign(M.operations,{
  relu:([x])=>x.map(relu),layernorm2:([x])=>ln(x),'relu-ffn':([x])=>classicFFN(x),position:([x])=>position(x),
- 'original-weights':([x])=>unmaskedWeights(x),'head-a':([x])=>head(x,x,0),'head-b':([x])=>head(x,x,1),concat:([a,b])=>concat(a,b),
+ 'original-weights':([x])=>unmaskedWeights(x),'single-attention':([x])=>singleAttention(x),'two-head-attention':([x])=>multi(x),'single-cross-attention':([q,kv])=>singleAttention(q,kv),'head-a':([x])=>head(x,x,0),'head-b':([x])=>head(x,x,1),concat:([a,b])=>concat(a,b),
  'self-heads':([x])=>multi(x),'masked-heads':([x])=>multi(x,x,true),'cross-heads':([q,kv])=>multi(q,kv),
  'ln-attn':([x])=>lnSequence(x),'ln-ffn':([x])=>lnSequence(x),'ln-cross':([x])=>lnSequence(x),
  'original-ffn-block':([x])=>sequenceFFN(x),'cross-add':([a,b])=>plus(a,b),
@@ -110,6 +113,7 @@ Object.assign(M.operations,{
  'original-q':([x])=>project(x,wide.q),'original-k':([x])=>project(x,wide.k),'original-v':([x])=>project(x,wide.v),'original-output':([x])=>project(x,wide.output)
 });
 const operatorIds=['relu','layernorm2','relu-ffn','position','original-weights','head-a','head-b','concat','self-heads','masked-heads','cross-heads','ln-attn','ln-ffn','ln-cross','original-ffn-block','cross-add','original-encoder','original-decoder','source-embed','target-embed','wide-embedding','wide-position','encoder-add','ffn-add','original-score','original-aggregate','original-head','original-q','original-k','original-v','original-output'];
+operatorIds.push('single-attention','two-head-attention','single-cross-attention');
 for(const id of operatorIds){
  const d=M.definitions[id];M.extraColors[id]=({linear:0x789abf,score:0x879bb3,mix:0x64a68f,vocabulary:0xb79b6b,embedding:0x7d9ea5,activation:0xc6a574,layernorm:0xb8a36a,ffn:0x759c88,position:0xb49b6a,attention:0x789abf,concat:0x9b86b4,residual:0xc3a26f,encoder:0x6a9c93,decoder:0x9387ad})[d.type];
 }
@@ -259,12 +263,34 @@ for(const id of [...originalNetwork,...Object.values(bridges)]){const l=M.levels
 // Scalar exercises and whole-sequence circuits have different port contracts.
 // The engine track uses its own costed tasks, not raw arithmetic operators.
 const sequenceKind=kind=>Math.max(...M.definitions[kind].ins,M.definitions[kind].out)>4;
+// A reward has exactly the same inputs, weights and output as its lesson.
+// Its own shelf entry is revealed by the UI only after that lesson passes.
+M.fusions={
+ softmax:{kind:'original-weights',inputs:['R']},
+ 'self-attention':{kind:'single-attention',inputs:['R']},
+ multihead:{kind:'two-head-attention',inputs:['R']},
+ 'wider-features':{kind:'source-embed',inputs:['R']},
+ 'encoder-layer':{kind:'original-encoder',inputs:['R']},
+ 'cross-attention':{kind:'single-cross-attention',inputs:['R','Z']},
+ 'decoder-layer':{kind:'original-decoder',inputs:['R','Z']},
+ attention:{kind:'attention',inputs:['R']}
+};
+const fusionOrigins=Object.fromEntries(Object.entries(M.fusions).map(([id,{kind}])=>[kind,id]));
+M.fusionCopy={
+ gathering:L('把刚搭好的网络收成一个组件','Package the network you just built'),
+ formed:L('内部计算相同，外面只需一个组件','The same computation, now inside one module'),
+ stored:L('已放入左侧组件架，可拖出使用','Added to the left shelf — drag it onto the workbench'),
+ collected:L('已收录组件','Module collected'),
+ skip:L('跳过动画','Skip animation')
+};
+I18n.prepare(M.fusionCopy);
 const learned=new Set(),origins={};
 for(const [track,route]of Object.entries(M.routes)){
  const known=track==='engine'?new Set():learned;
  for(const id of route.ids){
   const l=M.levels[id],own={...M.inventory(l)};
   for(const kind of Object.keys(own)){known.add(kind);origins[kind]??=id;}
+  if(M.fusions[id])known.add(M.fusions[id].kind);
   if(l.practice||l.engine)continue;
   const kinds=[...known].filter(kind=>sequenceKind(kind)===!!l.sequence||own[kind]);
   l.inventory=Object.fromEntries(kinds.map(kind=>[kind,Math.max(2,own[kind]||0)]));
@@ -273,7 +299,7 @@ for(const [track,route]of Object.entries(M.routes)){
 }
 // Cards for optional shelf modules use a real, dimensionally valid example
 // from the lesson in which that module was taught, rather than a missing node.
-M.exampleLevel=(kind,id)=>M.levels[id].nodes.includes(kind)?id:origins[kind]||id;
+M.exampleLevel=(kind,id)=>M.levels[id].nodes.includes(kind)?id:origins[kind]||fusionOrigins[kind]||id;
 M.moduleShape=(kind,dim)=>{
  if(['head-a','head-b','concat'].includes(kind)&&dim===3)return '3 × 1';
  return sequenceKind(kind)?({3:I18n.t('3 个 ID'),6:'3 × 2',9:'3 × 3',12:'3 × 4',18:'3 × 6'}[dim]||dim):dim;
@@ -283,6 +309,9 @@ const ffnStages=[moduleNames(['project']),['ReLU'],moduleNames(['down'])];
 const matchingStages=[['Q','K'],['QKᵀ / √d_k'],['Softmax']];
 const headStages=[['Q','K','V'],['softmax(QKᵀ / √d_k) V']];
 M.packages={
+ 'single-attention':pack([['Q','K','V'],['QKᵀ / √2'],['Softmax'],['A × V'],['Wo']],M.definitions['single-attention'].hint),
+ 'two-head-attention':pack([moduleNames(['head-a','head-b']),moduleNames(['concat']),['Wo']],M.definitions['two-head-attention'].hint),
+ 'single-cross-attention':pack([['Q ← D','K, V ← E'],['QKᵀ / √4'],['Softmax'],['A × V'],['Wo']],M.definitions['single-cross-attention'].hint),
  'relu-ffn':pack(ffnStages,L('与序章的三块组件使用同样的权重：2 → 4 → 4 → 2。ReLU 仍在内部，不是一次线性变换。','Uses the same weights as the three prologue modules: 2 → 4 → 4 → 2. ReLU remains inside; this is not one linear transformation.')),
  'original-weights':pack(matchingStages,L('只封装 Q/K 的匹配与比例，不包含 V、内容汇合、遮罩或 RoPE。','Packages only Q/K matching and proportions, without V, value aggregation, masking or RoPE.')),
  'head-a':pack(headStages,L('把已学的 Q/K/V、打分、Softmax、AV 收成一个头。这里各投影到 1 个特征，使用第一组权重；不含 Wo。','Packages Q/K/V, scores, Softmax and AV as one head. Here each projection produces one feature with the first set of weights; Wo is outside.')),
@@ -332,6 +361,10 @@ for(const id of operatorIds){
 Object.assign(cards.relu,{formula:'Aᵢ = max(0, Pᵢ)',purpose:L('正值沿直线通过，负值停在 0。输入符号会改变通过的特征，因此在线性层之间加入非线性。','Positive values pass along a straight line; negative values stop at zero. The input sign changes which features pass, adding nonlinearity between linear layers.')});
 for(const id of ['layernorm2','ln-attn','ln-ffn','ln-cross'])cards[id].formula='LN(x) = (x − μ) / √(variance(x) + ε) · γ + β';
 for(const id of ['relu-ffn','original-ffn-block'])cards[id].formula='FFN(x) = ReLU(xW1 + b1)W2 + b2';
+for(const id of ['single-attention','single-cross-attention','two-head-attention']){
+ cards[id].formula=id==='two-head-attention'?'Y = Concat(head A, head B) × Wo':'Y = softmax(QKᵀ / √'+(id==='single-attention'?'2':'4')+') × V × Wo';
+ cards[id].purpose=M.packages[id].note;
+}
 cards.position.formula='X[p] = √2 · Embedding[p] + [sin(p), cos(p)]';
 for(const id of ['wide-position','source-embed','target-embed'])cards[id].formula='X[p] = 2 · Embedding[p] + [sin(p), cos(p), sin(p/100), cos(p/100)]';
 cards['wide-embedding'].formula='X[p] = EmbeddingTable[token_id[p]]';
@@ -456,7 +489,12 @@ M.extraCard=(id,levelId)=>{
 };
 M.extraExample=(id,levelId)=>{
  if(!M.levels[levelId]?.original)return previousExample(id,levelId);
- const s=M.solutions(levelId),sampleIndex=levelId==='relu'?2:0,input=M.samplesFor(levelId)[sampleIndex].v,ev=M.evaluate(s,input),n=s.nodes.find(n=>n.id===id);if(!n)return null;
+ const s=M.solutions(levelId),sampleIndex=levelId==='relu'?2:0,input=M.samplesFor(levelId)[sampleIndex].v,ev=M.evaluate(s,input),n=s.nodes.find(n=>n.id===id);
+ if(!n){
+  const reward=M.fusions[levelId];if(reward?.kind!==id)return null;
+  const sources=M.sourceValues(s,input),values=reward.inputs.map(key=>sources[key]);
+  return {sampleIndex,exampleSource:['X',input],inputs:values.map((value,i)=>[reward.inputs.length===1?'X':i===0?'D':'E',value]),output:['Y',M.operations[id](values)]};
+ }
  const names={R:M.levels[levelId].dualSource?'D':'X',Z:levelId==='encoder-decoder'?'Source ID':'E',project:'P',relu:'A',down:'F',add:'R',layernorm2:'Y',q:'Q',k:'K',v:'V',score:'S',softmax:'A',aggregate:'O',output:'Y','original-q':'Q','original-k':'K','original-v':'V','original-score':'S','original-aggregate':'O','original-output':'Y','original-head':'L','wide-embedding':'X','wide-position':'Xp',position:'Xp','head-a':'H_A','head-b':'H_B',concat:'C','original-weights':'A','relu-ffn':'F','original-ffn-block':'F','self-heads':'O','masked-heads':'O','cross-heads':'O','cross-add':'Rc','source-embed':'Xs','target-embed':'Xt','original-encoder':'E','original-decoder':'D','encoder-add':'R1','ffn-add':'R2','ln-attn':'X1','ln-cross':'X2','ln-ffn':'Y'};
  names['self-heads']='Oa';names['masked-heads']='Om';names['cross-heads']='Oc';
  names.add=levelId==='add-norm'?'R':'Y';

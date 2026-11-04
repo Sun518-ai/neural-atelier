@@ -117,6 +117,34 @@ function completedCircuit(M,id){
  throw new Error('No completed circuit fixture: '+id);
 }
 
+test('composite rewards wait for a win and their animation, then remain usable without replacing the saved board',async()=>{
+ const app=boot(new Map(),'#self-attention'),doc=app.document,selector='[data-add-module="single-attention"]';
+ let count=0,begin,finish;const started=new Promise(resolve=>begin=resolve);
+ app.c.fuse=reward=>{count++;assert.equal(reward.kind,'single-attention');return new Promise(resolve=>{finish=resolve;begin();});};app.eval('world.fuse=window.fuse');
+ assert.equal(doc.querySelector(selector),null);app.eval("chooseModule('single-attention')");assert.equal(app.eval('placeModule(0,0)'),false);
+ await app.eval('run()');assert.equal(count,0);assert.equal(app.eval("progress.completed('self-attention')"),false);assert.equal(doc.querySelector(selector),null);
+ app.eval("state=M.solutions(stageId);checkpoint();state.nodes[0].z+=.2;save()");const board=app.eval('JSON.stringify(state)'),undo=app.eval('JSON.stringify(history)');
+ const running=app.eval('run()');await started;
+ assert.equal(app.eval('levelPassed()'),true);assert.equal(app.eval('busy'),true);assert.ok(!doc.querySelector('#level-complete').open);
+ assert.equal(doc.querySelector(selector).getAttribute('aria-disabled'),'true','the reward is visible but cannot be placed while its ceremony runs');
+ finish(true);await running;assert.equal(app.eval('busy'),false);assert.equal(doc.querySelector('#level-complete').open,true);
+ assert.equal(doc.querySelector('#complete-reward').hidden,false);assert.match(doc.querySelector('#complete-reward').textContent,/单头自注意力/);
+ assert.equal(app.eval('JSON.stringify(state)'),board);assert.equal(app.eval('JSON.stringify(history)'),undo);
+ const restored=boot(app.storage,'#self-attention');assert.ok(restored.document.querySelector(selector));assert.equal(restored.eval('JSON.stringify(state)'),board);
+ restored.eval("for(const n of [...state.nodes])removeModule(n.id);chooseModule('single-attention')");assert.equal(restored.eval('placeModule(0,0)'),true);
+ restored.eval("chooseOutput('R');chooseInput('single-attention',0);chooseOutput('single-attention');chooseInput('sink',0)");await restored.eval('run()');
+ assert.equal(restored.eval('levelPassed()'),true,'the earned component really computes the complete lesson');
+ const packed=restored.eval('JSON.stringify(state)'),reloaded=boot(app.storage,'#self-attention');assert.equal(reloaded.eval('JSON.stringify(state)'),packed);
+ reloaded.eval("switchLevel('multihead')");assert.ok(reloaded.document.querySelector(selector),'later compatible lessons retain the component');assert.equal(reloaded.document.querySelector('[data-add-module="two-head-attention"]'),null,'the next lesson still needs to be built');
+ for(const lang of ['en','zh']){app.c.I18n.setPreference(lang);assert.equal(doc.querySelector('#complete-reward>strong').textContent,app.c.NeuralPrologue.definitions['single-attention'].name);if(lang==='en')assert.doesNotMatch(doc.querySelector('#complete-reward').textContent,/[\u3400-\u9fff]/);}
+ assert.deepEqual([...app.c.I18n.missing],[]);
+});
+test('a failed celebration cannot strand a valid completion or take away its reward',async()=>{
+ const app=boot(new Map(),'#self-attention'),errors=[];app.c.console={...console,error:(...args)=>errors.push(args)};
+ app.eval("state=M.solutions(stageId);world.fuse=async()=>{throw new Error('presentation unavailable')}");const saved=app.eval('JSON.stringify(state)');await app.eval('run()');
+ assert.equal(errors.length,1);assert.equal(app.eval('busy'),false);assert.equal(app.document.querySelector('#level-complete').open,true);assert.ok(app.document.querySelector('[data-add-module="single-attention"]'));assert.equal(app.eval('JSON.stringify(state)'),saved);
+});
+
 test('completion waits for every input, replay preserves the circuit and undo, and next loads the saved destination',async()=>{
  const app=boot(),dialog=app.document.querySelector('#level-complete');app.document.querySelector('#run').focus=()=>{};
  app.eval("switchLevel(M.levels.workshop.next);state=M.solutions(stageId);state.nodes[0].x+=.2;save();window.destination=JSON.stringify(state);switchLevel('workshop');state=M.solutions(stageId);checkpoint();state.nodes[0].z+=.25;save();setPlaybackSpeed(.5)");
@@ -318,7 +346,7 @@ test('the shelf remains usable after the placement tutorial and original lessons
  }
  for(const id of [...M.routes.modern.ids,...M.routes.engine.ids]){
   app.eval(`switchLevel('${id}')`);assert.equal(shelf.hidden,false,id);
-  assert.equal(app.document.querySelectorAll('[data-add-module]').length,Object.keys(M.inventory(M.levels[id])).length,id+' exposes its own stock');
+  assert.equal(app.document.querySelectorAll('[data-add-module]').length,Object.keys(M.inventory(M.levels[id])).filter(kind=>M.fusions[id]?.kind!==kind||app.eval(`progress.completed('${id}')`)).length,id+' exposes unlocked stock');
  }
  app.eval("switchLevel('normalize')");assert.equal(app.eval('state.nodes.length'),1,'prepared arithmetic lessons keep their starting modules');
  shelf.removeAttribute('open');app.eval("switchLevel('embedding');switchLevel('normalize')");assert.equal(shelf.hidden,false);assert.equal(shelf.hasAttribute('open'),false,'the player can still collapse the persistent shelf');

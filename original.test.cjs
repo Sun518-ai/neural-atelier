@@ -33,7 +33,7 @@ test('original concepts are completed before optional modern and engine tracks',
 test('learned shelves accumulate in teaching order without exposing future operators or requiring distractors',()=>{
  const seen=new Set(),sequenceKind=k=>Math.max(...M.definitions[k].ins,M.definitions[k].out)>4;
  for(const route of [M.routes.main,M.routes.modern])for(const id of route.ids){
-  const l=M.levels[id];l.nodes.forEach(k=>seen.add(k));
+  const l=M.levels[id];l.nodes.forEach(k=>seen.add(k));if(M.fusions[id])seen.add(M.fusions[id].kind);
   if(l.practice)continue;
   const stock=M.inventory(l);
   for(const kind of seen)if(sequenceKind(kind)===!!l.sequence)assert.ok(stock[kind]>0,id+' retains '+kind);
@@ -50,6 +50,25 @@ test('learned shelves accumulate in teaching order without exposing future opera
  assert.ok(M.samplesFor('scores').some(({v})=>!close(M.evaluate(wrong,v).output,M.reference(v,'scores'))),'V is a real numerical distractor, not an alternate key projection');
  assert.equal(M.inventory(M.levels.workshop).project,1);assert.equal(Object.keys(M.inventory(M.levels.workshop)).length,1);
  for(const id of M.routes.engine.ids)assert.deepEqual(Object.keys(M.inventory(M.levels[id])),Array.from(M.levels[id].nodes),'engine shelves keep costed tasks');
+});
+
+test('collected modules compute the same complete circuit, with the original input and output widths',()=>{
+ for(const [id,reward]of Object.entries(M.fusions)){
+  const level=M.levels[id],definition=M.definitions[reward.kind],packed=M.initial(id);
+  assert.ok(level.buildable,id);assert.equal(definition.out,level.sinkDim);
+  assert.deepEqual(Array.from(definition.ins),Array.from(reward.inputs,()=>level.sourceDim||2));
+  assert.ok(M.addNode(packed,reward.kind,0,0),id);
+  reward.inputs.forEach((source,i)=>assert.equal(M.connect(packed,source,reward.kind,i),null));
+  assert.equal(M.connect(packed,reward.kind,'sink',0),null);
+  for(const {v}of M.samplesFor(id)){
+   const expected=M.evaluate(M.solutions(id),v),actual=M.evaluate(packed,v);
+   assert.equal(actual.error,null,id);assert.ok(close(actual.output,expected.output),id+' keeps its circuit’s weights and operations');
+   assert.ok(close(actual.output,M.reference(v,id)),id+' keeps the lesson target');
+  }
+  assert.ok(M.packages[reward.kind]?.stages.length,id+' keeps its internal diagram');
+ }
+ const input=M.samplesFor('self-attention')[0].v;
+ assert.ok(!close(M.operations['single-attention']([input]),M.operations['two-head-attention']([input])),'one full-width head cannot be mislabeled as two narrow heads');
 });
 
 test('packaging bridges require wiring and accept numerically equivalent expanded graphs',()=>{
@@ -73,7 +92,7 @@ test('packaging bridges require wiring and accept numerically equivalent expande
 test('every optional shelf module has a real worked example and every package is introduced',()=>{
  for(const level of Object.values(M.levels))for(const kind of Object.keys(M.inventory(level))){
   const id=M.exampleLevel(kind,level.id),d=M.definitions[kind];
-  assert.ok(M.levels[id].nodes.includes(kind),level.id+' / '+kind);
+  assert.ok(M.levels[id].nodes.includes(kind)||M.fusions[id]?.kind===kind,level.id+' / '+kind);
   const ex=M.extraExample(kind,id)||ctx.exampleFor(M,kind,id);
   assert.equal(ex.inputs.length,d.ins.length,level.id+' / '+kind);
   ex.inputs.forEach(([,values],i)=>assert.equal(values.length,d.ins[i],kind+' input shape'));
@@ -81,7 +100,7 @@ test('every optional shelf module has a real worked example and every package is
   for(const values of [...ex.inputs,ex.output])assert.ok(values[1].every(n=>Number.isFinite(n)||n===-Infinity),kind+' values');
  }
  for(const kind of Object.keys(M.packages)){
-  const id=M.exampleLevel(kind,'wire');assert.ok(M.levels[id].packages.includes(kind));
+  const id=M.exampleLevel(kind,'wire');assert.ok(M.levels[id].packages?.includes(kind)||M.fusions[id]?.kind===kind);
  }
 });
 

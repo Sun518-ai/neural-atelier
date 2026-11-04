@@ -802,6 +802,39 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
    if(gather===1)o.position.copy(home);else o.position.copy(start.lerp(target,gather).sub(origin));
   });
  }
+ function fusionVisual(assembly,wires,kind,definition,weights){
+  const root=new T.Group(),ghost=new T.Group(),center=new T.Vector3(0,1.2,0),ownedGeometry=new Map(),ownedMaterials=new Map();
+  root.userData.fusion={kind,phase:0,count:assembly.children.length};root.add(ghost);
+  const copyMaterial=m=>{if(!ownedMaterials.has(m)){const copy=m.clone();if(m.map){copy.map=m.map.clone();copy.map.needsUpdate=true;}ownedMaterials.set(m,copy);}return ownedMaterials.get(m);};
+  for(const source of [assembly,wires]){
+   const copy=source.clone(true);copy.visible=true;
+   copy.traverse(o=>{
+    if(o.geometry){if(!ownedGeometry.has(o.geometry)){const geometry=o.geometry.clone();geometry.userData={...geometry.userData,shared:false};ownedGeometry.set(o.geometry,geometry);}o.geometry=ownedGeometry.get(o.geometry);}
+    if(o.material)o.material=Array.isArray(o.material)?o.material.map(copyMaterial):copyMaterial(o.material);
+    o.castShadow=o.receiveShadow=false;
+   });ghost.add(copy);
+  }
+  const packed=module(root,{id:'fusion-preview',kind,x:0,z:0,links:definition.ins.map(()=>null)},definition,weights,{register:false});packed.position.copy(center);
+  const shade=group=>{const list=[];group.traverse(o=>{if(o.material)for(const material of Array.isArray(o.material)?o.material:[o.material]){list.push([material,material.opacity]);material.transparent=true;material.depthWrite=false;material.needsUpdate=true;}});return list;};
+  const ghostShades=shade(ghost),packedShades=shade(packed),halo=new T.Group();halo.position.copy(center);root.add(halo);
+  for(let i=0;i<3;i++){const mesh=ring(halo,1.5+i*.18,0,.2+i*.16,0,colors[kind]||0x69ab97,.022);mesh.material.transparent=true;mesh.material.depthWrite=false;mesh.material.emissive.set(colors[kind]||0x69ab97);mesh.material.emissiveIntensity=.8;}
+  const sparks=assembly.children.map((node,i)=>{const spark=new T.Mesh(new T.SphereGeometry(.07,8,6),mat(featureColor(i),{emissive:featureColor(i),emissiveIntensity:1.8,transparent:true,depthWrite:false}));spark.userData.start=node.position.clone().add(new T.Vector3(0,1,0));root.add(spark);return spark;});
+  const clamp=x=>Math.max(0,Math.min(1,x)),ease=x=>{x=clamp(x);return x*x*(3-2*x);},fade=(list,amount)=>list.forEach(([m,opacity])=>m.opacity=opacity*amount);
+  let disposed=false;scene.add(root);
+  return {root,packed,center,
+   update(phase,destination=center,reduced=false){
+    const gather=ease(phase/.44),reveal=ease((phase-.32)/.17),flight=ease((phase-.68)/.23);
+    root.userData.fusion.phase=phase;root.userData.fusion.stage=phase<.38?'gather':phase<.68?'formed':'shelf';
+    ghost.visible=!reduced&&phase<.46;ghost.scale.setScalar(1-.96*gather);ghost.position.y=.9*gather;ghost.rotation.y=.18*Math.sin(gather*Math.PI);fade(ghostShades,1-ease((phase-.23)/.21));
+    packed.visible=reduced?phase<.8:reveal>0;packed.scale.setScalar(reduced?1.55:Math.max(.001,reveal*1.65*(1-.83*flight)));
+    packed.position.copy(reduced?center:center.clone().lerp(destination,flight));packed.position.y+=reduced?0:Math.sin(flight*Math.PI)*.7;
+    packed.rotation.y=reduced?0:(1-reveal)*-.65+Math.sin(phase*Math.PI)*.12;fade(packedShades,reduced?1:reveal*(1-ease((phase-.88)/.07)));
+    halo.visible=!reduced;halo.scale.setScalar(.8+reveal*.8);halo.children.forEach((ring,i)=>{ring.material.opacity=Math.sin(clamp((phase-.25)/.44)*Math.PI)*.65;ring.rotation.z=phase*2+i*.2;});
+    sparks.forEach((spark,i)=>{const travel=ease((phase-.08-i*.012)/.31);spark.visible=!reduced&&phase<.43;spark.position.copy(spark.userData.start).lerp(center,travel);spark.position.y+=Math.sin(travel*Math.PI)*1.1;spark.material.opacity=Math.sin(travel*Math.PI);});
+   },
+   dispose(){if(disposed)return;disposed=true;scene.remove(root);const geometry=new Set(),materials=new Set(),textures=new Set();root.traverse(o=>{if(o.geometry&&!o.geometry.userData.shared)geometry.add(o.geometry);if(o.material)for(const m of Array.isArray(o.material)?o.material:[o.material]){materials.add(m);if(m.map)textures.add(m.map);}});geometry.forEach(g=>g.dispose());textures.forEach(t=>t.dispose());materials.forEach(m=>m.dispose());}
+  };
+ }
  function resetUnits(){units.clear();}
- return {surroundings,module,sync,focusCalculations,updateDetail,detailsVisible:()=>detailModes[detailScope],pulseSource,layerNormFrame,layerNormStats,layerNormAnchor,routeLayerNormInput,routeLayerNormOutput,tokenOperation,tokenFrame,tokenAnchor,routeTokenInput,routeTokenOutput,projectionFrame,sequenceProjectionFrame,routeSequenceProjectionInput,routeSequenceProjectionOutput,routeAggregationValues,rmsFrame,rmsAnchor,routeRMSOutput,projectionColor,pairColorsFor:id=>units.get(id)?.pairTones||pairColors,processing,clearProcessing,packet,prepareProjectionPacket,routeProjectionPacket,routePairedPacket,projectionOutlet,projectionRadius,prepareProjectionOutput,routeProjectionOutput,featureColor,rowColor,rowZ,resetUnits,focus(active){context.visible=!active;floor.visible=!active;detailScope=active?'card':'board';if(active)detailModes.card=true;}};
+ return {surroundings,module,sync,fusionVisual,focusCalculations,updateDetail,detailsVisible:()=>detailModes[detailScope],pulseSource,layerNormFrame,layerNormStats,layerNormAnchor,routeLayerNormInput,routeLayerNormOutput,tokenOperation,tokenFrame,tokenAnchor,routeTokenInput,routeTokenOutput,projectionFrame,sequenceProjectionFrame,routeSequenceProjectionInput,routeSequenceProjectionOutput,routeAggregationValues,rmsFrame,rmsAnchor,routeRMSOutput,projectionColor,pairColorsFor:id=>units.get(id)?.pairTones||pairColors,processing,clearProcessing,packet,prepareProjectionPacket,routeProjectionPacket,routePairedPacket,projectionOutlet,projectionRadius,prepareProjectionOutput,routeProjectionOutput,featureColor,rowColor,rowZ,resetUnits,focus(active){context.visible=!active;floor.visible=!active;detailScope=active?'card':'board';if(active)detailModes.card=true;}};
 }
