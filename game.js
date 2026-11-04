@@ -1,5 +1,5 @@
-import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=compute-focus-1';
-import {createProgress} from './level-progress.js?v=compute-focus-1';
+import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=av-animation-1';
+import {createProgress} from './level-progress.js?v=av-animation-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -241,7 +241,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=compute-focus-1');
+ const {createSceneArt}=await import('./scene-art.js?v=av-animation-1');
  const art=createSceneArt(T,scene,colors,{anisotropy:renderer.capabilities.getMaxAnisotropy()});art.surroundings(samples(),stage());
  const assembly=new T.Group(),wires=new T.Group();scene.add(assembly,wires);const neuronGeo=new T.SphereGeometry(.115,16,12);let elements=[],curves=[],packets=[],drag=null,preview=null,yaw=.05,pitch=.8,zoom=stage().zoom,lastDepth=-1;
  const cameraTarget=new T.Vector3();let focusId=null,shelfFocus=null,shelfModel=null,overview=null,cameraFrame=0,transitioning=false,lastTap=null;
@@ -374,7 +374,7 @@ try{
   Object.assign(camera,{left:-width/2,right:width/2,top:height/2,bottom:-height/2});
   camera.position.set(cameraTarget.x+Math.sin(yaw)*24,cameraTarget.y+Math.sin(pitch)*24,cameraTarget.z+Math.cos(yaw)*Math.cos(pitch)*24);
   camera.lookAt(cameraTarget);camera.updateProjectionMatrix();art.updateDetail(camera,w,h);
-  for(const p of packets)if(p.tokenOperation||p.centering||p.sequenceProjection)for(const {label}of p.mesh.userData.featureRoutes)label.visible=label.material.opacity>0&&art.detailsVisible();
+  for(const p of packets)if(p.tokenOperation||p.centering||p.sequenceProjection)for(const mesh of [p.mesh,p.mixing?p.otherMesh:null].filter(Boolean))for(const {label}of mesh.userData.featureRoutes)label.visible=label.material.opacity>0&&art.detailsVisible();
   renderer.render(scene,camera);
   syncConnectionGuide(w,h);syncPlacementGuide(w,h);syncWireTargets(w,h);syncConnectionError(w,h);
   const flow=flowFootprints(w/width);
@@ -521,13 +521,20 @@ try{
   let previous=animationTime(),elapsed=0;
   const seq=!!stage().sequence,readyNodes=state.nodes.filter(n=>ev.values[n.id]);
   const pairedNode=id=>!seq&&['multiply','add'].includes(definition(id)?.type);
+  const mixingNode=id=>definition(id)?.type==='mix';
+  const handledSecondary=id=>pairedNode(id)||mixingNode(id);
+  const wordsFrom=source=>{
+   let from=source;const visited=new Set();
+   while(from&&!visited.has(from)){visited.add(from);const ids=ev.values[from];if(ids?.length===3&&ids.every(v=>Number.isInteger(v)&&M.math.vocab[v]!=null))return ids.map(i=>M.math.vocab[i]);if(from==='Z'&&stage().secondaryTokenIds)return stage().secondaryTokenIds.map(i=>M.math.vocab[i]);from=state.nodes.find(other=>other.id===from)?.links[0];}
+   return samples()[sample].word.split(' / ');
+  };
   const lastWave=Math.max(0,...Object.values(ev.depths)),starts=[0],ends=[0];
   // Travel is 1.5× faster than before; every operator keeps its original clock.
   const travelDuration=2/3;
   for(let depth=1;depth<=lastWave;depth++){
    const durations=readyNodes.filter(n=>ev.depths[n.id]===depth).map(n=>{
     const d=definition(n.id),tokenOperation=art.tokenOperation(d);
-    return tokenOperation?art.tokenFrame(0,tokenOperation).duration:['norm','layernorm'].includes(d.type)?normalizationFrame(0,d.type==='layernorm').duration:seq&&d.type==='linear'?art.sequenceProjectionFrame(0,weightsFor(n.id)[0].length).duration:!seq&&['linear','multiply','add'].includes(d.type)?art.projectionFrame(0,ev.values[n.id].length).duration:1;
+    return tokenOperation?art.tokenFrame(0,tokenOperation).duration:['norm','layernorm'].includes(d.type)?normalizationFrame(0,d.type==='layernorm').duration:seq&&['linear','mix'].includes(d.type)?art.sequenceProjectionFrame(0,d.type==='mix'?d.out/3:weightsFor(n.id)[0].length).duration:!seq&&['linear','multiply','add'].includes(d.type)?art.projectionFrame(0,ev.values[n.id].length).duration:1;
    });
    starts[depth]=ends[depth-1]+travelDuration;ends[depth]=starts[depth]+Math.max(1,...durations);
   }
@@ -551,19 +558,21 @@ try{
    const p=movingPacket(ev.values[edge.from],edge.from,edge.to,'wire');
    const perRow=!seq&&sample<3,departure=perRow&&['R','Z'].includes(edge.from)?new T.LineCurve3(rowEndpoint('source'),edge.curve.getPoint(0)):null,arrival=perRow&&edge.to==='sink'?new T.LineCurve3(edge.curve.getPoint(1),rowEndpoint('sink')):null;
    const start=ends[ev.depths[edge.from]||0],processStart=processPaths.has(edge.to)?starts[ev.depths[edge.to]]:null;
-   Object.assign(p,{edge,departure,arrival,start,processStart,end:processStart==null?start+travelDuration:processStart+(edge.index>0&&!pairedNode(edge.to)?.25:0)});
+   Object.assign(p,{edge,departure,arrival,start,processStart,end:processStart==null?start+travelDuration:processStart+(edge.index>0&&!handledSecondary(edge.to)?.25:0)});
    p.p=departure?.getPoint(0)||edge.curve.getPoint(0);p.mesh.position.copy(p.p);packets.push(p);
   });
   readyNodes.forEach(n=>{
    const input=ev.values[n.links[0]],output=ev.values[n.id],p=movingPacket(input,n.id,n.id,'process');
    p.el.classList.add('processing-packet');p.el.dataset.node=n.id;p.mesh.userData.processing=n.id;
-   const detailed=definition(n.id).type==='linear',sequenceProjection=seq&&detailed,paired=pairedNode(n.id),worked=detailed||paired,other=paired?ev.values[n.links[1]]:null;
-   const operation=definition(n.id).type,tokenOperation=art.tokenOperation(definition(n.id)),centering=operation==='layernorm',normalizing=operation==='norm'||centering,pairTones=paired?art.pairColorsFor(n.id):null,operator=operation==='add'?'+':'×';
-   Object.assign(p,{detailed,sequenceProjection,columns:detailed?weightsFor(n.id)[0].length:output.length,paired,worked,other,normalizing,centering,tokenOperation});
-   if(worked||tokenOperation||centering)art.prepareProjectionPacket(p.mesh,paired?()=>pairTones[0]:undefined);
-   if(paired){
-    const otherMesh=art.packet(other,p.color);otherMesh.userData={processingSecondary:n.id,row:p.el.dataset.row};otherMesh.visible=false;scene.add(otherMesh);
-    art.prepareProjectionPacket(otherMesh,()=>pairTones[1]);fadeMaterials(otherMesh);p.otherMesh=otherMesh;
+   const operation=definition(n.id).type,mixing=operation==='mix',detailed=operation==='linear'||mixing,sequenceProjection=seq&&detailed,paired=pairedNode(n.id),worked=detailed||paired,other=paired||mixing?ev.values[n.links[1]]:null;
+   const tokenOperation=art.tokenOperation(definition(n.id)),centering=operation==='layernorm',normalizing=operation==='norm'||centering,pairTones=paired?art.pairColorsFor(n.id):null,operator=operation==='add'?'+':'×';
+   const columns=mixing?output.length/3:detailed?weightsFor(n.id)[0].length:output.length,matrix=mixing?M.math.rows(other,columns):detailed?weightsFor(n.id):null;
+   Object.assign(p,{detailed,sequenceProjection,columns,matrix,mixing,paired,worked,other,normalizing,centering,tokenOperation});
+   if(mixing)p.valueWords=()=>wordsFrom(n.links[1]);
+   if(worked||tokenOperation||centering)art.prepareProjectionPacket(p.mesh,paired?()=>pairTones[0]:mixing?i=>art.rowColor(i%3):undefined);
+   if(paired||mixing){
+    const otherMesh=art.packet(other,p.color,{sequence:mixing});otherMesh.userData={processingSecondary:n.id,row:p.el.dataset.row};otherMesh.visible=false;scene.add(otherMesh);
+    art.prepareProjectionPacket(otherMesh,mixing?i=>art.rowColor(Math.floor(i/columns)):()=>pairTones[1]);fadeMaterials(otherMesh);p.otherMesh=otherMesh;
    }
    const outputMesh=art.packet(output,p.color,{sequence:seq});outputMesh.userData={processingOutput:n.id,row:p.el.dataset.row};outputMesh.visible=false;scene.add(outputMesh);
    const morph=document.createElement('span');morph.className='packet-morph';p.cells.replaceWith(morph);morph.appendChild(p.cells);
@@ -633,20 +642,17 @@ try{
     const calculation=document.createElement('span');calculation.className='projection-calculation';calculation.hidden=true;calculation.dataset.node=n.id;calculation.dataset.operation=operation;
     const equation=document.createElement('span');equation.className='projection-equation';calculation.appendChild(equation);
     const abstract=document.createElement('span');abstract.className='projection-sum-symbol';abstract.textContent=paired?operator:'∑';abstract.setAttribute('aria-hidden','true');calculation.appendChild(abstract);
-    const factor=v=>v<0?'('+fmt(v)+')':fmt(v),terms=[],width=sequenceProjection?weightsFor(n.id).length:input.length;
-    const token=document.createElement('b');if(sequenceProjection){calculation.classList.add('sequence-projection-calculation');equation.append(token);p.words=()=>{
-     let from=n.links[0];const visited=new Set();
-     while(from&&!visited.has(from)){visited.add(from);const ids=ev.values[from];if(ids?.length===3&&ids.every(v=>Number.isInteger(v)&&M.math.vocab[v]!=null))return ids.map(i=>M.math.vocab[i]);if(from==='Z'&&stage().secondaryTokenIds)return stage().secondaryTokenIds.map(i=>M.math.vocab[i]);from=state.nodes.find(other=>other.id===from)?.links[0];}
-     return samples()[sample].word.split(' / ');
-    };}
-    (paired?[input,other]:input.slice(0,width)).forEach((_,i)=>{if(i)equation.appendChild(document.createTextNode(paired?' '+operator+' ':' + '));const term=document.createElement('span');term.style.color=colorHex(paired?pairTones[i]:art.featureColor(i));equation.appendChild(term);terms.push(term);});
+    const factor=v=>v<0?'('+fmt(v)+')':fmt(v),terms=[],width=sequenceProjection?matrix.length:input.length;
+    const token=document.createElement('b');if(sequenceProjection){calculation.classList.add('sequence-projection-calculation');equation.append(token);p.words=()=>wordsFrom(n.links[0]);}
+    if(mixing)calculation.classList.add('aggregation-calculation');
+    (paired?[input,other]:input.slice(0,width)).forEach((_,i)=>{if(i)equation.appendChild(document.createTextNode(paired?' '+operator+' ':' + '));const term=document.createElement('span');term.style.color=colorHex(paired?pairTones[i]:mixing?art.rowColor(i):art.featureColor(i));equation.appendChild(term);terms.push(term);});
     const sum=document.createElement('b');sum.style.opacity='0';equation.appendChild(sum);overlay.appendChild(calculation);
     const updateEquation=(column,row=0)=>{
      const values=sequenceProjection?input.slice(row*width,(row+1)*width):input,result=output[row*p.columns+column];
-     const operands=paired?[input[column],other[column]]:[...values,...weightsFor(n.id).map(w=>w[column])];
-     terms.forEach((term,i)=>term.textContent=paired?factor(operands[i]):factor(values[i])+' × '+factor(weightsFor(n.id)[i][column]));
+     const operands=paired?[input[column],other[column]]:[...values,...matrix.map(w=>w[column])];
+     terms.forEach((term,i)=>term.textContent=paired?factor(operands[i]):factor(values[i])+' × '+factor(matrix[i][column]));
      const rounded=[...operands,result].some(v=>Math.abs(v-Number(v.toFixed(2)))>1e-9);sum.textContent=(rounded?' ≈ ':' = ')+fmt(result);
-     if(sequenceProjection){token.textContent=p.words()[row]+' · ';calculation.dataset.projectionRow=String(row);}
+     if(sequenceProjection){token.textContent=(mixing?'O · ':'')+p.words()[row]+' · ';calculation.dataset.projectionRow=String(row);}
     };
     updateEquation(0);Object.assign(p,{calculation,equation,sum,updateEquation,column:0,projectionRow:0});
    }
@@ -686,6 +692,7 @@ try{
       }else if(p.sequenceProjection){
        p.mesh.visible=visible&&tt<timing.end;p.el.hidden=!visible||(progress>.08&&progress<.9);
        art.routeSequenceProjectionInput(p.node.id,p.mesh,tt,p.p,p.path.getPoint(.04));
+       if(p.mixing){p.otherMesh.visible=visible&&tt<.33;art.routeAggregationValues(p.node.id,p.otherMesh,tt);}
       }else art.routeProjectionPacket(p.node.id,p.mesh,progress,p.p,p.path.getPoint(.12));
       if(p.sequenceProjection)art.routeSequenceProjectionOutput(p.node.id,p.outputMesh,tt,p.p);else art.routeProjectionOutput(p.node.id,p.outputMesh,tt,p.p);
       p.outputMesh.visible=visible&&tt>=.67;
@@ -723,14 +730,14 @@ try{
        el.hidden=!visible||alpha<=0;el.style.opacity=String(alpha);
       });
      }
-     art.processing(p.node.id,tt,p.input,p.output,p.color,{sequence:seq,detailed:p.detailed,paired:p.paired,other:p.other,words:p.words?.()});
+     art.processing(p.node.id,tt,p.input,p.output,p.color,{sequence:seq,detailed:p.detailed,paired:p.paired,other:p.other,words:p.words?.(),valueWords:p.valueWords?.()});
     }else{
      const inView=!focusId||p.edge.from===focusId||p.edge.to===focusId,visible=t>=p.start&&t<p.end&&inView;
      p.el.hidden=!visible;p.mesh.visible=visible;
      const a=p.departure?.18:0,b=p.arrival?.18:0;
      p.p=a&&progress<a?p.departure.getPoint(progress/a):b&&progress>1-b?p.arrival.getPoint((progress-1+b)/b):p.edge.curve.getPoint((progress-a)/(1-a-b));
      // A secondary input joins the same processing event after both are ready.
-     const joining=p.processStart!=null&&p.edge.index>0&&!pairedNode(p.edge.to)&&t>=p.processStart;
+     const joining=p.processStart!=null&&p.edge.index>0&&!handledSecondary(p.edge.to)&&t>=p.processStart;
      const alpha=joining?1-ramp(t-p.processStart,0,.25):1;
      if(joining)p.p.lerp(processPaths.get(p.edge.to).getPoint(.3),ramp(t-p.processStart,0,.25));
      p.el.style.opacity=String(alpha);p.materials.forEach(m=>m.opacity=alpha);
@@ -775,6 +782,6 @@ try{
  $('#scene-expand').onclick=()=>{const expanded=document.body.classList.toggle('scene-expanded');$('#scene-expand').textContent=expanded?I18n.t("显示观察窗"):I18n.t("放大场景");$('#scene-expand').setAttribute('aria-pressed',String(expanded));render();};
  function beforeStage(){clearConnectionError();if(focusId)leaveFocus();cancelAnimationFrame(cameraFrame);transitioning=false;host.setAttribute('aria-busy','false');drag=lastTap=null;clearPreview();clearPlacement();clearPackets();elements=[];overlay.replaceChildren();}
  function setStage(){art.surroundings(samples(),stage());yaw=.05;pitch=.8;zoom=stage().zoom;cameraTarget.set(0,0,0);rebuild();}
- function relocalize(){clearConnectionError();art.surroundings(samples(),stage());rebuild();packets.forEach(p=>{p.el.querySelector('.packet-title').textContent=packetIdentity(p.el.dataset.from);if(p.sequenceProjection)p.updateEquation(p.column,p.projectionRow);if(p.normalizing&&p.progress!=null)p.updateRMS(normalizationFrame(p.progress,p.centering));if(p.tokenOperation&&p.progress!=null)p.updateToken(art.tokenFrame(p.progress,p.tokenOperation));if(p.motion==='process'&&p.progress!=null)art.processing(p.node.id,p.progress,p.input,p.output,p.color,{sequence:!!stage().sequence,detailed:p.detailed,paired:p.paired,other:p.other,words:p.words?.()});});render();}
+ function relocalize(){clearConnectionError();art.surroundings(samples(),stage());rebuild();packets.forEach(p=>{p.el.querySelector('.packet-title').textContent=packetIdentity(p.el.dataset.from);if(p.sequenceProjection)p.updateEquation(p.column,p.projectionRow);if(p.normalizing&&p.progress!=null)p.updateRMS(normalizationFrame(p.progress,p.centering));if(p.tokenOperation&&p.progress!=null)p.updateToken(art.tokenFrame(p.progress,p.tokenOperation));if(p.motion==='process'&&p.progress!=null)art.processing(p.node.id,p.progress,p.input,p.output,p.color,{sequence:!!stage().sequence,detailed:p.detailed,paired:p.paired,other:p.other,words:p.words?.(),valueWords:p.valueWords?.()});});render();}
  new ResizeObserver(render).observe(host);world={relocalize,labels,rebuild,animate,clearPackets,showConnectionError,clearConnectionError,clearPreview,clearPlacement,previewAt,previewPlacement,focus,focusShelf,focused:()=>focusId,beforeStage,setStage,syncShelf:()=>syncPlacementGuide(host.clientWidth,host.clientHeight)};$('#loading').hidden=true;rebuild();refresh();
 }catch(e){$('#loading').innerHTML=I18n.t("<strong>3D 台面没有加载成功，请刷新重试。</strong>");say(I18n.t("页面尚未开始运行。"),'error');console.error(e);}

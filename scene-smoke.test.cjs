@@ -15,6 +15,108 @@ async function boot({reduced=true,frameMs=1000,onFrame=()=>{},languages=['zh-CN'
  await vm.runInContext('(async()=>{'+src+'})()',c);
  assert.ok(c.testAPI.getWorld(),'3D boot failed');return {c,document,window,api:c.testAPI,scenes,time:()=>now,view:()=>view,camera:()=>renderedCamera};
 }
+test('A × V animates actual coefficients, V columns and stored sums at the projection pace',async()=>{
+ let app,level='weighted-sum';const seen=new Set(),starts=new Map(),checks=new Set();
+ const factor=v=>v<0?'('+Number(v.toFixed(2))+')':String(Number(v.toFixed(2)));
+ app=await boot({reduced:false,frameMs:100,onFrame:({now,document})=>{
+  if(!app)return;const M=app.c.NeuralPrologue,sample=M.samplesFor(level).find(s=>s.word===document.querySelector('#sample-name').textContent);if(!sample)return;
+  const state=app.api.getState(),ev=M.evaluate(state,sample.v),scene=app.scenes.at(-1);
+  scene.traverseVisible(unit=>{
+   const data=unit.userData.aggregation;if(!data)return;
+   const id=unit.userData.node,n=state.nodes.find(n=>n.id===id),width=ev.values[id].length/3,a=ev.values[n.links[0]],v=ev.values[n.links[1]];
+   assert.deepEqual([...data.attention],[...a]);assert.deepEqual([...data.values],[...v]);assert.deepEqual([...data.output],[...ev.values[id]]);
+   assert.equal(data.queryWord,sample.word.split(' / ')[data.query]);
+   if(level==='cross-attention'){assert.deepEqual([...data.valueWords],Array.from(M.levels[level].secondaryTokenIds,i=>M.math.vocab[i]));checks.add('distinct source words');}
+   for(const cell of unit.children.filter(o=>o.userData.aggregationValue)){
+    const {row,column,value}=cell.userData.aggregationValue;assert.equal(value,v[row*width+column]);assert.equal(cell.material.opacity,1,'the live V matrix stays readable');
+   }
+   if(unit.children[0].material.opacity<.13){assert.equal(document.querySelector('.node-label[data-node="'+id+'"]').hidden,true);checks.add('faded scaffold');}
+   const formula=document.querySelector('.aggregation-calculation[data-node="'+id+'"]');
+   if(!formula.hidden){
+    const query=Number(formula.dataset.projectionRow),column=Number(formula.dataset.column),key=[level,sample.word,query,column].join('|');seen.add(key);if(!starts.has(key)&&unit.userData.calculationHighlight>.2)starts.set(key,now);
+    assert.equal(formula.querySelector('.projection-equation>b').textContent,'O · '+sample.word.split(' / ')[query]+' · ');
+    assert.deepEqual([...formula.querySelectorAll('.projection-equation>span')].map(el=>el.textContent),[0,1,2].map(i=>factor(a[query*3+i])+' × '+factor(v[i*width+column])));
+   }
+   for(const spark of unit.children.filter(o=>o.userData.contribution&&o.visible&&o.material.opacity>.05)){
+    const d=spark.userData;assert.equal(d.inputValue,a[data.query*3+d.input]);assert.equal(d.weight,v[d.input*width+d.output]);assert.equal(d.value,d.inputValue*d.weight);assert.ok(Math.abs(d.value)>1e-9);assert.equal(d.output,unit.userData.activeColumn);
+    checks.add('products');if(d.value<0)checks.add('negative product');
+   }
+   for(const cue of unit.children.filter(o=>o.userData.projectionColumn!=null&&o.visible))assert.equal(cue.userData.projectionColumn,unit.userData.activeColumn);
+   const incoming=scene.children.find(o=>o.userData.processingSecondary===id);
+   if(incoming?.visible){checks.add('V enters its cells');incoming.children.filter(o=>o.userData.aggregationInput).forEach(bar=>assert.equal(bar.userData.value,v[bar.userData.source*width+bar.userData.column]));}
+   const out=scene.children.find(o=>o.userData.processingOutput===id);
+   if(out?.visible){
+    for(const bar of out.children.filter(o=>o.userData.feature!=null&&o.visible&&o.material.opacity>.01)){assert.equal(bar.userData.value,ev.values[id][bar.userData.feature]);if(bar.userData.transfer===1&&out.userData.gather===0)checks.add('sum waits in bank');}
+    if(out.userData.gather>0){assert.equal(out.children.filter(o=>o.userData.feature!=null&&o.visible).length,width*3);checks.add('whole output gathers');}
+   }
+  });
+ }});
+ const M=app.c.NeuralPrologue;
+ for(level of ['weighted-sum','aggregation','cross-attention']){
+  app.api.switchLevel(level);app.api.setState(M.solutions(level));app.api.getWorld().rebuild();const saved=JSON.stringify(app.api.getState());await app.api.run();
+  assert.equal(app.document.querySelectorAll('#test-results .pass').length,3);assert.equal(JSON.stringify(app.api.getState()),saved);
+  const width=level==='cross-attention'?4:2;
+  for(const sample of M.samplesFor(level))for(let query=0;query<3;query++)for(let column=0;column<width;column++){
+   const key=[level,sample.word,query,column].join('|');assert.ok(seen.has(key),key);
+   if(column)assert.ok(Math.abs(starts.get(key)-starts.get([level,sample.word,query,column-1].join('|'))-1040)<=110,'each output feature keeps the same 0.4-step calculation time');
+  }
+  assert.equal(app.document.querySelectorAll('.packet,.projection-calculation,.projection-result').length,0);
+  app.scenes.at(-1).traverse(o=>{assert.equal(o.userData.aggregation,undefined);if(o.userData.projectionBank!=null)assert.equal(o.visible,false);});
+ }
+ for(const key of ['distinct source words','faded scaffold','products','negative product','V enters its cells','sum waits in bank','whole output gathers'])assert.ok(checks.has(key),key);
+});
+
+test('A × V handles zero and signed contributions in both widths and replaces the live matrix on the next sample',async()=>{
+ const app=await boot(),M=app.c.NeuralPrologue,T=app.c.T,scene=new T.Scene(),art=app.c.createSceneArt(T,scene,{aggregate:0x64a68f,'original-aggregate':0x64a68f});
+ const a=[1,0,0,.25,.75,0,.2,.3,.5],words=['我','爱','猫'],valueWords=['猫','我','爱'];
+ for(const kind of ['aggregate','original-aggregate']){
+  const d=M.definitions[kind],width=d.out/3,unit=art.module(scene,{id:kind,x:0,z:0,links:['a','v']},d,M.weights),rowDuration=art.projectionFrame(0,width).duration;
+  for(const multiplier of [1,-2]){
+   const v=Array.from({length:3},(_,i)=>Array.from({length:width},(_,j)=>i===j?0:((i+1)*(j+1)-3)*multiplier)).flat(),output=M.operations[kind]([a,v]);
+   for(let query=0;query<3;query++)for(let column=0;column<width;column++){
+    art.processing(kind,query*rowDuration+.53+column*.4,a,output,0x64a68f,{other:v,words,valueWords});art.focusCalculations();
+    assert.equal(unit.userData.aggregation.query,query);assert.equal(unit.userData.activeColumn,column);
+    const particles=unit.children.filter(o=>o.userData.contribution&&o.visible);
+    assert.deepEqual(particles.map(o=>o.userData.input),[0,1,2].filter(i=>Math.abs(a[query*3+i]*v[i*width+column])>1e-9));
+    assert.ok(Math.abs(particles.reduce((sum,o)=>sum+o.userData.value,0)-output[query*width+column])<1e-9,'visible contributions sum to this output');
+    for(const cell of unit.children.filter(o=>o.userData.aggregationValue)){const {row,column,value}=cell.userData.aggregationValue;assert.equal(value,v[row*width+column]);}
+   }
+   art.clearProcessing();art.focusCalculations();assert.equal(unit.userData.aggregation,undefined);
+   unit.traverse(o=>{if(o.userData.aggregationValue)assert.equal(o.userData.aggregationValue.value,undefined);if(o.userData.contribution)assert.equal(o.visible,false);});
+  }
+ }
+});
+
+test('an extra A × V module uses its own two wires instead of a reference V projection',async()=>{
+ let app;const seen=new Set();
+ app=await boot({reduced:false,frameMs:180,onFrame:({document})=>{
+  if(!app)return;const M=app.c.NeuralPrologue,sample=M.samplesFor('weighted-sum').find(s=>s.word===document.querySelector('#sample-name').textContent);if(!sample)return;
+  const ev=M.evaluate(app.api.getState(),sample.v);
+  app.scenes.at(-1).traverseVisible(o=>{if(o.userData.node!=='aggregate-2'||!o.userData.aggregation)return;const data=o.userData.aggregation;assert.deepEqual([...data.values],[...ev.values.aggregate]);assert.notDeepEqual([...data.values],[...ev.values.v]);assert.deepEqual([...data.output],[...ev.values['aggregate-2']]);seen.add(data.query);});
+ }});
+ const M=app.c.NeuralPrologue;app.api.switchLevel('weighted-sum');const state=M.initial('weighted-sum'),b=M.bounds(M.levels['weighted-sum']);
+ for(const [kind,x,z]of [['original-weights',b.left,b.back],['v',b.left,b.front],['aggregate',b.right,b.back],['aggregate',b.right,b.front]])assert.ok(M.addNode(state,kind,x,z),kind);
+ M.connect(state,'R','original-weights',0);M.connect(state,'R','v',0);M.connect(state,'original-weights','aggregate',0);M.connect(state,'v','aggregate',1);M.connect(state,'original-weights','aggregate-2',0);M.connect(state,'aggregate','aggregate-2',1);M.connect(state,'aggregate-2','sink',0);
+ app.api.setState(state);app.api.getWorld().rebuild();const saved=JSON.stringify(state);await app.api.run();assert.equal(seen.size,3);assert.equal(JSON.stringify(state),saved);
+});
+
+test('A × V pauses, rescales and relocalizes without losing arithmetic, then cleans up on stop',async()=>{
+ let app,phase=0,frames=0,stop,before;
+ const unit=()=>app.scenes.at(-1).children.flatMap(g=>g.children).find(g=>g.userData.node==='aggregate');
+ app=await boot({reduced:false,frameMs:100,onFrame:({document})=>{
+  if(!app)return;const formula=document.querySelector('.aggregation-calculation:not([hidden])');
+  if(!phase&&formula?.dataset.projectionRow==='1'&&formula.dataset.column==='1'){app.api.togglePause();before=JSON.stringify(unit().userData.aggregation);phase=1;}
+  else if(phase===1&&++frames===3){
+   assert.equal(JSON.stringify(unit().userData.aggregation),before);const scale=Number(formula.style.getPropertyValue('--calculation-scale')),wheel=new app.window.Event('wheel',{bubbles:true,cancelable:true});wheel.deltaY=2000;document.querySelector('#scene').dispatchEvent(wheel);
+   assert.ok(Number(formula.style.getPropertyValue('--calculation-scale'))<scale);assert.equal(formula.dataset.detail,'abstract');app.c.I18n.setPreference('en');assert.match(formula.textContent,/O · love ·/);assert.equal(unit().userData.aggregation.queryWord,'love');assert.ok(unit().children[0].material.opacity<.13);
+   const speed=document.querySelector('#playback-speed');speed.value='1';speed.dispatchEvent(new app.window.Event('input'));assert.equal(formula.dataset.projectionRow,'1');app.api.togglePause();phase=2;
+  }else if(phase===2&&formula?.dataset.projectionRow==='2'){stop=app.api.run();phase=3;}
+ }});
+ app.document.querySelector('#welcome').close();app.api.switchLevel('weighted-sum');app.api.setState(app.c.NeuralPrologue.solutions('weighted-sum'));app.api.getWorld().rebuild();const saved=JSON.stringify(app.api.getState());await app.api.run();await stop;
+ assert.equal(phase,3);assert.equal(JSON.stringify(app.api.getState()),saved);assert.equal(app.document.querySelectorAll('.packet,.projection-calculation,.projection-result').length,0);assert.equal(unit().userData.aggregation,undefined);assert.equal(unit().children[0].material.opacity,1);assert.equal(app.document.querySelector('.node-label[data-node="aggregate"]').hidden,false);
+ app.api.switchLevel('wire');assert.equal(app.document.querySelector('.aggregation-calculation'),null);assert.deepEqual([...app.c.I18n.missing],[]);
+});
+
 test('calculation focus fades the projection scaffold for every token while keeping matrices, highlights and contributions readable',async()=>{
  let app;const seen=new Set(),sparks=new Set();
  const units=()=>app.scenes.at(-1).children.flatMap(g=>g.children).filter(g=>['q','k','v'].includes(g.userData.node));
