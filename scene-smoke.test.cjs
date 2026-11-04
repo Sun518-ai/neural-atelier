@@ -1071,6 +1071,24 @@ test('dragging a module card previews the operator, places one copy and dismisse
  event(doc.querySelector('[data-add-module="project"]'),'pointerdown',{clientX:120,clientY:160});event(doc,'pointermove',{clientX:700,clientY:380});event(doc,'pointerup',{clientX:1500,clientY:380});assert.equal(ghost(),undefined);assert.equal(app.api.getState().nodes.length,0,'dropping outside does not create or spend a copy');
 });
 
+test('scoring cards explain the divisor and compare downstream Softmax using real values in both languages',async()=>{
+ for(const language of ['zh-CN','en-US']){
+  const app=await boot({languages:[language]}),doc=app.document,M=app.c.NeuralPrologue;doc.querySelector('#welcome').close();
+  for(const [level,kind,width]of [['scores','score',2],['cross-attention','original-score',4]]){
+   app.api.switchLevel(level);const before=JSON.stringify(app.api.getState());app.api.getWorld().focusShelf(kind);
+   assert.equal(doc.querySelector('#module-card').open,true);assert.equal(doc.querySelector('.score-example').dataset.width,String(width));
+   const expected=app.c.scoreComparison(M,M.extraExample(kind,level));
+   for(const mode of ['before','after'])assert.deepEqual([...doc.querySelectorAll('.score-bar[data-mode="'+mode+'"]')].map(el=>Number(el.dataset.weight)),Array.from(expected[mode]));
+   assert.match(doc.querySelector('#card-formula').textContent,/√dₖ/);assert.match(doc.querySelector('.score-shortcut').textContent,/Softmax\(\[0, 2\]/);
+   assert.ok(doc.querySelector('.score-theory').textContent.length>200);assert.equal(doc.querySelectorAll('.score-table tbody tr').length,3);
+   assert.equal(doc.querySelectorAll('.score-full .card-vector').length,3);
+   if(level==='cross-attention')assert.equal(doc.querySelector('.score-pair .key b').textContent.endsWith(M.math.vocab[M.levels[level].secondaryTokenIds[0]]),true);
+   if(language==='en-US')assert.doesNotMatch(doc.querySelector('#module-card').textContent,/[\u3400-\u9fff]/);
+   doc.querySelector('#card-close').onclick();assert.equal(JSON.stringify(app.api.getState()),before);
+  }
+ }
+});
+
 test('shelf cards inspect every available kind without placing a node, including exhausted stock',async()=>{
  const app=await boot({languages:['en-US']}),doc=app.document,M=app.c.NeuralPrologue;doc.querySelector('#welcome').close();
  const event=(target,type,properties={})=>{const e=new app.window.Event(type,{bubbles:true,cancelable:true});Object.assign(e,properties);target.dispatchEvent(e);};

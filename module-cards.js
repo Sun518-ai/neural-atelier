@@ -102,6 +102,20 @@ export function cardFor(id,levelId){
  return card;
 }
 
+// The comparison uses the example's actual Q/K and scored output. Softmax is
+// shown as a downstream comparison; it is never added to the scoring operator.
+export function scoreComparison(M,example,query=2,key=0){
+ const q=example.inputs[0][1],k=example.inputs[1][1],width=q.length/3;
+ const queries=M.math.rows(q,width),keys=M.math.rows(k,width);
+ const raw=queries.flatMap(a=>keys.map(b=>a.reduce((sum,x,i)=>sum+x*b[i],0)));
+ const scaled=example.output[1],offset=query*3;
+ const softmax=values=>{const exp=values.map(x=>Math.exp(x-Math.max(...values))),sum=exp.reduce((a,b)=>a+b,0);return exp.map(x=>x/sum);};
+ return {width,divisor:Math.sqrt(width),query,key,q:queries[query],k:keys[key],
+  raw:raw.slice(offset,offset+3),scaled:scaled.slice(offset,offset+3),
+  before:M.math.probabilities(raw).slice(offset,offset+3),after:M.math.probabilities(scaled).slice(offset,offset+3),
+  simple:{raw:[0,2],scaled:[0,2/Math.sqrt(width)],before:softmax([0,2]),after:softmax([0,2/Math.sqrt(width)])}};
+}
+
 export function exampleFor(M,id,levelId='ffn'){
   if(['down-projection','plain-ffn','gate-projection','pairwise'].includes(levelId)){
    const input=[1,0],state=M.solutions(levelId),ev=M.evaluate(state,input),node=state.nodes.find(n=>n.id===id);

@@ -346,6 +346,33 @@ cards['self-heads'].formula='MHA(X) = Concat(headA, headB)Wo';cards['masked-head
 cards['cross-heads'].formula='Q = DWq; K = EWk; V = EWv';cards['cross-add'].formula='C = D + CrossAttention(D, E)';
 cards['original-encoder'].formula='A = LN(X + MHA(X)); E = LN(A + FFN(A))';
 cards['original-decoder'].formula='A = LN(D + MaskedMHA(D)); B = LN(A + Cross(A,E)); Y = LN(B + FFN(B))';
+const scorePurpose=L('点积把多个特征的乘积相加。特征越多，分数通常波动越大；先除以 √dₖ，避免仅因维度变大就让后面的 Softmax 过早集中到一个位置。Softmax 接着把分数变成和为 1 的比例，两步作用不同。','A dot product adds feature-wise products. More features usually mean a wider score spread. Dividing by √dₖ avoids making Softmax overly concentrated merely because the head is wider. Softmax then turns scores into proportions that sum to 1; the two steps serve different purposes.');
+for(const [id,width]of [['score',2],['original-score',4]]){
+ const meaning=width===2?L('每个位置的 Q，分别与各位置的 K 对应相乘再求和。这里每个 Q/K 有 2 个特征，所以 dₖ = 2，再把每个点积除以 √2。输出 S 仍是匹配分数，可以为负。','For each position’s Q, multiply matching features with each K and sum. Here every Q/K has two features, so dₖ = 2 and each dot product is divided by √2. S still contains matching scores, which may be negative.'):
+  L('每个位置的 Q，分别与各位置的 K 对应相乘再求和。这里每个 Q/K 有 4 个特征，所以 dₖ = 4，再把每个点积除以 √4 = 2。输出 S 仍是匹配分数，可以为负。','For each position’s Q, multiply matching features with each K and sum. Here every Q/K has four features, so dₖ = 4 and each dot product is divided by √4 = 2. S still contains matching scores, which may be negative.');
+ cards[id]={...(cards[id]||previousCard(id)),ability:L('先算匹配，再缩放分数','Compute matches, then scale the scores'),formula:'S = QKᵀ / √dₖ   (dₖ = '+width+')',meaning,purpose:scorePurpose,trait:L('缩放点积','Scaled dot products')};
+ M.definitions[id].hint=meaning;
+}
+cards.softmax={...previousCard('softmax'),ability:L('把一组分数变成一组比例','Turn scores into proportions'),formula:'Aⱼ = exp(Sⱼ) / Σₜ exp(Sₜ)',
+ meaning:L('对同一个查询的三个分数分别取指数，再除以这些指数的总和。输出是非负比例，总和为 1，供后面按比例读取 V。','Exponentiate the three scores for one query, then divide each exponential by their sum. The outputs are nonnegative proportions summing to 1, ready to read V in proportion.'),
+ purpose:L('Softmax 对分数差距敏感：输入 [0, 2] 得到约 [12%, 88%]，先除以 √2 再算则约为 [20%, 80%]。两次都和为 1，但比例不同；前一步缩放不会被这一步抵消。','Softmax responds to score differences: [0, 2] gives about [12%, 88%], while dividing by √2 first gives about [20%, 80%]. Both sum to 1 but allocate differently; Softmax does not cancel the preceding scale.')};
+M.levels.scores.rationale.takeaway=scorePurpose;
+M.scoreGuide={
+ title:L('先看一个查询怎样给键打分','Follow one query as it scores the keys'),
+ query:L('查询 Q','Query Q'),key:L('匹配的键 K','Matching key K'),dot:L('点积 Q · K','Dot product Q · K'),scaled:L('缩放分数 S','Scaled score S'),
+ shape:L('Kᵀ 把 K 转置，让每个 Q 能一次匹配所有 K；结果的每个格对应一对查询与键。','Kᵀ transposes K so each Q can match every K at once. Each output cell corresponds to one query–key pair.'),
+ dimension:L('dₖ 是每个注意力头中，一个 Q 或 K 向量的特征数。这里是','dₖ is the feature count of one Q or K vector in this attention head. Here it is'),
+ compare:L('下一步对照：再经过 Softmax','Next-step comparison: apply Softmax'),
+ before:L('不缩放 → Softmax','Unscaled → Softmax'),after:L('缩放后 → Softmax','Scaled → Softmax'),
+ boundary:L('本组件输出到 S 为止。下面把两组分数分别交给 Softmax，比较它们会如何分配比例。','This module stops at S. Below, each set of scores is passed to Softmax to compare how the resulting proportions differ.'),
+ explanation:L('Softmax 先取指数，再除以指数的总和。因此，缩小分数差距会改变比例；它不是把原分数简单除以总和。两组比例都和为 1，但集中程度不同。','Softmax exponentiates scores before dividing by the sum of exponentials. Reducing score differences therefore changes the proportions; it is not simply dividing the original scores by their sum. Both distributions sum to 1 but differ in concentration.'),
+ shortcut:L('一个更简单的对照：','A simpler comparison:'),
+ reason:L('为什么用平方根？','Why the square root?'),
+ theory:L('一个 dₖ 维点积是 dₖ 个乘积的和。在 Q/K 各分量近似独立、均值为 0、方差为 1 的假设下，点积的方差约为 dₖ，标准差约为 √dₖ；除以 √dₖ 后，方差回到约 1。这是控制典型波动幅度，并不保证每个分数都落在固定范围内。','A dₖ-dimensional dot product sums dₖ products. Assuming approximately independent Q/K components with mean 0 and variance 1, the dot product has variance about dₖ and standard deviation about √dₖ. Dividing by √dₖ brings the variance back to about 1. This controls typical spread; it does not bound every score to a fixed range.'),
+ training:L('Softmax 的比例过早接近 0 或 1 时，它对分数变化的响应会变小，训练也更难调整注意力。缩放是为了避免仅因维度增加就出现这种情况，并不要求注意力始终平均分配。','When Softmax proportions approach 0 or 1 too early, they become less responsive to score changes, making attention harder to adjust during training. Scaling avoids this happening merely because dimensionality increased; it does not require attention to stay uniform.'),
+ full:L('查看完整 Q、K 和打分结果','View the full Q, K and score matrices')
+};
+I18n.prepare(M.scoreGuide);
 I18n.prepare(cards);
 M.original={relu,ln,position,embed,wide,project,vocabulary,classicFFN,sequenceFFN,head,concat,multi,singleAttention,encoder,decoderSelf,decoder,sourceIds,
  exampleLabels(levelId){return {Oa:L('自注意力更新','Self-attention update'),Om:L('因果注意力更新','Masked attention update'),Oc:L('交叉注意力更新','Cross-attention update'),A:['relu','original-ffn'].includes(levelId)?L('ReLU 输出','ReLU output'):I18n.t('注意力'),E:L('编码器输出','Encoder output'),D:L('目标特征','Target features'),Xs:L('源词向量与位置','Source embeddings and positions'),Xt:L('目标词向量与位置','Target embeddings and positions'),Xp:L('含位置的特征','Position-enriched features'),H_A:L('头 A 的结果','Head A output'),H_B:L('头 B 的结果','Head B output'),C:L('拼接结果','Concatenated features'),X1:L('第一次归一化','First normalized state'),X2:L('交叉注意力后的特征','Features after cross-attention'),R1:L('Attention 残差结果','Attention residual result'),R2:L('FFN 残差结果','FFN residual result'),Rc:L('交叉注意力残差结果','Cross-attention residual result')};},

@@ -1,5 +1,5 @@
-import {cardFor,exampleFor} from './module-cards.js?v=learned-shelf-1';
-import {createProgress} from './level-progress.js?v=learned-shelf-1';
+import {cardFor,exampleFor,scoreComparison} from './module-cards.js?v=score-card-1';
+import {createProgress} from './level-progress.js?v=score-card-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -233,7 +233,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=learned-shelf-1');
+ const {createSceneArt}=await import('./scene-art.js?v=score-card-1');
  const art=createSceneArt(T,scene,colors,{anisotropy:renderer.capabilities.getMaxAnisotropy()});art.surroundings(samples(),stage());
  const assembly=new T.Group(),wires=new T.Group();scene.add(assembly,wires);const neuronGeo=new T.SphereGeometry(.115,16,12);let elements=[],curves=[],packets=[],drag=null,preview=null,yaw=.05,pitch=.8,zoom=stage().zoom,lastDepth=-1;
  const cameraTarget=new T.Vector3();let focusId=null,shelfFocus=null,shelfModel=null,overview=null,cameraFrame=0,transitioning=false,lastTap=null;
@@ -417,7 +417,15 @@ try{
   const ex=M.extraExample?.(kind,cardStageId)||exampleFor(M,kind,cardStageId),vectorRow=([name,values],output=false,focus=-1,label=names[name]||name)=>`<div class="card-vector ${output?'result':''}" data-symbol="${name}"><b>${name} · ${label}</b><span ${(cardStage.original||ex.rms)&&cardStage.sequence?'style="display:grid;grid-template-columns:repeat('+Math.ceil(values.length/3)+',minmax(0,1fr))"':''}>${values.map((v,i)=>`<i class="${v<0?'negative':''} ${i===focus?'example-focus':''}">${fmt(v)}</i>`).join('')}</span></div>`;
   const formulaNumber=v=>Number(v.toFixed(4)).toString();
   if(ex.sampleIndex===0&&!cardStage.sequence){$('.card-example-title').firstChild.textContent=I18n.t("用“我”的向量看一次");$('#card-example-input').textContent=ex.exampleSource[0]+' = '+vector(ex.exampleSource[1]);}
-  if(ex.rms){
+  if(d.type==='score'){
+   const data=scoreComparison(M,ex),copy=M.scoreGuide,words=M.samplesFor(cardStageId)[ex.sampleIndex||0].word.split(' / ');
+   const keys=cardStage.dualSource?cardStage.secondaryTokenIds.map(id=>M.math.vocab[id]):words;
+   const percent=value=>(value*100).toFixed(1)+'%',percentVector=values=>'['+values.map(percent).join(', ')+']';
+   const signed=x=>x<0?'('+formulaNumber(x)+')':formulaNumber(x);
+   const terms=data.q.map((x,i)=>signed(x)+' × '+signed(data.k[i])).join(' + ');
+   $('.card-example-title').firstChild.textContent=copy.title;$('#card-example-input').textContent='dₖ = '+data.width;
+   $('#card-example-values').innerHTML=`<div class="score-example" data-width="${data.width}"><p class="score-shapes"><code>Q (3 × ${data.width}) × Kᵀ (${data.width} × 3) → 3 × 3</code>${copy.shape}</p><p class="score-dimension">${copy.dimension} <b>${data.width}</b>：<code>√dₖ = √${data.width} ≈ ${formulaNumber(data.divisor)}</code></p><div class="score-pair"><div class="query"><b>${copy.query} · ${words[data.query]}</b><code>${vector(data.q)}</code></div><div class="key"><b>${copy.key} · ${keys[data.key]}</b><code>${vector(data.k)}</code></div></div><div class="score-worked"><code>${terms} ≈ ${formulaNumber(data.raw[data.key])}<br>${formulaNumber(data.raw[data.key])} / √${data.width} ≈ <b>${formulaNumber(data.scaled[data.key])}</b></code></div><table class="score-table"><thead><tr><th>${copy.key}</th><th>${copy.dot}</th><th>${copy.scaled}</th></tr></thead><tbody>${keys.map((word,i)=>`<tr class="${i===data.key?'worked':''}"><th>${word}</th><td>${formulaNumber(data.raw[i])}</td><td>${formulaNumber(data.scaled[i])}</td></tr>`).join('')}</tbody></table><section class="score-softmax"><h4>${copy.compare}</h4><p>${copy.boundary}</p><div class="score-distributions"><span></span><b>${copy.before}</b><b>${copy.after}</b>${keys.map((word,i)=>`<span>${word}</span>${['before','after'].map(mode=>`<div class="score-bar ${mode}" data-mode="${mode}" data-weight="${data[mode][i]}"><i style="width:${data[mode][i]*100}%" aria-hidden="true"></i><span>${percent(data[mode][i])}</span></div>`).join('')}`).join('')}</div><p>${copy.explanation}</p><div class="score-shortcut"><b>${copy.shortcut}</b><code>Softmax(${vector(data.simple.raw)})<br>≈ ${percentVector(data.simple.before)}<br>Softmax(${vector(data.simple.raw)} / √${data.width})<br>≈ ${percentVector(data.simple.after)}</code></div></section><details class="score-theory"><summary>${copy.reason}</summary><p>${copy.theory}</p><p>${copy.training}</p></details><details class="score-full"><summary>${copy.full}</summary>${ex.inputs.map(v=>vectorRow(v)).join('')+vectorRow(ex.output,true)}</details></div>`;
+  }else if(ex.rms){
    const {width,meanSquare,divisor}=ex.rms,v=ex.inputs[0][1].slice(0,width);
    $('#card-example-values').innerHTML=ex.inputs.map(v=>vectorRow(v)).join('')+`<div class="card-silu-worked"><small>${I18n.t('这里只展开第一个位置的归一化，其他位置分别计算。')}</small><code>mean(X²) = ${formulaNumber(meanSquare)}<br>r = √(${formulaNumber(meanSquare)} + ε) ≈ ${formulaNumber(divisor)}<br>${vector(v)} / ${formulaNumber(divisor)} ≈ ${vector(ex.output[1].slice(0,width))}</code></div>`+vectorRow(ex.output,true);
   }else if(ex.normalization){

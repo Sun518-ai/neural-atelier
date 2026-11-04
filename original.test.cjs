@@ -2,6 +2,7 @@ const test=require('node:test'),assert=require('node:assert/strict'),vm=require(
 const ctx={console,navigator:{languages:['zh-CN']}};ctx.window=ctx;vm.createContext(ctx);
 for(const file of ['locales/en.js','i18n.js','model.js','campaign.js','engine-model.js','original-curriculum.js'])vm.runInContext(fs.readFileSync(__dirname+'/'+file,'utf8'),ctx,{filename:file});
 const M=ctx.NeuralPrologue,O=M.original;
+vm.runInContext(fs.readFileSync(__dirname+'/module-cards.js','utf8').replaceAll('export ',''),ctx,{filename:'module-cards.js'});
 const plain=x=>JSON.parse(JSON.stringify(x));
 const close=(a,b,tol=1e-9)=>a?.length===b.length&&a.every((x,i)=>Number.isFinite(x)&&Math.abs(x-b[i])<tol);
 test('QKV accepts only V at the outlet and ignores optional Q/K branches',()=>{
@@ -70,7 +71,6 @@ test('packaging bridges require wiring and accept numerically equivalent expande
 });
 
 test('every optional shelf module has a real worked example and every package is introduced',()=>{
- vm.runInContext(fs.readFileSync(__dirname+'/module-cards.js','utf8').replaceAll('export ',''),ctx,{filename:'module-cards.js'});
  for(const level of Object.values(M.levels))for(const kind of Object.keys(M.inventory(level))){
   const id=M.exampleLevel(kind,level.id),d=M.definitions[kind];
   assert.ok(M.levels[id].nodes.includes(kind),level.id+' / '+kind);
@@ -83,6 +83,24 @@ test('every optional shelf module has a real worked example and every package is
  for(const kind of Object.keys(M.packages)){
   const id=M.exampleLevel(kind,'wire');assert.ok(M.levels[id].packages.includes(kind));
  }
+});
+
+test('score explanations follow actual Q/K dimensions and show why Softmax does not cancel scaling',()=>{
+ for(const [level,kind,width]of [['scores','score',2],['cross-attention','original-score',4],['rope','score',2]]){
+  const example=M.extraExample(kind,level),d=ctx.scoreComparison(M,example);
+  assert.equal(d.width,width);assert.equal(d.divisor,Math.sqrt(width));
+  assert.ok(close(d.scaled,d.raw.map(x=>x/d.divisor)));
+  assert.ok(Math.abs(d.q.reduce((sum,x,i)=>sum+x*d.k[i],0)-d.raw[d.key])<1e-12);
+  for(const weights of [d.before,d.after]){assert.ok(weights.every(x=>x>=0&&x<=1));assert.ok(Math.abs(weights.reduce((a,b)=>a+b,0)-1)<1e-12);}
+  assert.ok(!close(d.before,d.after));assert.ok(Math.max(...d.before)>Math.max(...d.after));
+  const card=M.extraCard(kind,level);assert.match(card.formula,/√dₖ/);assert.ok(card.formula.includes('dₖ = '+width));
+ }
+ const two=ctx.scoreComparison(M,M.extraExample('score','scores')).simple;
+ assert.ok(close(two.before,[1/(1+Math.exp(2)),1/(1+Math.exp(-2))]));
+ assert.ok(close(two.after,[1/(1+Math.exp(Math.SQRT2)),1/(1+Math.exp(-Math.SQRT2))]));
+ assert.ok(two.after[0]>two.before[0]);
+ const zero=ctx.scoreComparison(M,{inputs:[['Q',Array(6).fill(0)],['K',Array(6).fill(0)]],output:['S',Array(9).fill(0)]});
+ assert.ok(close(zero.before,[1/3,1/3,1/3]));assert.ok(close(zero.before,zero.after),'already uniform scores remain uniform');
 });
 
 test('original ReLU FFN keeps positive values and zeros negative features without a gate',()=>{

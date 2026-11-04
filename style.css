@@ -41,6 +41,22 @@ body{min-width:1080px}#game{max-width:1920px;padding:18px 24px}main{grid-templat
 @media(prefers-reduced-motion:reduce){.module-card[open],.card-sheen:after{animation:none}.card-sheen{display:none}}
 
 .module-card .card-vector>b{width:92px;flex-shrink:0;font-size:10px;white-space:nowrap}
+.score-shapes>code{display:block;margin-bottom:5px;font-size:11px;color:#516f79}
+.score-dimension{padding:7px 9px;background:#ede9d6;border-radius:5px}.score-dimension code{white-space:nowrap}
+.score-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px}
+.score-pair>div{padding:8px;border:1px solid #acbdc9;border-radius:5px;background:#e5ecf0;color:#446c8f}
+.score-pair .key{border-color:#c1b4ce;background:#eee8f1;color:#78608c}
+.score-pair b{display:block;font-size:10px;margin-bottom:5px}.score-pair code{font-size:12px;overflow-wrap:anywhere}
+.score-worked{margin:8px 0;font:11px/1.8 ui-monospace,monospace;color:#617462;overflow-wrap:anywhere}
+.score-table{border-collapse:collapse;width:100%;font-size:11px;margin:10px 0 14px}
+.score-table th{font-weight:500;color:#7b7460}.score-table td,.score-table th{padding:6px;text-align:right;border-bottom:1px solid #d5d5c4}
+.score-table th:first-child{text-align:left}.score-table td:last-child{color:#397f71;font-weight:600}.score-table .worked{background:#e8ecdf80}
+.score-softmax{border-top:1px dashed #c8c5ad;padding-top:10px}.score-distributions{display:grid;grid-template-columns:48px repeat(2,minmax(0,1fr));gap:5px 8px;align-items:center;margin-top:9px;font-size:10px;color:#6b7466}
+.score-distributions>b{font-weight:500;text-align:center}.score-bar{position:relative;min-height:23px;background:#e5e6dc;border-radius:4px;overflow:hidden;text-align:center;line-height:23px}
+.score-bar i{position:absolute;inset:0 auto 0 0;background:#b9a5c2;opacity:.65}.score-bar.after i{background:#82ae99}.score-bar span{position:relative;color:#334d43;font-variant-numeric:tabular-nums}
+.score-shortcut{padding:8px 10px;margin-top:10px;background:#eeecd9;border-radius:5px;font-size:10px;color:#736b54}.score-shortcut code{display:block;font-size:11px;line-height:1.7;margin-top:5px}
+.score-theory,.score-full{margin-top:10px;padding-top:9px;border-top:1px dashed #ccc6ad}
+.score-theory summary,.score-full summary{font-size:11px;color:#587461;cursor:pointer}.score-theory summary:focus-visible,.score-full summary:focus-visible{outline:2px solid #648b78;outline-offset:3px}
 .card-comparison .card-vector{--branch:#397f71}
 .card-comparison .card-vector[data-symbol="G"],.card-comparison .card-vector[data-symbol="S"]{--branch:#75628e}
 .module-card .card-comparison .card-vector>b{width:106px;white-space:normal;color:var(--branch);line-height:1.4}
