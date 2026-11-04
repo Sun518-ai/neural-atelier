@@ -373,6 +373,35 @@ M.scoreGuide={
  full:L('查看完整 Q、K 和打分结果','View the full Q, K and score matrices')
 };
 I18n.prepare(M.scoreGuide);
+const aggregateMeaning=L('A 是 Softmax 算出的注意力比例，V 是 V 投影产生的内容向量。AV 就是 A × V：一个比例乘一整组 V，再把这些贡献相加，得到输出 O。','A contains the attention proportions computed by Softmax. V contains the content vectors from the V projection. AV means A × V: scale each whole V vector by its proportion, then add the contributions to obtain O.');
+const aggregatePurpose=L('这是原版 Transformer 的 Attention 公式里，Softmax 后面“乘 V”的一步。只做 V 投影时，各位置仍各自加工自己的特征；A × V 让当前查询能读取其他位置的内容。每个查询各有一组比例，分别算出自己的输出，之后才做输出投影 Wo。','This is the multiplication by V after Softmax in the original Transformer’s Attention formula. A V projection transforms each position separately; A × V lets a query read content from other positions. Each query has its own proportions and output. The output projection Wo comes afterward.');
+for(const [id,wide]of [['aggregate',false],['original-aggregate',true]]){
+ M.definitions[id].name=wide?L('A × V · 汇合四维内容','A × V · mix four-feature values'):L('A × V · 汇合内容','A × V · mix values');
+ M.definitions[id].hint=aggregateMeaning;
+ cards[id]={...(cards[id]||previousCard(id)),seal:'AV',english:'ATTENTION · WEIGHTED SUM',ability:L('按比例，把内容取回来','Retrieve content in proportion'),formula:'O = A × V',meaning:aggregateMeaning,purpose:aggregatePurpose,weight:L('无','None'),trait:L('矩阵乘法 · 加权求和','Matrix product · weighted sum')};
+}
+M.aggregateGuide={
+ flowTitle:L('它在 Attention 的哪里？','Where does it fit in Attention?'),
+ a:L('A · 取多少','A · how much'),v:L('V · 取什么','V · what to read'),o:L('O · 汇合后的内容','O · combined content'),
+ scorePath:L('Q/K → 打分 → Softmax','Q/K → scores → Softmax'),
+ crossScorePath:L('目标 Q / 源句 K → 打分 → Softmax','Target Q / source K → scores → Softmax'),
+ maskedScorePath:L('Q/K → 打分 → 遮罩 → Softmax','Q/K → scores → mask → Softmax'),
+ valuePath:L('输入特征 → V 投影','Input features → V projection'),
+ crossValuePath:L('源句特征 → V 投影','Source features → V projection'),
+ dynamic:L('A 是随输入算出的比例，不是另一块固定的投影权重。','A is computed from the input, not a fixed projection weight matrix.'),
+ title:L('先用两个内容向量算一次','Start with two content vectors'),
+ simple:L('简化例子：假设某个查询得到的比例是 25% 和 75%。','Simplified example: suppose one query assigns 25% and 75%.'),
+ proportion:L('A · 比例','A · proportion'),content:L('V · 内容向量','V · content vector'),contribution:L('这份贡献','Contribution'),
+ sum:L('最后把贡献相加','Add the contributions'),
+ whole:L('25% 乘第一个 V 的两个数，75% 乘第二个 V 的两个数；再把对应特征相加。结果是一组新向量，不是选出其中一个词。','Multiply both features of the first V by 25%, and both features of the second by 75%, then add matching features. The result is a new vector, not a selected word.'),
+ actual:L('展开游戏里的三位置计算','Show the game’s three-position example'),
+ rounding:L('上方为简化例子；展开后使用示例关卡的真实计算值 · 数字已四舍五入','The example above is simplified; expand for the example level’s actual calculation · Values are rounded'),
+ query:L('正在为这个查询汇合：','Combining content for query:'),
+ sources:L('内容来自：','Content sources:'),
+ rest:L('上面只算这个查询的输出。其余查询各用自己的比例计算，三组输出合起来才是完整的 O。','The calculation above produces one query’s output. Each other query uses its own proportions; the three outputs together form O.'),
+ dimensions:L('A 的三个数对应三个内容来源；每个比例乘完整的 V，输出保留 V 的特征数。','Each of the three proportions in A belongs to a content source. It scales the whole V vector, so the output keeps V’s feature count.')
+};
+I18n.prepare(M.aggregateGuide);
 I18n.prepare(cards);
 M.original={relu,ln,position,embed,wide,project,vocabulary,classicFFN,sequenceFFN,head,concat,multi,singleAttention,encoder,decoderSelf,decoder,sourceIds,
  exampleLabels(levelId){return {Oa:L('自注意力更新','Self-attention update'),Om:L('因果注意力更新','Masked attention update'),Oc:L('交叉注意力更新','Cross-attention update'),A:['relu','original-ffn'].includes(levelId)?L('ReLU 输出','ReLU output'):I18n.t('注意力'),E:L('编码器输出','Encoder output'),D:L('目标特征','Target features'),Xs:L('源词向量与位置','Source embeddings and positions'),Xt:L('目标词向量与位置','Target embeddings and positions'),Xp:L('含位置的特征','Position-enriched features'),H_A:L('头 A 的结果','Head A output'),H_B:L('头 B 的结果','Head B output'),C:L('拼接结果','Concatenated features'),X1:L('第一次归一化','First normalized state'),X2:L('交叉注意力后的特征','Features after cross-attention'),R1:L('Attention 残差结果','Attention residual result'),R2:L('FFN 残差结果','FFN residual result'),Rc:L('交叉注意力残差结果','Cross-attention residual result')};},

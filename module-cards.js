@@ -116,6 +116,17 @@ export function scoreComparison(M,example,query=2,key=0){
   simple:{raw:[0,2],scaled:[0,2/Math.sqrt(width)],before:softmax([0,2]),after:softmax([0,2/Math.sqrt(width)])}};
 }
 
+// Keep each source's whole V vector together: one attention coefficient
+// scales all its features, then the contributions sum feature by feature.
+export function aggregationExample(M,example,query=2){
+ const describe=(weights,values)=>{
+  const contributions=values.map((v,i)=>v.map(x=>weights[i]*x));
+  return {weights,values,contributions,output:values[0].map((_,j)=>contributions.reduce((sum,v)=>sum+v[j],0))};
+ };
+ const width=example.inputs[1][1].length/3,values=M.math.rows(example.inputs[1][1],width),weights=M.math.rows(example.inputs[0][1],3)[query];
+ return {width,query,...describe(weights,values),simple:describe([.25,.75],[[2,0],[0,4]])};
+}
+
 export function exampleFor(M,id,levelId='ffn'){
   if(['down-projection','plain-ffn','gate-projection','pairwise'].includes(levelId)){
    const input=[1,0],state=M.solutions(levelId),ev=M.evaluate(state,input),node=state.nodes.find(n=>n.id===id);

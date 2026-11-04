@@ -1,13 +1,13 @@
 const fs=require('node:fs'),vm=require('node:vm'),test=require('node:test'),assert=require('node:assert/strict');
 const {parseHTML}=require('linkedom');
-async function boot({reduced=true,frameMs=1000,onFrame=()=>{},languages=['zh-CN']}={}){
+async function boot({reduced=true,frameMs=1000,onFrame=()=>{},languages=['zh-CN'],timers={setTimeout,clearTimeout}}={}){
  const Three=await import('./vendor/three.module.js');
  const {document,window}=parseHTML(fs.readFileSync(__dirname+'/index.html','utf8'));const native=document.createElement.bind(document);
  document.createElement=function(name){const el=native(name);if(name==='canvas')el.getContext=()=>({fillRect(){},fillText(){},measureText(t){return {width:String(t).length*60}}});return el;};
  for(const el of document.querySelectorAll('dialog')){el.showModal=function(){this.open=true};el.close=function(){this.open=false};}
  for(const el of document.querySelectorAll('*')){Object.defineProperty(el,'clientWidth',{get:()=>el.id==='scene'?1400:100});Object.defineProperty(el,'clientHeight',{get:()=>el.id==='scene'?760:60});el.focus=()=>{};el.scrollIntoView=()=>{};}
  let view,renderedCamera;const scenes=[];class Renderer{constructor(){this.domElement=native('canvas');this.shadowMap={};this.capabilities={getMaxAnisotropy:()=>8};}setPixelRatio(){}setClearColor(){}setSize(){}render(scene,camera){renderedCamera=camera;view={position:camera.position.toArray(),width:camera.right-camera.left};scenes.push(scene);scene.updateMatrixWorld();camera.updateMatrixWorld();scene.traverse(o=>{if(o.isMesh)assert.ok(o.matrixWorld.elements.every(Number.isFinite),'nonfinite transform '+o.type);});}}
- const storage=new Map();let now=0;const c={document,console,navigator:{languages},T:{...Three,WebGLRenderer:Renderer},devicePixelRatio:2,ResizeObserver:class{observe(){}},requestAnimationFrame:cb=>setImmediate(()=>{now+=frameMs;onFrame({now,document,window});cb(now);}),cancelAnimationFrame:clearImmediate,performance:{now:()=>now},matchMedia:()=>({matches:reduced}),setTimeout,localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)}};c.window=c;vm.createContext(c);
+ const storage=new Map();let now=0;const c={document,console,navigator:{languages},T:{...Three,WebGLRenderer:Renderer},devicePixelRatio:2,ResizeObserver:class{observe(){}},requestAnimationFrame:cb=>setImmediate(()=>{now+=frameMs;onFrame({now,document,window});cb(now);}),cancelAnimationFrame:clearImmediate,performance:{now:()=>now},matchMedia:()=>({matches:reduced}),setTimeout:timers.setTimeout,clearTimeout:timers.clearTimeout,localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)}};c.window=c;vm.createContext(c);
  for(const f of ['locales/en.js','i18n.js','music.js','shell.js','model.js','campaign.js','engine-model.js','original-curriculum.js'])vm.runInContext(fs.readFileSync(__dirname+'/'+f,'utf8'),c,{filename:f});
  for(const f of ['module-cards.js','level-progress.js','scene-art.js'])vm.runInContext(fs.readFileSync(__dirname+'/'+f,'utf8').replaceAll('export ',''),c,{filename:f});
  let src=fs.readFileSync(__dirname+'/game.js','utf8').replace(/^import .*\n/gm,'').replace("const T=await import('./vendor/three.module.js');",'const T=window.T;').replace(/const \{createSceneArt\}=await import\('\.\/scene-art\.js\?v=[^']+'\);/,'');
@@ -1069,6 +1069,75 @@ test('dragging a module card previews the operator, places one copy and dismisse
  app.api.chooseOutput('R');app.api.chooseInput('project',0);app.api.chooseOutput('project');app.api.chooseInput('sink',0);await app.api.run();assert.equal(doc.querySelectorAll('#test-results .pass').length,3);
  app.document.querySelector('#reset').onclick();assert.equal(guide().hasAttribute('hidden'),false);
  event(doc.querySelector('[data-add-module="project"]'),'pointerdown',{clientX:120,clientY:160});event(doc,'pointermove',{clientX:700,clientY:380});event(doc,'pointerup',{clientX:1500,clientY:380});assert.equal(ghost(),undefined);assert.equal(app.api.getState().nodes.length,0,'dropping outside does not create or spend a copy');
+});
+
+function noticeTimers(){
+ let now=0,id=0;const tasks=new Map(),callbacks=[];
+ return {callbacks,setTimeout(fn,delay){callbacks.push(fn);tasks.set(++id,{fn,at:now+delay});return id;},clearTimeout(id){tasks.delete(id);},
+  tick(ms){now+=ms;for(const [id,t]of [...tasks])if(t.at<=now){tasks.delete(id);t.fn();}},get pending(){return tasks.size;}};
+}
+test('rejected clicks show a port-local toast, track the camera, and dismiss without changing the circuit',async()=>{
+ const timers=noticeTimers(),app=await boot({timers}),doc=app.document,M=app.c.NeuralPrologue;
+ doc.querySelector('#welcome').close();app.api.switchLevel('weighted-sum');app.api.setState(M.solutions('weighted-sum'));app.api.getWorld().rebuild();
+ const saved=JSON.stringify(app.api.getState()),event=(target,type,props={})=>{const e=new app.window.Event(type,{bubbles:true,cancelable:true});Object.assign(e,props);target.dispatchEvent(e);};
+ event(doc.querySelector('[data-output="original-weights"]'),'click');event(doc.querySelector('[data-input="v:0"]'),'click');
+ let toast=doc.querySelector('.connection-toast');assert.ok(toast);assert.equal(toast.parentElement.id,'labels');
+ assert.equal(toast.getAttribute('role'),'status');assert.match(toast.textContent,/3 × 3.*3 × 2/);assert.equal(JSON.stringify(app.api.getState()),saved);
+ assert.ok(doc.querySelector('[data-input="v:0"]').classList.contains('rejected'));
+ Object.defineProperties(toast,{offsetWidth:{value:260},offsetHeight:{value:70}});app.api.getWorld().labels();
+ const at=[toast.style.left,toast.style.top];event(doc.querySelector('#scene'),'wheel',{deltaY:150});assert.notDeepEqual([toast.style.left,toast.style.top],at);
+ assert.ok(parseFloat(toast.style.left)>=12&&parseFloat(toast.style.left)<=1400-260-12);
+ assert.ok(parseFloat(toast.style.top)>=12&&parseFloat(toast.style.top)<=760-70-12);
+ assert.equal(doc.querySelectorAll('.connection-toast').length,1,'label refresh retains a single notice');
+ const obsolete=timers.callbacks.at(-1);timers.tick(3200);app.api.chooseInput('v',0);toast=doc.querySelector('.connection-toast');obsolete();
+ assert.equal(doc.querySelector('.connection-toast'),toast,'an older timer cannot remove the next rejection');timers.tick(3599);assert.ok(doc.querySelector('.connection-toast'));timers.tick(1);
+ assert.equal(doc.querySelector('.connection-toast'),null);assert.equal(doc.querySelector('.port.rejected'),null);assert.equal(JSON.stringify(app.api.getState()),saved);
+ assert.match(doc.querySelector('#feedback').textContent,/3 × 3.*3 × 2/,'the footer keeps the explanation for later reading');
+ app.api.chooseInput('v',0);assert.ok(doc.querySelector('.connection-toast'));app.api.chooseInput('aggregate',0);
+ assert.equal(doc.querySelector('.connection-toast'),null);assert.equal(doc.querySelector('.port.rejected'),null);assert.equal(timers.pending,0);
+ assert.equal(JSON.stringify(app.api.getState()),saved,'a failed attempt never removed or replaced the old wire');
+});
+
+test('drag rejection and self-wires use the same localized notice and clear on cancellation, inspection, run or level change',async()=>{
+ for(const language of ['zh-CN','en-US']){
+  const timers=noticeTimers(),app=await boot({timers,languages:[language]}),doc=app.document,M=app.c.NeuralPrologue;
+  doc.querySelector('#welcome').close();app.api.switchLevel('weighted-sum');app.api.setState(M.solutions('weighted-sum'));app.api.getWorld().rebuild();
+  doc.querySelector('#scene').getBoundingClientRect=()=>({left:0,top:0,width:1400,height:760,right:1400,bottom:760});
+  const event=(target,type,props={})=>{const e=new app.window.Event(type,{bubbles:true,cancelable:true});Object.assign(e,props);target.dispatchEvent(e);};
+  const saved=JSON.stringify(app.api.getState());doc.elementFromPoint=()=>doc.querySelector('[data-input="v:0"]');
+  event(doc.querySelector('[data-output="original-weights"]'),'pointerdown',{clientX:650,clientY:350});event(doc,'pointermove',{clientX:830,clientY:350});event(doc,'pointerup',{clientX:830,clientY:350});timers.tick(0);
+  assert.ok(doc.querySelector('.connection-toast'));assert.match(doc.querySelector('.connection-toast').textContent,/3 × 3.*3 × 2/);assert.equal(JSON.stringify(app.api.getState()),saved);
+  if(language==='en-US')assert.doesNotMatch(doc.querySelector('.connection-toast').textContent,/[\u3400-\u9fff]/);
+  event(doc,'pointercancel');assert.equal(doc.querySelector('.connection-toast'),null);
+  app.api.chooseOutput('v');app.api.chooseInput('v',0);assert.ok(doc.querySelector('.connection-toast').textContent.includes(app.c.I18n.t('不能把输出接回自己')));event(doc,'keydown',{key:'Escape'});assert.equal(doc.querySelector('.connection-toast'),null);
+  const reject=()=>{app.api.chooseOutput('v');app.api.chooseOutput('original-weights');app.api.chooseInput('v',0);assert.ok(doc.querySelector('.connection-toast'));};
+  reject();app.api.getWorld().focusShelf('aggregate');assert.equal(doc.querySelector('.connection-toast'),null);doc.querySelector('#card-close').onclick();
+  reject();app.c.I18n.setPreference(language==='en-US'?'zh':'en');assert.equal(doc.querySelector('.connection-toast'),null);
+  reject();const running=app.api.run();assert.equal(doc.querySelector('.connection-toast'),null);await running;
+  assert.equal(doc.querySelectorAll('#test-results .pass').length,3);doc.querySelector('#complete-close').onclick();
+  reject();app.api.switchLevel('scores');assert.equal(doc.querySelector('.connection-toast'),null);assert.equal(timers.pending,0);
+ }
+});
+
+test('AV cards explain provenance and whole-vector contributions in both languages and feature widths',async()=>{
+ for(const language of ['zh-CN','en-US']){
+  const app=await boot({languages:[language]}),doc=app.document,M=app.c.NeuralPrologue;doc.querySelector('#welcome').close();
+  for(const [level,kind,width]of [['weighted-sum','aggregate',2],['cross-attention','original-aggregate',4],['attention','aggregate',2],['multihead','aggregate',2]]){
+   app.api.switchLevel(level);const before=JSON.stringify(app.api.getState()),exampleLevel=M.exampleLevel(kind,level),stage=M.levels[exampleLevel];app.api.getWorld().focusShelf(kind);
+   const expected=app.c.aggregationExample(M,M.extraExample(kind,exampleLevel));
+   assert.equal(doc.querySelector('.av-example').dataset.width,String(width));assert.equal(doc.querySelector('#card-attention-flow').hidden,false);
+   assert.match(doc.querySelector('.av-a').textContent,/Softmax/);assert.match(doc.querySelector('.av-v').textContent,/V/);assert.equal(doc.querySelector('#card-formula').textContent,'O = A × V');
+   assert.match(doc.querySelector('#card-purpose').textContent,/Transformer/);assert.equal(doc.querySelectorAll('.av-simple tbody tr').length,2);assert.match(doc.querySelector('.av-simple .av-sum').textContent,/\[0.5, 0\] \+ \[0, 3\] = \[0.5, 3\]/);
+   assert.equal(doc.querySelector('.av-actual').hasAttribute('open'),false);
+   assert.deepEqual([...doc.querySelectorAll('.av-actual tr[data-weight]')].map(el=>Number(el.dataset.weight)),Array.from(expected.weights));
+   assert.ok(doc.querySelector('.av-example-level').textContent.includes(stage.title));
+   const query=M.samplesFor(exampleLevel)[0].word.split(' / ')[2];assert.equal(doc.querySelector('.av-query>b').textContent,query);
+   if(stage.dualSource)assert.deepEqual([...doc.querySelectorAll('.av-word')].map(el=>el.textContent),Array.from(stage.secondaryTokenIds,id=>M.math.vocab[id]));
+   if(language==='en-US')assert.doesNotMatch(doc.querySelector('#module-card').textContent,/[\u3400-\u9fff]/);
+   doc.querySelector('#card-close').onclick();assert.equal(JSON.stringify(app.api.getState()),before);
+  }
+  app.api.switchLevel('weighted-sum');app.api.getWorld().focusShelf('v');assert.equal(doc.querySelector('#card-attention-flow').hidden,true);assert.equal(doc.querySelector('.av-example'),null);doc.querySelector('#card-close').onclick();
+ }
 });
 
 test('scoring cards explain the divisor and compare downstream Softmax using real values in both languages',async()=>{

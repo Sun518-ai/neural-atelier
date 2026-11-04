@@ -103,6 +103,26 @@ test('score explanations follow actual Q/K dimensions and show why Softmax does 
  assert.ok(close(zero.before,[1/3,1/3,1/3]));assert.ok(close(zero.before,zero.after),'already uniform scores remain uniform');
 });
 
+test('AV examples sum weighted whole V vectors for every query, including cross-attention and masked attention',()=>{
+ for(const [level,kind,width]of [['weighted-sum','aggregate',2],['self-attention','aggregate',2],['cross-attention','original-aggregate',4],['attention','aggregate',2]]){
+  const example=M.extraExample(kind,level),before=JSON.stringify(example);
+  for(let query=0;query<3;query++){
+   const d=ctx.aggregationExample(M,example,query);
+   assert.equal(d.width,width);assert.equal(d.query,query);assert.equal(d.values.length,3);
+   assert.ok(close(d.output,example.output[1].slice(query*width,(query+1)*width)),level+' query '+query);
+   assert.ok(Math.abs(d.weights.reduce((a,b)=>a+b,0)-1)<1e-12);
+   for(let i=0;i<3;i++)assert.ok(close(d.contributions[i],d.values[i].map(x=>x*d.weights[i])));
+   assert.ok(close(d.simple.output,[.5,3]));assert.deepEqual(plain(d.simple.contributions),[[.5,0],[0,3]]);
+   if(level==='attention')for(let i=query+1;i<3;i++){assert.equal(d.weights[i],0);assert.ok(d.contributions[i].every(x=>x===0));}
+  }
+  assert.equal(JSON.stringify(example),before);
+  assert.equal(M.extraCard(kind,level).formula,'O = A × V');
+  assert.match(M.extraCard(kind,level).meaning,/Softmax/);
+ }
+ const sample={inputs:[['A',[1,0,0,0,1,0,.25,.75,0]],['V',[2,-4,-2,8,0,0]]],output:['O',[2,-4,-2,8,-1,5]]};
+ assert.ok(close(ctx.aggregationExample(M,sample).output,[-1,5]),'signed features combine instead of choosing or multiplying paired positions');
+});
+
 test('original ReLU FFN keeps positive values and zeros negative features without a gate',()=>{
  assert.deepEqual([-2,0,1,3].map(O.relu),[0,0,1,3]);
  assert.ok(close(O.classicFFN([-1,2]),[0,.6]));assert.ok(close(O.classicFFN([0,1]),[.1,.4]));
