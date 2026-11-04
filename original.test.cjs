@@ -4,17 +4,15 @@ for(const file of ['locales/en.js','i18n.js','model.js','campaign.js','engine-mo
 const M=ctx.NeuralPrologue,O=M.original;
 const plain=x=>JSON.parse(JSON.stringify(x));
 const close=(a,b,tol=1e-9)=>a?.length===b.length&&a.every((x,i)=>Number.isFinite(x)&&Math.abs(x-b[i])<tol);
-test('QKV requires three independently correct projections although V itself does not depend on Q or K',()=>{
- const s=M.solutions('qkv'),input=[1,0,0,1,1,1],ev=M.evaluate(s,input);
- assert.ok(ev.goals.every(g=>g.pass));
- for(const [kind,expected]of [['q',[1,.25,.5,1,1.5,1.25]],['k',[.8,-.5,.2,1,1,.5]],['v',[1,0,0,2,1,2]]])assert.ok(close(ev.goals.find(g=>g.kind===kind).actual,expected));
- s.nodes=s.nodes.filter(n=>n.kind==='v');const onlyV=M.evaluate(s,input);
- assert.ok(close(onlyV.output,M.reference(input,'qkv')));assert.equal(onlyV.error,null);
- assert.deepEqual(plain(onlyV.goals.map(g=>g.pass)),[false,false,true]);assert.ok(onlyV.goals.slice(0,2).every(g=>g.actual===null&&g.id===null));
- const serial=M.solutions('qkv');serial.nodes.find(n=>n.kind==='k').links=['q'];const wrong=M.evaluate(serial,input);
- assert.ok(close(wrong.output,M.reference(input,'qkv')));assert.equal(wrong.goals.find(g=>g.kind==='k').pass,false);
- assert.ok(M.evaluate(M.solutions('scores'),input).goals.length===0,'other lessons keep their numerical outlet goal');
+test('QKV accepts only V at the outlet and ignores optional Q/K branches',()=>{
+ const state=M.initial('qkv');assert.ok(M.addNode(state,'v',0,0));assert.equal(M.connect(state,'R','v',0),null);assert.equal(M.connect(state,'v','sink',0),null);
+ for(const sample of M.samplesFor('qkv')){const ev=M.evaluate(state,sample.v);assert.equal(ev.error,null);assert.ok(close(ev.output,M.reference(sample.v,'qkv')));assert.equal(ev.values.q,undefined);assert.equal(ev.values.k,undefined);}
+ assert.ok(close(M.evaluate(state,[1,0,0,1,1,1]).output,[1,0,0,2,1,2]));
+ const optional=M.solutions('qkv');optional.nodes.find(n=>n.id==='q').links=['k'];optional.nodes.find(n=>n.id==='k').links=['q'];
+ for(const sample of M.samplesFor('qkv')){const ev=M.evaluate(optional,sample.v);assert.equal(ev.error,null);assert.ok(close(ev.output,M.reference(sample.v,'qkv')));}
+ for(const sink of ['R','q','k']){const wrong=M.solutions('qkv');wrong.sink=sink;assert.ok(M.samplesFor('qkv').some(sample=>!close(M.evaluate(wrong,sample.v).output,M.reference(sample.v,'qkv'))),sink+' is not the V result');}
 });
+
 const differs=(id,edit)=>{const s=M.solutions(id);edit(s);assert.ok(M.samplesFor(id).slice(0,M.levels[id].sampleCount).some(t=>{const e=M.evaluate(s,t.v);return e.error||!close(e.output,M.reference(t.v,id));}),id+' must reject this incorrect computation');};
 
 test('original concepts are completed before optional modern and engine tracks',()=>{

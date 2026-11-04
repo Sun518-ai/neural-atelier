@@ -117,13 +117,7 @@ function evaluate(state,v){const level=levelFor(state),context={state,level,inpu
  // final outlet is disconnected or another branch cannot finish. Keep the
  // original final-output validation separate from this execution trace.
  for(const node of state.nodes){visiting.clear();try{run(node.id);}catch{}}
- const goals=(level.projectionGoals||[]).map(kind=>{
-  const expected=api.operations[kind]([values.R],context),candidates=state.nodes.filter(n=>nodeKind(n)===kind);
-  const matches=a=>a?.length===expected.length&&a.every((x,i)=>Number.isFinite(x)&&Math.abs(x-expected[i])<1e-9);
-  const node=candidates.find(n=>matches(values[n.id]))||candidates[0],actual=values[node?.id]||null;
-  return {kind,id:node?.id||null,label:definitions[kind].name,actual,expected,pass:!!matches(actual)};
- });
- return {output,values,depths,order,error,bad,goals};}
+ return {output,values,depths,order,error,bad};}
 function valueForKind(state,ev,kind){
  if(!ev)return null;const pending=[state.sink],seen=new Set();
  while(pending.length){const id=pending.shift();if(!id||seen.has(id))continue;seen.add(id);const n=state.nodes.find(n=>n.id===id);if(!n)continue;if(nodeKind(n)===kind)return ev.values[id]||null;pending.push(...n.links);}

@@ -6,7 +6,6 @@ L('原版基础','Original');L('现代扩展','Modern');L('源序列','Source se
 L('3 个位置 × 4 个特征','3 positions × 4 features');
 L('这里只展开第一个位置的归一化，其他位置分别计算。','The calculation below expands the first position; other positions are normalized independently.');
 L('残差相加结果','Residual sum');
-L('出口 V','V outlet');
 const {rows,mat,scores,probabilities,mix,causal}=M.math,flat=x=>x.flat(),plus=(a,b)=>a.map((x,i)=>x+b[i]);
 const relu=x=>Math.max(0,x),eps=1e-6;
 const wide={
@@ -240,9 +239,8 @@ for(const [track,route]of Object.entries(M.routes))route.ids.forEach((id,i)=>{M.
 // module makes that copy available to place again without changing the puzzle.
 for(const level of Object.values(M.levels))if(!level.practice&&!level.buildable){level.buildable=true;level.startWithModules=true;}
 for(const id of originalNetwork){const l=M.levels[id];l.migratePreparedStart=!!l.startWithModules;l.startWithModules=false;l.requirePlacement=true;}
-M.levels.qkv.projectionGoals=['q','k','v'];M.levels.qkv.goalRevision=1;
-M.levels.qkv.mission=L('得到三组投影，并将 V 送到出口','Produce all three projections and send V to the outlet');
-M.levels.qkv.description=L('Q、K、V 的结果都要正确，出口接收 V。三套权重各自处理同一份输入：生成 V 不需要先经过 Q 或 K。运行结束后分别核对三组结果。','Q, K and V must all be correct; the outlet receives V. Each weight matrix acts on the same input independently: V does not pass through Q or K. All three results are checked after the run.');
+M.levels.qkv.mission=L('把内容向量送到出口','Send the value vectors to the outlet');
+M.levels.qkv.description=L('本关只检查出口的 V。Q/K 用于后续的注意力打分，这里不要求放置或接线。','This lesson checks only V at the outlet. Q/K are used for attention scoring in later lessons; placing or connecting them is optional here.');
 M.levels.qkv.summary=M.levels.qkv.description;
 M.levels.softmax.description=L('将已学过的 Q/K 投影和打分接起来，再把分数交给 Softmax。每组权重的和应为 1，本关不遮住未来位置。','Connect the familiar Q/K projections and scoring, then feed the scores to Softmax. Each weight row should sum to 1; this level has no future mask.');
 M.levels.residual.rationale.scope=L('这里先用线性支路练习残差。进入原版基础章后，会把它包在 ReLU FFN 和 Attention 外，再加入 LayerNorm。','Practice the residual with a linear branch here. The original chapter then wraps ReLU FFNs and Attention with residuals and LayerNorm.');

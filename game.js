@@ -1,5 +1,5 @@
-import {cardFor,exampleFor} from './module-cards.js?v=qkv-projections-1';
-import {createProgress} from './level-progress.js?v=qkv-projections-1';
+import {cardFor,exampleFor} from './module-cards.js?v=qkv-v-outlet-1';
+import {createProgress} from './level-progress.js?v=qkv-v-outlet-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -74,8 +74,7 @@ function renderReport(){
  const panel=$('#run-report'),attentionValues=M.valueForKind(state,current,'softmax')||M.valueForKind(state,current,'attentionweights')||M.valueForKind(state,current,'original-weights');let html=I18n.t("<div class=\"run-report-content\" tabindex=\"0\" aria-label=\"本次运行详情\">");
  if(stage().tokenOutput){html+='<div class="word-trials">'+results.map((r,i)=>`${I18n.t("<div><small>输入：")}${samples()[i].word}</small><strong class="${r.pass?'good':'bad'}">${r.actual?M.readTokens(r.actual):I18n.t("未得到输出")}${I18n.t("</strong><span>目标：")}${M.readTokens(r.expected)}</span></div>`).join('')+I18n.t("</div><p>文字来自词表分数最高的候选。计算出错可能改词，也可能碰巧仍是同一个词。</p>");}
  if(stage().attentionReadout&&attentionValues){const a=M.math.rows(attentionValues,3),words=samples()[sample].word.split(' / ');html+=I18n.t("<h3>各位置从哪里读取内容</h3><div class=\"attention-map\">")+a.map((r,i)=>`<div><b>${words[i]}${I18n.t(" · 位置 ")}${i}</b>${r.map((v,j)=>`<span style="--weight:${Math.max(0,Math.min(1,v))}">${words[j]} ${Math.round(v*100)}%</span>`).join('')}</div>`).join('')+I18n.t("</div><p>比例是这次计算的注意力权重，不是对真实语言理解的完整解释。</p>");}
- if(current?.goals?.length){const checks=[...current.goals,{kind:I18n.t('出口 V'),pass:results.at(-1)?.outletPass,actual:current.output}];html+='<div class="projection-checks">'+checks.map(g=>`<span class="${g.pass?'good':'bad'}">${g.pass?'✓':'×'} ${g.kind.toUpperCase()} · ${g.pass?I18n.t("数值匹配。"):g.actual?I18n.t("数值不匹配。"):I18n.t("未得到输出")}</span>`).join('')+'</div>';}
- if(stage().sequence&&!stage().engine&&!stage().tokenOutput&&!current?.goals?.length&&(!stage().attentionReadout||!attentionValues)){const r=results[results.length-1];html+=`<p>${r?.pass?I18n.t("数值匹配。"):I18n.t("数值不匹配。")}${I18n.t("输出特征仍对应原来的输入位置；下一词要在词表投影后才确定。</p>")}`;}
+ if(stage().sequence&&!stage().engine&&!stage().tokenOutput&&(!stage().attentionReadout||!attentionValues)){const r=results[results.length-1];html+=`<p>${r?.pass?I18n.t("数值匹配。"):I18n.t("数值不匹配。")}${I18n.t("输出特征仍对应原来的输入位置；下一词要在词表投影后才确定。</p>")}`;}
  if(stageId==='vocabulary'&&current?.values.lmhead){const scores=M.math.rows(current.values.lmhead,6);html+=I18n.t("<h3>词表分数 · 各位置取最高分</h3><div class=\"vocab-scores\"><div><b>位置</b>")+M.math.vocab.map(v=>'<b>'+v+'</b>').join('')+'</div>'+scores.map((r,i)=>'<div><b>'+i+'</b>'+r.map(v=>`<span class="${v===Math.max(...r)?'winner':''}">${fmt(v)}</span>`).join('')+'</div>').join('')+'</div>';}
  if(stageId==='autoregressive'&&results.every(r=>r.pass)){const rollout=M.rollout(state,samples()[0].v);html+=I18n.t("<h3>把新词追加回去，连续解码六次</h3><div class=\"word-trials\"><div><strong>")+rollout.text+I18n.t("</strong><small>每次只采用最后一个位置的预测，再更新上下文。</small></div></div>");}
  if(stage().engine&&results.length){html+='<div class="word-trials">'+results.map((r,i)=>`${I18n.t("<div><small>提示：")}${samples()[i].word}</small><strong class="${r.pass?'good':'bad'}">${r.actual?M.decodeFeatures(r.actual):I18n.t("未输出")}${I18n.t("</strong><span>目标读出：")}${M.decodeFeatures(r.expected)}</span></div>`).join('')+'</div>';}
@@ -205,8 +204,8 @@ async function run(){
   refresh();world.labels();say(`${I18n.t("试跑：「")}${samples()[i].word}」`);
   await world.animate(current,650,id);
   if(id!==runId||!busy)return;
-  const failedGoal=current.goals?.find(g=>!g.pass),outletPass=!current.error&&!!actual&&actual.length===expected.length&&actual.every((x,j)=>Number.isFinite(x)&&Math.abs(x-expected[j])<(stage().engine?(stage().limits?.error||.06):1e-9)),pass=!failedGoal&&outletPass;results.push({pass,actual,expected,outletPass,goals:current.goals});
-  if(!pass){fault=failedGoal?{id:failedGoal.id||'sink',actual:failedGoal.actual,expected:failedGoal.expected,goalKind:failedGoal.kind}:{id:'sink',actual,expected};level=99;busy=paused=false;if(stage().engine)engineReport=M.engineReport(state);world.labels();refresh();renderReport();say(`「${samples()[i].word}${I18n.t("」未通过。")}`,'error');return;}
+  const pass=!current.error&&!!actual&&actual.length===expected.length&&actual.every((x,j)=>Number.isFinite(x)&&Math.abs(x-expected[j])<(stage().engine?(stage().limits?.error||.06):1e-9));results.push({pass,actual,expected});
+  if(!pass){fault={id:'sink',actual,expected};level=99;busy=paused=false;if(stage().engine)engineReport=M.engineReport(state);world.labels();refresh();renderReport();say(`「${samples()[i].word}${I18n.t("」未通过。")}`,'error');return;}
   level=99;world.labels();refresh();
  }
  busy=paused=false;if(stage().engine)engineReport=M.engineReport(state);if(levelPassed())progress.complete(stageId,state);world.labels();refresh();renderReport();say(stage().engine?(engineReport.pass?I18n.t("数值与性能约束全部通过。"):I18n.t("数值通过；性能验收未通过，查看运行报告。")):`${I18n.t("通过：")}${stage().sampleCount} / ${stage().sampleCount}。`,stage().engine&&!engineReport.pass?'error':'success');showCompletion();
@@ -225,7 +224,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=qkv-projections-1');
+ const {createSceneArt}=await import('./scene-art.js?v=qkv-v-outlet-1');
  const art=createSceneArt(T,scene,colors,{anisotropy:renderer.capabilities.getMaxAnisotropy()});art.surroundings(samples(),stage());
  const assembly=new T.Group(),wires=new T.Group();scene.add(assembly,wires);const neuronGeo=new T.SphereGeometry(.115,16,12);let elements=[],curves=[],packets=[],drag=null,preview=null,yaw=.05,pitch=.8,zoom=stage().zoom,lastDepth=-1;
  const cameraTarget=new T.Vector3();let focusId=null,shelfFocus=null,shelfModel=null,overview=null,cameraFrame=0,transitioning=false,lastTap=null;
@@ -270,12 +269,11 @@ try{
   addLabel('button','port input '+(state.sink?'connected ':''),String(shape(stage().sinkDim)),{'type':'button','data-input':'sink:0','aria-label':`${I18n.t("本层输出入口，")}${shape(stage().sinkDim)}${state.sink?I18n.t("，已连接"):''}`},()=>point('sink'));
   if(busy&&current?.output&&level===99&&!fault&&!stage().sequence)addLabel('span','node-value',vector(current.output),{},()=>new T.Vector3(stage().sinkX,.6,1.6));
   if(fault){
-   const pos=()=>point(fault.id),vf=v=>v?'['+v.map(x=>fmt(x)).join(', ')+']':I18n.t("未得到输出");
+   const pos=()=>point('sink'),vf=v=>v?'['+v.map(x=>fmt(x)).join(', ')+']':I18n.t("未得到输出");
    const tokenText=stage().tokenOutput?`${I18n.t("<p class=\"token-verdict\">实际：")}${fault.actual?M.readTokens(fault.actual):I18n.t("未输出")}${I18n.t("<br>目标：")}${M.readTokens(fault.expected)}</p>`:'';
    const content=`${I18n.t("<button type=\"button\" class=\"fault-close\" data-dismiss-result aria-label=\"关闭结果提示\" title=\"关闭结果提示\">×</button><strong>最终结果 · ")}${sample<3&&!stage().sequence?I18n.t("位置 ")+sample+I18n.t("（输入“")+samples()[sample].word+'”）':samples()[sample].word}</strong>${tokenText}${I18n.t("<div><span>你的结果</span><b>")}${vf(fault.actual)}${I18n.t("</b></div><div class=\"expected\"><span>预期结果</span><b>")}${vf(fault.expected)}</b></div>`;
-   addLabel('span','fault-pin','!',{'data-owner':fault.id,'aria-hidden':'true'},pos);
-   const notice=addLabel('div','local-fault',content,{'data-owner':fault.id,'role':'status'},pos);
-   if(fault.goalKind)notice.querySelector('strong').textContent+= ' · '+M.definitions[fault.goalKind].name;
+   addLabel('span','fault-pin','!',{'data-owner':'sink','aria-hidden':'true'},pos);
+   addLabel('div','local-fault',content,{'data-owner':'sink','role':'status'},pos);
   }
   render();
  }

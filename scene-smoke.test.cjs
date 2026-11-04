@@ -78,11 +78,12 @@ test('paused QKV calculation keeps its token and arithmetic while zooming, switc
  assert.equal(phase,3);assert.equal(app.document.querySelectorAll('.packet,.projection-calculation,.projection-result').length,0);assert.ok(!app.document.querySelector('#level-complete').open);
  app.scenes.at(-1).traverse(o=>{assert.equal(o.userData.sequenceProjection,undefined);if(o.userData.projectionBank!=null)assert.equal(o.visible,false);});assert.deepEqual([...app.c.I18n.missing],[]);
 });
-test('missing QKV results appear at the failed branch only after animation and can be dismissed without editing',async()=>{
- let app;app=await boot({reduced:false,frameMs:250,onFrame:({document})=>{if(app){assert.equal(app.api.getFault(),null);assert.equal(document.querySelector('.local-fault'),null);}}});
- app.api.switchLevel('qkv');const state=app.c.NeuralPrologue.solutions('qkv');state.nodes.find(n=>n.id==='q').links=[null];state.nodes.find(n=>n.id==='k').links=[null];
- app.api.setState(state);app.api.getWorld().rebuild();await app.api.run();assert.equal(app.api.getFault().id,'q');assert.ok(app.document.querySelector('.local-fault[data-owner="q"]'));
- app.c.I18n.setPreference('en');assert.match(app.document.querySelector('.local-fault strong').textContent,/query projection/i);
+test('V-only animation passes without Q/K and an actual outlet error remains dismissible after running',async()=>{
+ let app;app=await boot({reduced:false,frameMs:250,onFrame:({document})=>{if(app&&document.body.classList.contains('network-running')){assert.equal(app.api.getFault(),null);assert.equal(document.querySelector('.local-fault'),null);}}});
+ app.api.switchLevel('qkv');const M=app.c.NeuralPrologue,state=M.initial('qkv');assert.ok(M.addNode(state,'v',0,0));M.connect(state,'R','v',0);M.connect(state,'v','sink',0);
+ app.api.setState(state);app.api.getWorld().rebuild();await app.api.run();assert.equal(app.document.querySelectorAll('#test-results .pass').length,3);assert.equal(app.api.getFault(),null);assert.equal(app.document.querySelector('#level-complete').open,true);
+ state.sink='R';app.api.getWorld().rebuild();await app.api.run();assert.equal(app.api.getFault().id,'sink');assert.ok(app.document.querySelector('.local-fault[data-owner="sink"]'));
+ app.c.I18n.setPreference('en');assert.match(app.document.querySelector('.local-fault strong').textContent,/Final result/);
  const before=JSON.stringify(app.api.getState());app.document.querySelector('.fault-close').dispatchEvent(new app.window.Event('click',{bubbles:true}));assert.equal(app.document.querySelector('.local-fault'),null);assert.equal(app.api.getFault(),null);assert.equal(JSON.stringify(app.api.getState()),before);
 });
 test('moving trays preserve feature columns and sequence rows through projection',async()=>{

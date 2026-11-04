@@ -3,7 +3,7 @@ export function createProgress(M,storage){
  const read=key=>{try{return JSON.parse(storage.getItem(key));}catch{return null;}};
  const write=(key,value)=>{try{storage.setItem(key,JSON.stringify(value));return true;}catch{return false;}};
  const key=id=>id==='ffn'?legacy:`neural-atelier-level-${id}-v1`;
- const saved=read(metaKey),meta={current:M.levels[saved?.current]?saved.current:(read(legacy)?'ffn':'wire'),completed:(Array.isArray(saved?.completed)?saved.completed:[]).filter(id=>M.levels[id]),practiceRuns:{},goalRevisions:{...saved?.goalRevisions}};
+ const saved=read(metaKey),meta={current:M.levels[saved?.current]?saved.current:(read(legacy)?'ffn':'wire'),completed:(Array.isArray(saved?.completed)?saved.completed:[]).filter(id=>M.levels[id]),practiceRuns:{}};
  for(const [id,run]of Object.entries(saved?.practiceRuns||{}))if(M.levels[id]?.practice&&run&&typeof run.finished==='boolean'&&(!run.finished||typeof run.circuit==='string'))meta.practiceRuns[id]={finished:run.finished,...(run.finished?{circuit:run.circuit}:{})};
  const completedKey=id=>key(id)+'-completed';
  const placementKey=id=>key(id)+'-before-placement';
@@ -36,7 +36,7 @@ export function createProgress(M,storage){
   // Only restart a completed answer, never a partly edited circuit.
   return M.samplesFor(id).slice(0,M.levels[id].sampleCount).every(({v})=>{
    const ev=M.evaluate(s,v),expected=M.reference(v,id);
-   return !ev.error&&!ev.goals?.some(g=>!g.pass)&&ev.output?.length===expected.length&&ev.output.every((x,i)=>Number.isFinite(x)&&Math.abs(x-expected[i])<1e-9);
+   return !ev.error&&ev.output?.length===expected.length&&ev.output.every((x,i)=>Number.isFinite(x)&&Math.abs(x-expected[i])<1e-9);
   });
  }
  function load(id){
@@ -67,11 +67,6 @@ export function createProgress(M,storage){
   write(key(id),state);
  }
  const previous=id=>M.levels[id]?.practice?validated(read(completedKey(id)),id):M.levels[id]?.requirePlacement?validated(read(placementKey(id)),id):null;
- // Recheck only badges earned under an older goal. Keep the player's circuit.
- for(const id of [...meta.completed])if(M.levels[id].goalRevision&&meta.goalRevisions[id]!==M.levels[id].goalRevision){
-  const s=validated(read(key(id)),id);if(!s||!solved(s,id))meta.completed=meta.completed.filter(x=>x!==id);
-  meta.goalRevisions[id]=M.levels[id].goalRevision;write(metaKey,meta);
- }
  return {current:()=>meta.current,completed:id=>meta.completed.includes(id),load,
   save,
   canRestore(id,state){const s=previous(id);return !!s&&(!state||circuitKey(s,true)!==circuitKey(state,true));},
@@ -79,7 +74,6 @@ export function createProgress(M,storage){
   select(id){meta.current=id;write(metaKey,meta);},
   complete(id,state){
    if(!meta.completed.includes(id))meta.completed.push(id);
-   if(M.levels[id]?.goalRevision)meta.goalRevisions[id]=M.levels[id].goalRevision;
    if(M.levels[id]?.practice){const s=validated(state||read(key(id)),id);if(s){save(s);write(completedKey(id),s);meta.practiceRuns[id]={finished:true,circuit:circuitKey(s)};}}
    write(metaKey,meta);
   }
