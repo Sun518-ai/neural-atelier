@@ -28,7 +28,8 @@ test('A × V animates actual coefficients, V columns and stored sums at the proj
    assert.equal(data.queryWord,sample.word.split(' / ')[data.query]);
    if(level==='cross-attention'){assert.deepEqual([...data.valueWords],Array.from(M.levels[level].secondaryTokenIds,i=>M.math.vocab[i]));checks.add('distinct source words');}
    for(const cell of unit.children.filter(o=>o.userData.aggregationValue)){
-    const {row,column,value}=cell.userData.aggregationValue;assert.equal(value,v[row*width+column]);assert.equal(cell.material.opacity,1,'the live V matrix stays readable');
+    const {row,column,value}=cell.userData.aggregationValue;assert.equal(value,v[row*width+column]);assert.ok(cell.material.opacity>.2&&cell.material.opacity<=1,'V remains visible even when its column is inactive');
+    if(unit.userData.calculationHighlight>.999){if(column===unit.userData.activeColumn)assert.ok(cell.material.opacity>.999,'the current V column is clear');else assert.ok(cell.material.opacity<.35,'other V columns recede');}
    }
    if(unit.children[0].material.opacity<.13){assert.equal(document.querySelector('.node-label[data-node="'+id+'"]').hidden,true);checks.add('faded scaffold');}
    const formula=document.querySelector('.aggregation-calculation[data-node="'+id+'"]');
@@ -128,7 +129,11 @@ test('calculation focus fades the projection scaffold for every token while keep
    assert.equal(document.querySelector('.node-label[data-node="'+id+'"]').hidden,true,'the name stays out of the running calculation');
    for(const base of unit.children.slice(0,2)){assert.ok(base.material.opacity<=.13);assert.equal(base.material.depthWrite,false);assert.equal(base.castShadow,false);}
    const faces=unit.children.filter(o=>o.userData.detailText);assert.equal(faces.length,4);
-   faces.forEach(face=>assert.equal(face.material.opacity,1,'weight numbers remain opaque'));
+   faces.forEach(face=>{
+    assert.ok(face.material.opacity>.3&&face.material.opacity<=1,'inactive numbers remain visible');
+    if(face.userData.matrixColumn!==unit.userData.activeColumn)assert.ok(face.material.opacity<.35,'only the current column is emphasized');
+    else if(unit.userData.calculationHighlight>.999)assert.ok(face.material.opacity>.999,'the multiplying column is fully clear');
+   });
    unit.children.filter(o=>o.geometry?.type==='TubeGeometry').forEach(path=>assert.ok(path.material.opacity<.081,'the static weight web recedes'));
    const active=unit.children.find(o=>o.userData.projectionColumn===unit.userData.activeColumn);if(active)assert.ok(active.visible,'column emphasis remains visible');
    if(unit.children.some(o=>o.userData.contribution&&o.visible&&o.material.opacity>.4))sparks.add(id);
@@ -155,7 +160,10 @@ test('the same focus treatment restores all module families exactly and does not
   art.processing(kind,.55,ex.inputs[0][1],ex.output[1],colors[kind],options);assert.ok(art.focusCalculations().has(kind),kind);
   assert.ok(unit.children[0].material.opacity<.13,kind+' base fades');const focused=snapshot();
   for(let i=0;i<4;i++){art.focusCalculations();assert.deepEqual(snapshot(),focused,kind+' camera render must not compound alpha');}
-  if(d.type==='linear')unit.children.filter(o=>o.userData.detailText).forEach(face=>assert.equal(face.material.opacity,1));
+  if(d.type==='linear'||d.type==='mix')unit.children.filter(o=>o.userData.matrixColumn!=null).forEach(cell=>{
+   if(cell.userData.matrixColumn===unit.userData.activeColumn)assert.equal(cell.material.opacity,1);
+   else{assert.ok(cell.material.opacity>.2&&cell.material.opacity<.35);assert.equal(cell.material.depthWrite,false);assert.equal(cell.castShadow,false);}
+  });
   if(d.type==='activation')unit.children.filter(o=>o.geometry?.type==='TubeGeometry').forEach(curve=>assert.equal(curve.material.opacity,1,'the activation curve explains the operation'));
   art.processing(kind,.55,ex.inputs[0][1],ex.output[1],colors[kind],options);art.focusCalculations();assert.deepEqual(snapshot(),focused,kind+' repeated animation time preserves focus');
   art.clearProcessing();assert.equal(art.focusCalculations().size,0);assert.deepEqual(snapshot(),idle,kind+' stop restores materials and shadows');

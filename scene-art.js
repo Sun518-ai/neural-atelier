@@ -124,6 +124,11 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
    // input rather than a learned weight matrix. Its cells start unfilled.
    const w=mixing?Array.from({length:3},()=>Array(d.out/3).fill(0)):weights[n.kind||n.id],a=w.length,b=w[0].length,cw=1.5/b,ch=1.5/a;
    for(let i=0;i<a;i++)for(let j=0;j<b;j++){const x=(j-(b-1)/2)*cw,z=(i-(a-1)/2)*ch,c=w[i][j]<0?0xc89d70:w[i][j]===0?0xd7dfd4:color;const tile=box(g,cw*.84,.055+Math.abs(w[i][j])*.065,ch*.82,x,.49,z,c);const face=textTile(g,mixing?'·':String(w[i][j]),cw*.8,ch*.76,x,.53+Math.abs(w[i][j])*.065,z,{bg:w[i][j]<0?'#d7b68b':w[i][j]===0?'#dfe5d9':'#d2dfcc',color:'#456052',size:63});if(mixing){tile.userData.aggregationValue={row:i,column:j};face.mesh.userData.aggregationValue={row:i,column:j};}weightCells.push({tile,face:face.mesh,write:face.write,i,j,weight:w[i][j]});}
+   for(const {tile,face,j}of weightCells){
+    const active=()=>g.userData.activeColumn===j?g.userData.calculationHighlight:0;
+    tile.userData.matrixColumn=face.userData.matrixColumn=j;
+    backdrop(tile,.22,active);backdrop(face,.32,active);
+   }
    if(mixing){
     textTile(g,'V',.32,.23,0,.55,.97,{size:78,color:'#367e68'});
     textTile(g,'A',.28,.23,-1.12,1.22,-.87,{size:78,color:'#996f32'});
@@ -315,8 +320,8 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   backdrop(sock);
   if(register)units.set(n.id,{g,glow,outputs,inputs,connections,weightCells,activationChannels,columnCues,projectionRows,pairChannels,pairTones,pairOperation,normalizationStages,rmsRows,lnRows,tokenKind,tokenWidth,tokenRows,lookupRows,positionWaves,mixing,valueLabels,backdrops,focusAmount:0,links:n.links,color});return g;
  }
- // Keep mathematical tiles and moving values separate from the visual context.
- // The fade lasts for the whole operation, including every token/feature.
+ // Moving values stay clear. Matrix columns regain opacity with their own
+ // calculation highlight; the surrounding context fades for the whole operation.
  function focusCalculations(){
   const active=new Map();
   for(const [id,u]of units){
