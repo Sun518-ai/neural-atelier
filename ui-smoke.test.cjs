@@ -219,8 +219,8 @@ test('English covers every level, inspector, module card and generated report',a
  }
  assert.deepEqual([...app.c.I18n.missing],[]);
 });
-test('speed and persisted audio controls live together in the settings dialog',()=>{
- const app=boot();assert.ok(app.document.querySelector('#settings #playback-speed'));assert.equal(app.document.querySelector('.run-toolbar #playback-speed'),null);
+test('speed stays in the run toolbar while persisted audio controls remain in settings',()=>{
+ const app=boot();assert.ok(app.document.querySelector('.run-toolbar #playback-speed'));assert.equal(app.document.querySelector('#settings #playback-speed'),null);
  app.document.querySelector('#settings-open').onclick();assert.equal(app.document.querySelector('#settings').open,true);
  const volume=app.document.querySelector('#music-volume');volume.value='20';volume.dispatchEvent(new app.window.Event('input',{bubbles:true}));app.document.querySelector('#music-enabled').onclick();
  assert.deepEqual(JSON.parse(app.storage.get('neural-atelier-audio-v1')),{enabled:false,volume:.2});const reloaded=boot(app.storage);assert.equal(reloaded.document.querySelector('#music-volume').value,'20');assert.equal(reloaded.document.querySelector('#music-enabled').getAttribute('aria-checked'),'false');

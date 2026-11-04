@@ -65,7 +65,7 @@ After completing a prologue, reopening or reloading it starts a fresh challenge.
 
 The FFN reuses **Linear projection** for its content branch; the card explains this role and compares it with the different weights in **Gate projection**. The modern extension track introduces **SwiGLU** after the original encoder–decoder foundations. Separate lessons cover different weights, elementwise multiplication, gating, and down projection; RMSNorm is taught before the final puzzle uses normalized input. Existing level links, circuits, and completion records stay valid after reordering.
 
-**Settings** brings together language, animation speed, music, and volume. Language follows your browser preference unless you choose one manually. Runs start at **0.25×** by default so the computation is easy to follow; your chosen speed is remembered.
+The **Speed** slider sits beside **Run my network** and **Pause**, so you can adjust it while watching a run. Slide left to slow down or right to speed up. Runs start at **0.25×** by default; your chosen speed is remembered. **Settings** contains language, music, and volume. Language follows your browser preference unless you choose one manually.
 
 The animated title screen introduces the workbench. Music starts after you enter and pauses while the tab is in the background. You can mute it or replay the introduction from Settings.
 
