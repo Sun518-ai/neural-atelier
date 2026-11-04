@@ -391,13 +391,18 @@ test('camera drag and zoom remain live during a run without editing the circuit'
  assert.ok(checked);assert.equal(app.document.querySelectorAll('#test-results .pass').length,3);assert.equal(app.document.querySelectorAll('.packet').length,0);assert.equal(app.document.body.classList.contains('network-running'),false);
 });
 test('construct every 3D level, run its data through scene updates, open and close every module card',async()=>{
- const app=await boot(),M=app.c.NeuralPrologue;
+ let app,active;const collected=new Set();app=await boot({onFrame:()=>{if(app&&app.scenes.at(-1).children.some(o=>o.userData.fusion))collected.add(active);}});const M=app.c.NeuralPrologue;
  for(const id of Object.keys(M.levels)){
+  active=id;
   app.api.switchLevel(id);const s=M.solutions(id);if(M.levels[id].engine)s.settings.precision=16;app.api.setState(s);app.api.getWorld().rebuild();app.api.refresh();
   await app.api.run();assert.equal(app.document.querySelector('#loading').hidden,true);assert.equal(app.document.querySelectorAll('.node-value').length,0,'completed runs clear transient vector labels');
   assert.equal(app.document.querySelectorAll('[data-node]').length,M.levels[id].nodes.length);
   for(const n of s.nodes){app.api.getWorld().focus(n.id);assert.equal(app.document.querySelector('#module-card').open,true);assert.ok(app.document.querySelector('#card-name').textContent);app.document.querySelector('#card-close').onclick();assert.equal(app.document.querySelector('#module-card').open,false);assert.ok(app.document.querySelector('.arena > #scene'));}
+  if(M.fusions[id]){
+   const before=JSON.stringify(app.api.getState()),kind=M.fusions[id].kind;app.document.querySelector('#complete-close').onclick();app.api.getWorld().focusShelf(kind);assert.equal(app.document.querySelector('#module-card').open,true);assert.equal(app.document.querySelector('#card-name').textContent,M.definitions[kind].name);app.document.querySelector('#card-close').onclick();assert.equal(JSON.stringify(app.api.getState()),before);
+  }
  }
+ assert.deepEqual([...collected].sort(),Object.keys(M.fusions).sort(),'every collection milestone reaches the actual 3D animation');
 });
 
 test('original ReLU visibly stops negative features at zero while keeping positive features unchanged',async()=>{

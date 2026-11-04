@@ -54,8 +54,8 @@ test('learned shelves accumulate in teaching order without exposing future opera
 
 test('collected modules compute the same complete circuit, with the original input and output widths',()=>{
  for(const [id,reward]of Object.entries(M.fusions)){
-  const level=M.levels[id],definition=M.definitions[reward.kind],packed=M.initial(id);
-  assert.ok(level.buildable,id);assert.equal(definition.out,level.sinkDim);
+  const level=M.levels[id],definition=M.definitions[reward.kind],packed=M.initial(level.buildable?id:'pack-ffn');packed.nodes=[];packed.sink=null;
+  assert.equal(definition.out,level.sinkDim);
   assert.deepEqual(Array.from(definition.ins),Array.from(reward.inputs,()=>level.sourceDim||2));
   assert.ok(M.addNode(packed,reward.kind,0,0),id);
   reward.inputs.forEach((source,i)=>assert.equal(M.connect(packed,source,reward.kind,i),null));
@@ -69,6 +69,8 @@ test('collected modules compute the same complete circuit, with the original inp
  }
  const input=M.samplesFor('self-attention')[0].v;
  assert.ok(!close(M.operations['single-attention']([input]),M.operations['two-head-attention']([input])),'one full-width head cannot be mislabeled as two narrow heads');
+ const r=[2,-.5],z=[.25,1.5],f=M.operations['swiglu-ffn']([z]);
+ assert.ok(close(M.operations['swiglu-residual']([r,z]),r.map((x,i)=>x+f[i])),'R and Z remain independent inputs, with normalization outside this package');
 });
 
 test('packaging bridges require wiring and accept numerically equivalent expanded graphs',()=>{

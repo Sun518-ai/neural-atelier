@@ -36,7 +36,7 @@ test('all levels automatically display their report beside the run controls',asy
  for(const id of Object.keys(M.levels)){
   app.eval(`switchLevel('${id}');state=M.solutions(stageId);if(stage().engine)state.settings.precision=16;`);
   assert.ok(app.document.querySelector('.mission h2').textContent.length);
-  const reason=app.document.querySelector('#mission-reason'),example=app.document.querySelector('#mission-reason-example'),hasExample=['gating','residual','ffn'].includes(id)||!!M.levels[id].packages?.length;
+  const reason=app.document.querySelector('#mission-reason'),example=app.document.querySelector('#mission-reason-example'),hasExample=['gating','residual','ffn','wider-features'].includes(id)||!!M.levels[id].packages?.length;
   assert.equal(reason.hidden,false,id+' explains its purpose');
   for(const field of ['title','text','takeaway'])assert.ok(app.document.querySelector('#mission-reason-'+field).textContent.trim(),id+' '+field);
   assert.equal(example.hidden,!hasExample);assert.equal(example.hasChildNodes(),hasExample,'text-only lessons clear earlier worked examples');
@@ -143,6 +143,42 @@ test('a failed celebration cannot strand a valid completion or take away its rew
  const app=boot(new Map(),'#self-attention'),errors=[];app.c.console={...console,error:(...args)=>errors.push(args)};
  app.eval("state=M.solutions(stageId);world.fuse=async()=>{throw new Error('presentation unavailable')}");const saved=app.eval('JSON.stringify(state)');await app.eval('run()');
  assert.equal(errors.length,1);assert.equal(app.eval('busy'),false);assert.equal(app.document.querySelector('#level-complete').open,true);assert.ok(app.document.querySelector('[data-add-module="single-attention"]'));assert.equal(app.eval('JSON.stringify(state)'),saved);
+});
+test('all reusable-network milestones celebrate, while fixed prologue rewards are collected for later building lessons',async()=>{
+ const app=boot(),M=app.c.NeuralPrologue,doc=app.document,seen=[];let completedPrologue;
+ for(const id of ['original-ffn','pack-ffn','pack-scores','plain-ffn','swiglu','ffn','encoder-decoder','block'])assert.ok(M.fusions[id],id+' has a collection milestone');
+ app.c.collect=reward=>{seen.push(app.eval('stageId'));assert.equal(app.eval('levelPassed()'),true);assert.ok(!doc.querySelector('#level-complete').open);assert.ok(doc.querySelector('[data-add-module="'+reward.kind+'"]'));};app.eval('world.fuse=window.collect');
+ for(const [id,reward]of Object.entries(M.fusions)){
+  app.eval(`switchLevel('${id}');state=M.solutions(stageId)`);const saved=app.eval('JSON.stringify(state)'),count=seen.length;
+  await app.eval('run()');assert.equal(seen.length,count+1,id+' celebrates');assert.equal(app.eval('JSON.stringify(state)'),saved);assert.equal(doc.querySelector('#level-complete').open,true);
+  assert.equal(doc.querySelector('#complete-reward>strong').textContent,M.definitions[reward.kind].name);assert.equal(doc.querySelector('#module-shelf').hidden,false);
+  if(!M.levels[id].buildable){
+   completedPrologue=new Map(app.storage);
+   assert.equal(doc.querySelector('#module-shelf').dataset.mode,'collection');assert.equal(doc.querySelectorAll('[data-add-module]').length,1);assert.match(doc.querySelector('#complete-reward>small').textContent,/后续搭建关/);
+   app.eval(`chooseModule('${reward.kind}')`);assert.equal(app.eval('placeModule(0,0)'),false);assert.equal(app.eval('JSON.stringify(state)'),saved);
+  }
+  app.eval('state.sink=null');await app.eval('run()');assert.equal(seen.length,count+1,id+' does not celebrate a failure');
+ }
+ assert.deepEqual(seen,Object.keys(M.fusions));
+ const reload=boot(completedPrologue,'#original-ffn');assert.equal(reload.document.querySelector('#module-shelf').hidden,false);assert.ok(reload.eval('state.nodes.every(n=>n.links.every(x=>x===null))'),'collected rewards do not prewire a new prologue attempt');
+ for(const id of ['pack-ffn','pack-scores']){
+  const fresh=boot(new Map(),'#'+id),kind=M.fusions[id].kind;
+  assert.ok(fresh.document.querySelector('[data-add-module="'+kind+'"]'),'the packaging lesson can use the already taught block before passing');
+  fresh.eval(`chooseModule('${kind}')`);assert.equal(fresh.eval('placeModule(0,0)'),true);
+ }
+});
+test('wider-feature examples compare actual embedding tables for the same token in both languages',()=>{
+ const app=boot(new Map(),'#wider-features'),M=app.c.NeuralPrologue,saved=app.eval('JSON.stringify(state)');
+ for(const language of ['zh','en']){
+  app.c.I18n.setPreference(language);const example=app.document.querySelector('.embedding-width-example');assert.ok(example);
+  for(const width of [2,4]){
+   const row=example.querySelector('[data-width="'+width+'"]');assert.equal(row.querySelector('.embedding-lookup>b').textContent,M.math.vocab[2]);
+   assert.deepEqual([...row.querySelectorAll('.embedding-coordinates>span')].map(el=>Number(el.textContent)),Array.from(M.original.embed([2],width)));
+  }
+  if(language==='en')assert.doesNotMatch(app.document.querySelector('.mission').textContent,/[\u3400-\u9fff]/);
+  assert.equal(app.eval('JSON.stringify(state)'),saved,'explanations never change the player’s wiring');
+ }
+ assert.deepEqual([...app.c.I18n.missing],[]);
 });
 
 test('completion waits for every input, replay preserves the circuit and undo, and next loads the saved destination',async()=>{

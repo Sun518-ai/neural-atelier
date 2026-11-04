@@ -93,6 +93,7 @@ body{min-width:1080px}#game{max-width:1920px;padding:18px 24px}main{grid-templat
 #mission-reason[hidden],#mission-reason [hidden]{display:none}#mission-reason{margin-top:13px;padding-top:11px;border-top:1px solid #cbd6c5}
 #mission-reason h3{font-size:12px;font-weight:600;color:#365a4d}#mission-reason p{font-size:11px;line-height:1.65;margin-top:6px}
 #mission-reason-text{white-space:pre-line}
+.embedding-width-example{display:grid;gap:9px;padding:9px;border:1px solid #d0ddc8;border-radius:7px;background:#ffffff78}.embedding-width-example small{display:block;margin-bottom:5px;font-size:10px;color:#61796b}.embedding-lookup{display:flex;align-items:center;gap:8px}.embedding-lookup>b{min-width:22px;color:#386758;font-size:12px}.embedding-lookup>span{color:#819183}.embedding-coordinates{display:flex;gap:4px}.embedding-coordinates>span{display:grid;place-items:center;min-width:31px;height:29px;padding:0 4px;border:1px solid color-mix(in srgb,var(--feature-color) 35%,#fff);border-bottom:3px solid var(--feature-color);border-radius:4px;background:color-mix(in srgb,var(--feature-color) 9%,#fff);color:var(--feature-color);font:11px ui-monospace,monospace}
 #mission-reason-example{margin-top:9px}#mission-reason-example table{width:100%;border-collapse:collapse}
 #mission-reason-example caption{text-align:left;margin-bottom:7px;font-size:10px;line-height:1.6;color:#60736c}
 #mission-reason-example th{text-align:left;font-size:9px;font-weight:500;color:#718477;padding-bottom:5px}#mission-reason-example td{padding:5px 0;border-top:1px solid #d3decd;font:10px/1.5 ui-monospace,monospace;white-space:nowrap}
@@ -210,6 +211,7 @@ html[lang=en] .chapter strong{font-size:19px;letter-spacing:0}html[lang=en] .mis
 .module-stock:active{cursor:grabbing}
 .module-stock:focus-visible{outline:2px solid #bc9b64;outline-offset:-1px}
 .module-stock[data-add-disabled=true]{opacity:.5;cursor:help}.module-stock[aria-disabled=true]{cursor:default}
+#module-shelf[data-mode=collection] .module-stock{opacity:1;cursor:help}#module-shelf[data-mode=collection] .stock-count{display:none}
 .stock-description{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
 .stock-name{font-size:11px;font-weight:600;line-height:13px}
 .stock-description small{font:9px ui-monospace,monospace;color:#859387}

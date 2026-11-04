@@ -1,5 +1,5 @@
-import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=component-fusion-1';
-import {createProgress} from './level-progress.js?v=component-fusion-1';
+import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=fusion-width-1';
+import {createProgress} from './level-progress.js?v=fusion-width-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -64,7 +64,7 @@ function renderCompletion(){
  $('#complete-detail').textContent=stage().engine?I18n.t("数值与性能约束全部通过。"):I18n.t("全部输入验证通过。");
  $('#complete-next').textContent=stage().next?I18n.t("下一关 →"):I18n.t("选择关卡");
  const reward=M.fusions[stageId];$('#complete-reward').hidden=!reward;
- if(reward){$('#complete-reward>small').textContent=M.fusionCopy.collected;$('#complete-reward>strong').textContent=M.definitions[reward.kind].name;}
+ if(reward){$('#complete-reward>small').textContent=stage().buildable?M.fusionCopy.collected:M.fusionCopy.storedLater;$('#complete-reward>strong').textContent=M.definitions[reward.kind].name;}
 }
 function showCompletion(){if(busy||!levelPassed())return;renderCompletion();if(!$('#level-complete').open)$('#level-complete').showModal();}
 $('#complete-close').onclick=closeCompletion;
@@ -108,6 +108,9 @@ function stageChrome(){
  }
  if(reason?.kind==='swiglu'){
   $('#mission-reason-example').innerHTML=`<div class="swiglu-primer"><h4>${I18n.t("SwiGLU 是哪一段？")}</h4><p>${I18n.t("前面的进阶关已经把双路门控与降维组成 SwiGLU FFN；本关再接入归一化输入和残差。")}</p><div class="swiglu-source">${I18n.t("同一份输入 Z")}</div><div class="swiglu-branches"><div><b>${I18n.t("线性投影")}</b><span>${I18n.t("内容特征")}</span></div><div class="swiglu-gate"><b>${I18n.t("门投影 → SiLU")}</b><span>${I18n.t("调节系数")}</span></div></div><div class="swiglu-merge"><span aria-hidden="true">↓</span><b>${I18n.t("逐元素相乘")}</b><span aria-hidden="true">↓</span><b>${I18n.t("降维投影")}</b></div><p>${I18n.t("同样的内容值 2，乘系数 0.3 得到 0.6，乘 1.5 得到 3。系数随输入变化，决定这个特征贡献多少。")}</p></div>`;
+ }else if(reason?.kind==='embedding-width'){
+  const ex=M.embeddingWidthExample;
+  $('#mission-reason-example').innerHTML=`<div class="embedding-width-example">${[[ex.beforeLabel,ex.before],[ex.afterLabel,ex.after]].map(([label,values])=>`<div data-width="${values.length}"><small>${label}</small><div class="embedding-lookup"><b>${ex.token}</b><span aria-hidden="true">→</span><div class="embedding-coordinates">${values.map((value,i)=>`<span style="--feature-color:${['#397aa2','#8862aa','#b68036','#288778'][i]}">${fmt(value)}</span>`).join('')}</div></div></div>`).join('')}</div>`;
  }else if(reason?.kind==='residual'){
   const x=reason.input,f=M.linear(M.linear(x,M.weights.project),M.weights.down),y=x.map((v,i)=>v+f[i]);
   $('#mission-reason-example').innerHTML=`<div class="residual-example">${[['baseline',I18n.t("原有特征 X"),x],['update',I18n.t("修改量 F"),f],['result',I18n.t("更新结果 Y"),y]].map(([role,label,values])=>`<div data-role="${role}"><span>${label}</span><code>${vector(values)}</code></div>`).join('')}<small>Y = X + F</small></div>`;
@@ -186,24 +189,25 @@ function link(from,to,port){
 function chooseWire(to,index){if(busy)return;const from=to==='sink'?state.sink:state.nodes.find(n=>n.id===to)?.links[index];if(!from)return;pending=placing=actionNode=null;selectedWire={from,to,index};world?.clearConnectionError?.();world?.clearPreview?.();world?.clearPlacement?.();world?.labels();}
 function deleteWire(){if(busy||!selectedWire)return;const {to,index}=selectedWire;checkpoint();M.disconnect(state,to,index);changed();say(I18n.t("已删除连线。"));}
 function chooseInput(to,port){if(busy)return;if(pending)return link(pending,to,port);const old=to==='sink'?state.sink:state.nodes.find(n=>n.id===to).links[port];if(!old)return say(I18n.t("先点一个圆形输出口，再接到这里。"));chooseWire(to,port);}
-const shelfUnlocked=kind=>M.fusions[stageId]?.kind!==kind||progress.completed(stageId);
+const shelfUnlocked=kind=>M.fusions[stageId]?.kind!==kind||stage().nodes.includes(kind)||progress.completed(stageId);
+const shelfInventory=()=>stage().buildable?M.inventory(stage()):M.fusions[stageId]&&progress.completed(stageId)?{[M.fusions[stageId].kind]:1}:{};
 function renderShelf(){
- const shelf=$('#module-shelf');shelf.hidden=!stage().buildable;$('#remove-module').hidden=!stage().buildable||!state.nodes.some(n=>n.id===selected);$('#remove-module').disabled=busy;
- if(!stage().buildable)return;
- const cap=M.moduleLimit(stage()),available=M.inventory(stage());$('#module-count').textContent=state.nodes.length+' / '+cap;$('#module-count').setAttribute('aria-label',I18n.t('台面数量 / 上限'));
+ const shelf=$('#module-shelf'),available=shelfInventory(),collection=!stage().buildable;shelf.hidden=!stage().buildable&&!Object.keys(available).length;shelf.dataset.mode=collection?'collection':'inventory';$('#remove-module').hidden=!stage().buildable||!state.nodes.some(n=>n.id===selected);$('#remove-module').disabled=busy;
+ if(shelf.hidden)return;
+ const cap=M.moduleLimit(stage());$('#module-count').textContent=collection?M.fusionCopy.collected:state.nodes.length+' / '+cap;$('#module-count').setAttribute('aria-label',collection?M.fusionCopy.collected:I18n.t('台面数量 / 上限'));
  shelf.querySelector('summary').title=shelf.hasAttribute('open')?I18n.t("收起组件架"):I18n.t("展开组件架");
- $('#module-palette').innerHTML=(state.palette||Object.keys(available)).filter(shelfUnlocked).map(kind=>{
-  const d=M.definitions[kind],remaining=M.stock(state,kind),disabled=busy||!M.canAdd(state,kind),w=M.weights[kind];
+ $('#module-palette').innerHTML=(collection?Object.keys(available):state.palette||Object.keys(available)).filter(shelfUnlocked).map(kind=>{
+  const d=M.definitions[kind],remaining=collection?1:M.stock(state,kind),disabled=busy||collection||!M.canAdd(state,kind),w=M.weights[kind];
   const symbols={layernorm:'LN',position:'sin',concat:'∥',encoder:'Enc',decoder:'Dec',activation:'∿',add:'+',residual:'+',multiply:'×',norm:'RMS',rope:'↻',score:'QKᵀ',mask:'◩',softmax:'σ',mix:'AV',attention:'Attn',ffn:'FFN'};
   const visual=w?`<span class="stock-matrix" aria-hidden="true" style="grid-template-columns:repeat(${w[0].length},1fr)">`+w.flat().slice(0,8).map(v=>`<i class="${v<0?'negative':''}"></i>`).join('')+'</span>':`<span class="stock-symbol" aria-hidden="true">${symbols[d.type]||'◇'}</span>`;
   const color=M.extraColors?.[kind]?'#'+M.extraColors[kind].toString(16).padStart(6,'0'):({project:'#5eaa9c',down:'#90a79a',add:'#c3a26f',gate:'#a894bf'})[kind]||'#8aa59a';
-  const code=({'single-attention':'1H','two-head-attention':'2H','single-cross-attention':'Cross',relu:'ReLU',layernorm2:'LN','ln-attn':'LN','ln-ffn':'LN','ln-cross':'LN',concat:'A ∥ B',position:'PE',project:'W',gate:'Wg',down:'Wd',output:'Wo',q:'Q',k:'K',v:'V',ropeq:'Q ↻',ropek:'K ↻',residual1:'+ A',residual2:'+ F'})[kind]||({activation:'SiLU',add:'+',residual:'+',multiply:'×',norm:'RMS',score:'QKᵀ',mask:'◩',softmax:'σ',mix:'AV',attention:'Attn',ffn:'FFN'})[d.type]||kind;
-  const description=`${d.name} · ${d.ins.map(dim=>moduleShape(kind,dim)).join(' + ')} → ${moduleShape(kind,d.out)} · ${I18n.t("可用数量")} ${remaining} / ${available[kind]} · ${I18n.t("双击查看说明")}`;
+  const code=({'silu-ffn':'SiLU','swiglu-ffn':'SwiGLU','swiglu-residual':'+ FFN','original-transformer':'Enc/Dec','modern-block':'Block','single-attention':'1H','two-head-attention':'2H','single-cross-attention':'Cross',relu:'ReLU',layernorm2:'LN','ln-attn':'LN','ln-ffn':'LN','ln-cross':'LN',concat:'A ∥ B',position:'PE',project:'W',gate:'Wg',down:'Wd',output:'Wo',q:'Q',k:'K',v:'V',ropeq:'Q ↻',ropek:'K ↻',residual1:'+ A',residual2:'+ F'})[kind]||({activation:'SiLU',add:'+',residual:'+',multiply:'×',norm:'RMS',score:'QKᵀ',mask:'◩',softmax:'σ',mix:'AV',attention:'Attn',ffn:'FFN'})[d.type]||kind;
+  const description=`${d.name} · ${d.ins.map(dim=>moduleShape(kind,dim)).join(' + ')} → ${moduleShape(kind,d.out)} · ${collection?M.fusionCopy.useLater:I18n.t("可用数量")+' '+remaining+' / '+available[kind]} · ${I18n.t("双击查看说明")}`;
   return `<div class="module-stock ${lastFusionKind===kind?'recently-crafted':''}" role="button" tabindex="${busy?'-1':'0'}" aria-disabled="${busy}" data-add-disabled="${disabled}" aria-label="${description}" title="${description}" data-add-module="${kind}" style="--stock-color:${color}">${visual}<span class="stock-description"><b class="stock-name">${d.name}</b><small>${d.ins.map(dim=>moduleShape(kind,dim)).join(' + ')} → ${moduleShape(kind,d.out)}</small></span><b class="stock-code" aria-hidden="true">${code}</b><span class="stock-count" aria-hidden="true">${remaining}</span></div>`;
  }).join('');
  world?.syncShelf?.();
 }
-function chooseModule(kind){if(busy||!shelfUnlocked(kind)||!M.canAdd(state,kind)||world?.focused())return;pending=selectedWire=actionNode=null;placing=kind;world?.clearConnectionError?.();world?.clearPreview?.();world?.labels();say(I18n.t("拖到台面松开；也可以点空位放下。"));}
+function chooseModule(kind){if(busy||!stage().buildable||!shelfUnlocked(kind)||!M.canAdd(state,kind)||world?.focused())return;pending=selectedWire=actionNode=null;placing=kind;world?.clearConnectionError?.();world?.clearPreview?.();world?.labels();say(I18n.t("拖到台面松开；也可以点空位放下。"));}
 function placeModule(x,z){if(!placing||busy)return false;const next=clone(state);if(!M.addNode(next,placing,x,z)){say(I18n.t("这里放不下，换一处空位。"),'error');return false;}checkpoint();selected=next.nodes.at(-1).id;state=next;placing=null;world?.clearPlacement?.();changed();say(I18n.t("组件已放置。"));return true;}
 $('#module-palette').onclick=e=>{if(suppressPaletteClick||world?.focused())return;const b=e.target.closest('[data-add-module]');if(b&&b.dataset.addDisabled!=='true')chooseModule(b.dataset.addModule);};
 $('#module-palette').ondblclick=e=>{const b=e.target.closest('[data-add-module]');if(!b||busy||suppressPaletteClick)return;e.preventDefault();world?.focusShelf?.(b.dataset.addModule);};
@@ -254,7 +258,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=component-fusion-1');
+ const {createSceneArt}=await import('./scene-art.js?v=fusion-width-1');
  const art=createSceneArt(T,scene,colors,{anisotropy:renderer.capabilities.getMaxAnisotropy()});art.surroundings(samples(),stage());
  let fusionEffect=null;
  const assembly=new T.Group(),wires=new T.Group();scene.add(assembly,wires);const neuronGeo=new T.SphereGeometry(.115,16,12);let elements=[],curves=[],packets=[],drag=null,preview=null,yaw=.05,pitch=.8,zoom=stage().zoom,lastDepth=-1;
@@ -439,7 +443,7 @@ try{
   const width=Math.max(4.1,3.5*host.clientWidth/host.clientHeight);transition(new T.Vector3(n.x,.7,n.z),width/23,.32,.92);
  }
  function focusShelf(kind){
-  if(busy||!stage().buildable||!M.inventory(stage())[kind])return;
+  if(busy||!shelfUnlocked(kind)||!shelfInventory()[kind])return;
   if(focusId)leaveFocus();
   overview={target:cameraTarget.clone(),zoom,yaw,pitch};shelfFocus={kind,selected};focusId='shelf-card';
   selected=actionNode=pending=placing=selectedWire=null;drag=lastTap=null;clearPreview();clearPlacement();
@@ -550,7 +554,7 @@ try{
   const depth=effect.visual.center.clone().project(camera).z,destination=new T.Vector3(x/host.clientWidth*2-1,1-y/host.clientHeight*2,depth).unproject(camera);
   effect.visual.update(phase,destination,effect.reduced);
   $('#component-fusion').dataset.phase=phase<.38?'gather':phase<.91?'formed':'shelf';
-  $('#fusion-stage').textContent=phase<.38?M.fusionCopy.gathering:phase<.91?M.fusionCopy.formed:M.fusionCopy.stored;
+  $('#fusion-stage').textContent=phase<.38?M.fusionCopy.gathering:phase<.91?M.fusionCopy.formed:stage().buildable?M.fusionCopy.stored:M.fusionCopy.storedLater;
   $('#fusion-name').textContent=d.name;$('#fusion-shape').textContent=d.ins.map(dim=>moduleShape(kind,dim)).join(' + ')+' → '+moduleShape(kind,d.out);$('#fusion-skip').textContent=M.fusionCopy.skip;
   if(target){target.classList.toggle('fusion-awaiting',phase<.84);target.classList.toggle('fusion-arrival',phase>=.84);if(phase>=.84)target.style.boxShadow='0 0 0 '+(3+Math.sin((phase-.84)/.16*Math.PI)*5)+'px #76b7a345';}
  }

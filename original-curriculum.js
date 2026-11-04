@@ -22,6 +22,8 @@ const project=(v,w)=>flat(rows(v,w.length).map(r=>M.linear(r,w)));
 function ln(v){const mean=v.reduce((a,b)=>a+b,0)/v.length,variance=v.reduce((s,x)=>s+(x-mean)**2,0)/v.length;return v.map(x=>(x-mean)/Math.sqrt(variance+eps));}
 const lnSequence=v=>flat(rows(v,v.length/3).map(ln));
 const classicFFN=v=>M.linear(M.linear(v,v.length===4?wide.up:M.weights.project).map(relu),v.length===4?wide.down:M.weights.down);
+const siluFFN=v=>M.linear(M.linear(v,M.weights.project).map(M.silu),M.weights.down);
+const swigluFFN=v=>{const g=M.linear(v,M.weights.gate).map(M.silu),u=M.linear(v,M.weights.project);return M.linear(g.map((x,i)=>x*u[i]),M.weights.down);};
 const sequenceFFN=v=>flat(rows(v,v.length/3).map(classicFFN));
 const position=v=>{const width=v.length/3;return flat(rows(v,width).map((r,p)=>r.map((x,j)=>Math.sqrt(width)*x+(j%2?Math.cos:Math.sin)(p/10000**(2*Math.floor(j/2)/width)))));};
 const embed=(ids,width=2)=>flat(ids.map(i=>(width===4?wide.embedding:M.math.emb)[i]));
@@ -86,7 +88,7 @@ for(const id of ['self-heads','masked-heads','cross-heads','ln-attn','ln-ffn','l
 }
 for(const id of ['source-embed','target-embed']){M.definitions[id].out=12;M.definitions[id].hint=widePositionHint;}
 Object.assign(M.definitions,{
- 'wide-embedding':def(L('词向量表 · 四维','Embedding table · four features'),[3],12,'embedding',L('同样是按 ID 查表，这次每个词取出四个特征。词的数量不变。','Look up each ID as before, now retrieving four features per token. The token count stays the same.')),
+ 'wide-embedding':def(L('词向量表 · 四维','Embedding table · four features'),[3],12,'embedding',L('按 token ID 查表，为每个 token 取出四个数，组成一个四维向量。四个数共同表示同一个 token；每一维是数值坐标，不一定有单独可命名的含义。','Look up each token ID to retrieve four numbers forming one four-dimensional vector. Together they represent the same token; a coordinate does not necessarily have a separately named meaning.')),
  'wide-position':def(labels.position,[12],12,'position',widePositionHint),
  'encoder-add':def(L('Attention 残差','Attention residual'),[12,12],12,'residual',L('把注意力更新加到当前子层输入，随后交给 LayerNorm。','Add the attention update to the current sublayer input, then send the sum to LayerNorm.')),
  'ffn-add':def(L('FFN 残差','FFN residual'),[12,12],12,'residual',L('将 FFN 更新加到进入 FFN 前的特征，随后交给 LayerNorm。','Add the FFN update to the features entering the FFN, then send the sum to LayerNorm.')),
@@ -98,6 +100,13 @@ for(const [kind,name]of [['q',L('Q · 查询投影','Q · query projection')],['
  M.definitions['original-'+kind]=def(name,[12],12,'linear',L('每个位置的四个特征乘同一套 4 × 4 权重，产生四个新特征。不会在这里混合不同 token。','Each position’s four features use the same 4 × 4 weights to produce four new features. Tokens are not mixed by this projection.'));
  M.weights['original-'+kind]=wide[kind];
 }
+Object.assign(M.definitions,{
+ 'silu-ffn':def(L('单支路 FFN · SiLU','Single-branch FFN · SiLU'),[2],2,'ffn',L('把线性投影、SiLU 和降维收在一起。每个 token 的两个数展开为四个，经过 SiLU 后组合回两个；不含门支路、归一化或残差。','Packages the linear projection, SiLU and down projection. Each token expands from two values to four, passes through SiLU, then returns to two. No gate branch, normalization or residual is included.'),{glyphs:['W1','SiLU','W2']}),
+ 'swiglu-ffn':def(L('SwiGLU FFN','SwiGLU FFN'),[2],2,'ffn',L('同一输入分别产生内容和门值，门值经过 SiLU 后与内容逐元素相乘，再降维。这里只输出修改量 F，归一化与残差仍在外面。','Project the same input into content and gate values, apply SiLU to the gate, multiply them elementwise and project down. This outputs only the update F; normalization and the residual stay outside.'),{glyphs:['W / Wg','SiLU ×','Wd']}),
+ 'swiglu-residual':def(L('SwiGLU + 残差','SwiGLU + residual'),[2,2],2,'ffn',L('保留 R、Z 两个入口：用 Z 计算 SwiGLU 的修改量，再加到 R。它与刚搭好的 FFN 关完全相同；Z 的归一化仍由组件外提供。','Keeps separate R and Z inputs: compute the SwiGLU update from Z, then add it to R. This matches the completed FFN lesson; normalization that produces Z is still supplied externally.'),{glyphs:['Z → FFN','+ R']}),
+ 'original-transformer':def(L('原版编码器—解码器','Original encoder–decoder'),[3,3],18,'decoder',L('保留目标与源 token ID 两个入口，包括两边的词向量与位置、编码器、解码器及词表投影。输出每个目标位置的候选词分数；选词与生成循环仍在外面。','Keeps separate target and source token-ID inputs, including their embeddings and positions, encoder, decoder and vocabulary projection. Outputs candidate-token scores at each target position; token selection and the generation loop stay outside.'),{glyphs:['Embed','Enc / Dec','Scores']}),
+ 'modern-block':def(L('现代解码器层','Modern decoder layer'),[6],6,'decoder',L('包含 RMSNorm、带 RoPE 的因果 Attention、SwiGLU 和两次残差。每段先归一化，再把更新加回自己的输入；三个 token 各保留两个特征。','Contains RMSNorm, causal attention with RoPE, SwiGLU and both residuals. Each sublayer normalizes first, then adds its update to its own input. All three tokens retain two features each.'),{glyphs:['Norm / Attn','+','Norm / FFN','+']})
+});
 M.weights['original-head']=wide.vocabulary;
 Object.assign(M.operations,{
  relu:([x])=>x.map(relu),layernorm2:([x])=>ln(x),'relu-ffn':([x])=>classicFFN(x),position:([x])=>position(x),
@@ -112,8 +121,13 @@ Object.assign(M.operations,{
  'original-score':([q,k])=>scoreWide(q,k),'original-aggregate':([a,v])=>mixWide(a,v),'original-head':([v])=>vocabulary(v),
  'original-q':([x])=>project(x,wide.q),'original-k':([x])=>project(x,wide.k),'original-v':([x])=>project(x,wide.v),'original-output':([x])=>project(x,wide.output)
 });
+Object.assign(M.operations,{
+ 'silu-ffn':([x])=>siluFFN(x),'swiglu-ffn':([x])=>swigluFFN(x),'swiglu-residual':([r,z])=>plus(r,swigluFFN(z)),
+ 'original-transformer':([target,source])=>vocabulary(decoder(position(embed(target,4)),encoder(position(embed(source,4))))),
+ 'modern-block':([x])=>M.math.block(x)
+});
 const operatorIds=['relu','layernorm2','relu-ffn','position','original-weights','head-a','head-b','concat','self-heads','masked-heads','cross-heads','ln-attn','ln-ffn','ln-cross','original-ffn-block','cross-add','original-encoder','original-decoder','source-embed','target-embed','wide-embedding','wide-position','encoder-add','ffn-add','original-score','original-aggregate','original-head','original-q','original-k','original-v','original-output'];
-operatorIds.push('single-attention','two-head-attention','single-cross-attention');
+operatorIds.push('single-attention','two-head-attention','single-cross-attention','silu-ffn','swiglu-ffn','swiglu-residual','original-transformer','modern-block');
 for(const id of operatorIds){
  const d=M.definitions[id];M.extraColors[id]=({linear:0x789abf,score:0x879bb3,mix:0x64a68f,vocabulary:0xb79b6b,embedding:0x7d9ea5,activation:0xc6a574,layernorm:0xb8a36a,ffn:0x759c88,position:0xb49b6a,attention:0x789abf,concat:0x9b86b4,residual:0xc3a26f,encoder:0x6a9c93,decoder:0x9387ad})[d.type];
 }
@@ -211,11 +225,20 @@ lesson('encoder-decoder',L('把原版两半接起来','Connect both halves of th
  L('输出是每个目标位置的六个候选分数。真实生成会做 Softmax 和选词，并追加到目标前缀；本例只验证结构与数值，不宣称这些手工权重能翻译。','The output contains six candidate scores per target position. Generation applies Softmax and token selection, then appends to the prefix. This checks structure and arithmetic; these hand-written weights are not a translation model.'),
  {'source-embed':['Z'],'target-embed':['R'],'original-encoder':['source-embed'],'original-decoder':['target-embed','original-encoder'],lmhead:['original-decoder'],sink:'lmhead'},ids=>vocabulary(decoder(position(embed(ids,4)),memory())),{...dual,positioned:false,sourceDim:3,sinkDim:18,sourcePorts:{R:'D ID',Z:'S ID'},sourceNames:{R:L('目标前缀 ID','Target prefix IDs'),Z:L('源序列 ID','Source sequence IDs')},sourceTitle:L('目标前缀 ID','Target prefix IDs'),shape:'2 × 3 ID → 3 × 6',buildable:true,maxModules:7});
 lesson('wider-features',L('词不变，特征变宽','Same tokens, wider features'),['wide-embedding','wide-position'],
- L('给三个 token 各准备四个特征','Prepare four features for each of three tokens'),
- L('仍然是查词向量、加位置。这次每个 token 使用四个特征；三个 token 不会变成四个。为后面的完整层准备输入。','Look up embeddings and add positions as before, now with four features per token. Three tokens do not become four. Prepare inputs for a complete layer.'),
- L('更多特征可以保留更丰富的关系。两维归一化几乎只剩正负方向，完整层改用四维后，能更清楚地观察注意力和 FFN 对这些关系的改变。','More features retain richer relationships. Two-feature normalization leaves almost only a sign direction. Using four features in complete layers makes changes from Attention and FFNs easier to observe.'),
- L('原论文的 base 模型使用 512 维、8 个头。本例完整层用 4 维、2 个头，每头 2 维，计算公式相同；位置编码也从一对频率扩为两对。','The paper’s base model used 512 features and eight heads. Our complete layer uses four features and two heads with two features each, using the same formulas. Position encoding expands from one frequency pair to two.'),
+ L('为每个 token 取出四维词向量，再加入位置','Look up four features per token, then add positions'),
+ L('前面每个 token 已经用两个数表示。本关重新从 token ID 查四维词表，改用四个数共同表示一个 token，再加入位置信息。三个 token 仍是三个，输出是 3 × 4。','Earlier, each token was already represented by two numbers. Here, start from token IDs and look up a four-feature embedding table, then add positions. Four numbers jointly represent each token. Three tokens remain three; the output is 3 × 4.'),
+ L('维度就是一个向量里数值的个数。每一维是一个特征坐标，模型会学习怎样组合这些坐标来表达词和上下文的关系；不必把某一维固定理解成“动物”或“情感”。真实词向量由训练学习，本游戏用固定数值演示。','A vector’s dimension is its number of coordinates. The model learns to combine these feature coordinates to represent tokens and their context; a coordinate need not mean a fixed property such as “animal” or “emotion”. Real embeddings are learned during training; the game uses fixed teaching values.'),
+ L('前面用两维是为了方便看计算。接下来一层里有多次 LayerNorm；两个数归一化后常接近 [1, −1] 或 [−1, 1]，许多差异看不出来。换成四维能保留更多相对差异，便于观察 Attention 和 FFN 的作用。','Two features made the earlier arithmetic easy to follow. The next layers apply LayerNorm repeatedly; normalizing two numbers often leaves approximately [1, −1] or [−1, 1], hiding many differences. Four coordinates retain more relative variation, making changes from Attention and FFNs easier to see.'),
  {'wide-embedding':['R'],'wide-position':['wide-embedding'],sink:'wide-position'},ids=>position(embed(ids,4)),{sourceDim:3,sinkDim:12,sourceTitle:'Token ID',shape:'3 ID → 3 × 4',wide:true});
+Object.assign(added['wider-features'].rationale,{
+ kind:'embedding-width',title:L('四个数，共同表示一个 token','Four coordinates, one token'),
+ scope:L('这里是教学上换用更宽的词表，不是把上关的两维输出临时扩成四维。真实 Transformer 通常从第一张词向量表起就采用选定的模型宽度；原版 base 为 512 维。FFN 内部先展开再收回，是另一种宽度变化。','This switches to a wider embedding table for teaching; it does not expand the previous lesson’s two-feature output. A real Transformer typically uses its chosen model width from the initial embedding table; the original base model used 512 features. Expansion and contraction inside an FFN are a separate width change.')
+});
+M.embeddingWidthExample={
+ token:M.math.vocab[2],beforeLabel:L('之前 · 两维词表','Earlier · two-feature table'),afterLabel:L('本关 · 四维词表','Here · four-feature table'),
+ before:[...M.math.emb[2]],after:[...wide.embedding[2]]
+};
+I18n.prepare(M.embeddingWidthExample);
 // Keep the early arithmetic tiny; complete Post-LN stacks need enough features
 // to retain observable differences instead of collapsing to two signed values.
 const wideAliases={residual1:'encoder-add',residual2:'ffn-add',q:'original-q',k:'original-k',v:'original-v',score:'original-score',aggregate:'original-aggregate',output:'original-output',lmhead:'original-head'};
@@ -264,22 +287,32 @@ for(const id of [...originalNetwork,...Object.values(bridges)]){const l=M.levels
 // The engine track uses its own costed tasks, not raw arithmetic operators.
 const sequenceKind=kind=>Math.max(...M.definitions[kind].ins,M.definitions[kind].out)>4;
 // A reward has exactly the same inputs, weights and output as its lesson.
-// Its own shelf entry is revealed by the UI only after that lesson passes.
+// New rewards appear after a win; packaging bridges may use an already taught block.
 M.fusions={
+ 'original-ffn':{kind:'relu-ffn',inputs:['R']},
+ 'pack-ffn':{kind:'relu-ffn',inputs:['R']},
  softmax:{kind:'original-weights',inputs:['R']},
+ 'pack-scores':{kind:'original-weights',inputs:['R']},
  'self-attention':{kind:'single-attention',inputs:['R']},
  multihead:{kind:'two-head-attention',inputs:['R']},
  'wider-features':{kind:'source-embed',inputs:['R']},
  'encoder-layer':{kind:'original-encoder',inputs:['R']},
  'cross-attention':{kind:'single-cross-attention',inputs:['R','Z']},
  'decoder-layer':{kind:'original-decoder',inputs:['R','Z']},
- attention:{kind:'attention',inputs:['R']}
+ 'encoder-decoder':{kind:'original-transformer',inputs:['R','Z']},
+ 'plain-ffn':{kind:'silu-ffn',inputs:['R']},
+ swiglu:{kind:'swiglu-ffn',inputs:['R']},
+ ffn:{kind:'swiglu-residual',inputs:['R','Z']},
+ attention:{kind:'attention',inputs:['R']},
+ block:{kind:'modern-block',inputs:['R']}
 };
 const fusionOrigins=Object.fromEntries(Object.entries(M.fusions).map(([id,{kind}])=>[kind,id]));
 M.fusionCopy={
  gathering:L('把刚搭好的网络收成一个组件','Package the network you just built'),
  formed:L('内部计算相同，外面只需一个组件','The same computation, now inside one module'),
  stored:L('已放入左侧组件架，可拖出使用','Added to the left shelf — drag it onto the workbench'),
+ storedLater:L('已收录到左侧，后续搭建关可使用','Collected on the left — available in later building lessons'),
+ useLater:L('后续搭建关可用','Use in later building lessons'),
  collected:L('已收录组件','Module collected'),
  skip:L('跳过动画','Skip animation')
 };
@@ -309,6 +342,11 @@ const ffnStages=[moduleNames(['project']),['ReLU'],moduleNames(['down'])];
 const matchingStages=[['Q','K'],['QKᵀ / √d_k'],['Softmax']];
 const headStages=[['Q','K','V'],['softmax(QKᵀ / √d_k) V']];
 M.packages={
+ 'silu-ffn':pack([moduleNames(['project']),['SiLU'],moduleNames(['down'])],M.definitions['silu-ffn'].hint),
+ 'swiglu-ffn':pack([['XW', 'SiLU(XWg)'],['⊙'],['Wd']],M.definitions['swiglu-ffn'].hint),
+ 'swiglu-residual':pack([['R', 'Z → SwiGLU'],['Y = R + F']],M.definitions['swiglu-residual'].hint),
+ 'original-transformer':pack([[L('源 ID → 词向量与位置 → 编码器','Source IDs → embeddings and positions → encoder')],[L('目标 ID → 词向量与位置','Target IDs → embeddings and positions'),L('编码器输出','Encoder output')],moduleNames(['original-decoder']),moduleNames(['original-head'])],M.definitions['original-transformer'].hint),
+ 'modern-block':pack([['RMSNorm → Attention'],['R1 = X + Attention'],['RMSNorm → SwiGLU'],['Y = R1 + FFN']],M.definitions['modern-block'].hint),
  'single-attention':pack([['Q','K','V'],['QKᵀ / √2'],['Softmax'],['A × V'],['Wo']],M.definitions['single-attention'].hint),
  'two-head-attention':pack([moduleNames(['head-a','head-b']),moduleNames(['concat']),['Wo']],M.definitions['two-head-attention'].hint),
  'single-cross-attention':pack([['Q ← D','K, V ← E'],['QKᵀ / √4'],['Softmax'],['A × V'],['Wo']],M.definitions['single-cross-attention'].hint),
@@ -368,6 +406,13 @@ for(const id of ['single-attention','single-cross-attention','two-head-attention
 cards.position.formula='X[p] = √2 · Embedding[p] + [sin(p), cos(p)]';
 for(const id of ['wide-position','source-embed','target-embed'])cards[id].formula='X[p] = 2 · Embedding[p] + [sin(p), cos(p), sin(p/100), cos(p/100)]';
 cards['wide-embedding'].formula='X[p] = EmbeddingTable[token_id[p]]';
+cards['wide-embedding'].purpose=L('例如本游戏中，“猫”的 ID 为 2，查表取出 [1, 1, 0.4, 0.2]。这是同一个 token 的四个坐标，不是四个 token，也不是四个预先命名的属性。位置编码会在下一块组件中加到这四个数上。','For example, Cat has ID 2 in this game and retrieves [1, 1, 0.4, 0.2]. These are four coordinates of one token, not four tokens or four predefined named properties. The next component adds position information to these same four values.');
+for(const id of ['silu-ffn','swiglu-ffn','swiglu-residual','modern-block']){cards[id].family=L('现代扩展','Modern extensions');cards[id].purpose=M.packages[id].note;}
+cards['silu-ffn'].formula='F = SiLU(XW1)W2';
+cards['swiglu-ffn'].formula='F = (SiLU(XWg) ⊙ XW)Wd';
+cards['swiglu-residual'].formula='Y = R + SwiGLU(Z)';
+cards['modern-block'].formula='R1 = X + Attention(RMSNorm(X)); Y = R1 + SwiGLU(RMSNorm(R1))';
+cards['original-transformer'].formula='L = Vocabulary(Decoder(TargetEmbedding, Encoder(SourceEmbedding)))';cards['original-transformer'].purpose=M.packages['original-transformer'].note;
 cards['encoder-add'].formula='R = X + MHA(X)';cards['ffn-add'].formula='R = A + FFN(A)';
 cards['original-score'].formula='S = QKᵀ / √4';cards['original-aggregate'].formula='O = AV';cards['original-head'].formula='L = DW_vocab + b';
 cards['original-q'].formula='Q = DWq';cards['original-k'].formula='K = EWk';cards['original-v'].formula='V = EWv';cards['original-output'].formula='Y = OWo';
@@ -488,13 +533,15 @@ M.extraCard=(id,levelId)=>{
  return c;
 };
 M.extraExample=(id,levelId)=>{
+ const reward=M.fusions[levelId];
+ if(reward?.kind===id&&!M.levels[levelId].nodes.includes(id)){
+  const s=M.solutions(levelId),sampleIndex=0,input=M.samplesFor(levelId)[sampleIndex].v,sources=M.sourceValues(s,input),values=reward.inputs.map(key=>sources[key]);
+  const labels=levelId==='ffn'?{R:'R',Z:'Z'}:levelId==='encoder-decoder'?{R:'D ID',Z:'S ID'}:{R:reward.inputs.length===1?'X':'D',Z:'E'};
+  return {sampleIndex,exampleSource:[labels.R,input],inputs:values.map((value,i)=>[labels[reward.inputs[i]],value]),output:[({'silu-ffn':'F','swiglu-ffn':'F','original-transformer':'L','source-embed':'Xp'})[id]||'Y',M.operations[id](values)]};
+ }
  if(!M.levels[levelId]?.original)return previousExample(id,levelId);
  const s=M.solutions(levelId),sampleIndex=levelId==='relu'?2:0,input=M.samplesFor(levelId)[sampleIndex].v,ev=M.evaluate(s,input),n=s.nodes.find(n=>n.id===id);
- if(!n){
-  const reward=M.fusions[levelId];if(reward?.kind!==id)return null;
-  const sources=M.sourceValues(s,input),values=reward.inputs.map(key=>sources[key]);
-  return {sampleIndex,exampleSource:['X',input],inputs:values.map((value,i)=>[reward.inputs.length===1?'X':i===0?'D':'E',value]),output:['Y',M.operations[id](values)]};
- }
+ if(!n)return null;
  const names={R:M.levels[levelId].dualSource?'D':'X',Z:levelId==='encoder-decoder'?'Source ID':'E',project:'P',relu:'A',down:'F',add:'R',layernorm2:'Y',q:'Q',k:'K',v:'V',score:'S',softmax:'A',aggregate:'O',output:'Y','original-q':'Q','original-k':'K','original-v':'V','original-score':'S','original-aggregate':'O','original-output':'Y','original-head':'L','wide-embedding':'X','wide-position':'Xp',position:'Xp','head-a':'H_A','head-b':'H_B',concat:'C','original-weights':'A','relu-ffn':'F','original-ffn-block':'F','self-heads':'O','masked-heads':'O','cross-heads':'O','cross-add':'Rc','source-embed':'Xs','target-embed':'Xt','original-encoder':'E','original-decoder':'D','encoder-add':'R1','ffn-add':'R2','ln-attn':'X1','ln-cross':'X2','ln-ffn':'Y'};
  names['self-heads']='Oa';names['masked-heads']='Om';names['cross-heads']='Oc';
  names.add=levelId==='add-norm'?'R':'Y';
