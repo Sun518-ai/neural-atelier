@@ -15,6 +15,76 @@ async function boot({reduced=true,frameMs=1000,onFrame=()=>{},languages=['zh-CN'
  await vm.runInContext('(async()=>{'+src+'})()',c);
  assert.ok(c.testAPI.getWorld(),'3D boot failed');return {c,document,window,api:c.testAPI,scenes,time:()=>now,view:()=>view,camera:()=>renderedCamera};
 }
+test('QKV projections animate every token and weight column at the gate-projection pace, then gather the actual results',async()=>{
+ let app;const starts=new Map(),seen=new Set(),paths=new Map();
+ app=await boot({reduced:false,frameMs:100,onFrame:({now,document})=>{
+  if(!app)return;const M=app.c.NeuralPrologue,sample=M.samplesFor('qkv').find(s=>s.word===document.querySelector('#sample-name').textContent);if(!sample)return;
+  for(const el of document.querySelectorAll('.sequence-projection-calculation:not([hidden])')){const key=[el.dataset.node,sample.word,el.dataset.projectionRow,el.dataset.column].join('|');if(!starts.has(key))starts.set(key,now);assert.equal(el.querySelector('.projection-equation>b').textContent,sample.word.split(' / ')[Number(el.dataset.projectionRow)]+' · ');}
+  app.scenes.at(-1).traverseVisible(o=>{
+   const data=o.userData.sequenceProjection;if(data){
+    assert.deepEqual([...data.input],[...sample.v]);const active=o.userData.activeColumn;
+    for(const cue of o.children.filter(c=>c.userData.projectionColumn!=null&&c.visible))assert.equal(cue.userData.projectionColumn,active);
+    seen.add(o.userData.node);for(const spark of o.children.filter(c=>c.userData.contribution&&c.visible)){
+     const d=spark.userData;assert.equal(d.inputValue,sample.v[data.row*2+d.input]);assert.equal(d.value,d.inputValue*d.weight);assert.equal(d.output,active);if(d.value<0)seen.add('negative contribution');
+    }
+   }
+   if(o.userData.sequenceProjectionInput&&o.material.opacity>.01){assert.equal(o.userData.mappedInput,o.userData.feature%2);seen.add('features routed');}
+   if(['q','k','v'].includes(o.userData.processingOutput)){
+    const expected=M.math.mat(sample.v,M.weights[o.userData.processingOutput]);
+    for(const bar of o.children.filter(c=>c.userData.feature!=null&&c.visible&&c.material.opacity>.01)){
+     assert.equal(bar.userData.value,expected[bar.userData.feature]);assert.equal(bar.userData.projectionToken,Math.floor(bar.userData.feature/2));
+     const key=[o.userData.processingOutput,sample.word,bar.userData.feature].join('|');if(!paths.has(key))paths.set(key,[]);paths.get(key).push(bar.getWorldPosition(new app.c.T.Vector3()));
+     if(bar.userData.transfer===1&&o.userData.gather===0)seen.add('stored before gathering');
+    }
+    if(o.userData.gather>0){assert.equal(o.children.filter(c=>c.userData.feature!=null&&c.visible).length,6);seen.add('complete gather');}
+   }
+  });
+ }});
+ const M=app.c.NeuralPrologue;app.api.switchLevel('qkv');app.api.setState(M.solutions('qkv'));app.api.getWorld().rebuild();await app.api.run();
+ assert.equal(starts.size,54);for(const node of ['q','k','v'])for(const sample of M.samplesFor('qkv'))for(let row=0;row<3;row++){
+  const first=starts.get([node,sample.word,row,0].join('|')),second=starts.get([node,sample.word,row,1].join('|'));assert.ok(Math.abs(second-first-1040)<=200,'all output columns keep the default gate-projection pace');
+ }
+ for(const key of ['q','k','v','negative contribution','features routed','stored before gathering','complete gather'])assert.ok(seen.has(key),key);
+ for(const points of paths.values())assert.ok(points.every((p,i)=>!i||p.distanceTo(points[i-1])<.8),'results move continuously from the neuron to their token bank and outgoing tray');
+ assert.equal(app.document.querySelectorAll('#test-results .pass').length,3);assert.equal(app.document.querySelectorAll('.projection-calculation,.projection-result,.packet').length,0);
+ app.scenes.at(-1).traverse(o=>{assert.equal(o.userData.sequenceProjection,undefined);if(o.userData.projectionBank!=null)assert.equal(o.visible,false);});
+});
+test('sequence projection uses actual upstream features for extra copies and four-feature source/target streams',async()=>{
+ let app,id='self-attention';const seen=new Set();
+ app=await boot({reduced:false,frameMs:160,onFrame:({document})=>{
+  if(!app)return;const M=app.c.NeuralPrologue,sample=M.samplesFor(id).find(s=>s.word===document.querySelector('#sample-name').textContent);if(!sample)return;
+  const state=app.api.getState(),ev=M.evaluate(state,sample.v);
+  app.scenes.at(-1).traverseVisible(o=>{const p=o.userData.sequenceProjection;if(!p)return;const n=state.nodes.find(n=>n.id===o.userData.node);assert.deepEqual([...p.input],[...ev.values[n.links[0]]]);seen.add(n.id);
+   if(n.id==='q-2'){assert.notDeepEqual([...p.input],[...sample.v]);seen.add('upstream projection');}
+   if(id==='cross-attention'&&['original-k','original-v'].includes(n.kind)){assert.equal(p.input.length,12);assert.equal(p.word,M.math.vocab[M.levels[id].secondaryTokenIds[p.row]]);seen.add('source token');}
+  });
+ }});
+ const M=app.c.NeuralPrologue;app.api.switchLevel(id);const state=M.initial(id);assert.ok(M.addNode(state,'q',-2,0));assert.ok(M.addNode(state,'q',2,0));M.connect(state,'R','q',0);M.connect(state,'q','q-2',0);M.connect(state,'q-2','sink',0);app.api.setState(state);app.api.getWorld().rebuild();await app.api.run();
+ id='cross-attention';app.api.switchLevel(id);app.api.setState(M.solutions(id));app.api.getWorld().rebuild();await app.api.run();assert.equal(app.document.querySelectorAll('#test-results .pass').length,3);
+ for(const key of ['q','q-2','upstream projection','original-q','original-k','original-v','source token'])assert.ok(seen.has(key),key);
+});
+test('paused QKV calculation keeps its token and arithmetic while zooming, switching language, changing speed and stopping',async()=>{
+ let app,phase=0,frames=0,stop,before;
+ app=await boot({reduced:false,frameMs:100,onFrame:({document})=>{
+  if(!app)return;const formula=document.querySelector('.sequence-projection-calculation[data-node="q"]:not([hidden])');
+  if(!phase&&formula?.dataset.projectionRow==='1'&&formula.dataset.column==='1'){app.api.togglePause();before=formula.textContent;phase=1;}
+  else if(phase===1&&++frames===3){
+   assert.equal(formula.textContent,before);const scale=Number(formula.style.getPropertyValue('--calculation-scale')),wheel=new app.window.Event('wheel',{bubbles:true,cancelable:true});wheel.deltaY=2000;document.querySelector('#scene').dispatchEvent(wheel);
+   assert.ok(Number(formula.style.getPropertyValue('--calculation-scale'))<scale);assert.equal(formula.dataset.detail,'abstract');app.c.I18n.setPreference('en');assert.match(formula.textContent,/love ·/);
+   const speed=document.querySelector('#playback-speed');speed.value='1';speed.dispatchEvent(new app.window.Event('input'));assert.equal(formula.dataset.projectionRow,'1');app.api.togglePause();phase=2;
+  }else if(phase===2&&formula?.dataset.projectionRow==='2'){stop=app.api.run();phase=3;}
+ }});
+ app.document.querySelector('#welcome').close();app.api.switchLevel('qkv');app.api.setState(app.c.NeuralPrologue.solutions('qkv'));app.api.getWorld().rebuild();await app.api.run();await stop;
+ assert.equal(phase,3);assert.equal(app.document.querySelectorAll('.packet,.projection-calculation,.projection-result').length,0);assert.ok(!app.document.querySelector('#level-complete').open);
+ app.scenes.at(-1).traverse(o=>{assert.equal(o.userData.sequenceProjection,undefined);if(o.userData.projectionBank!=null)assert.equal(o.visible,false);});assert.deepEqual([...app.c.I18n.missing],[]);
+});
+test('missing QKV results appear at the failed branch only after animation and can be dismissed without editing',async()=>{
+ let app;app=await boot({reduced:false,frameMs:250,onFrame:({document})=>{if(app){assert.equal(app.api.getFault(),null);assert.equal(document.querySelector('.local-fault'),null);}}});
+ app.api.switchLevel('qkv');const state=app.c.NeuralPrologue.solutions('qkv');state.nodes.find(n=>n.id==='q').links=[null];state.nodes.find(n=>n.id==='k').links=[null];
+ app.api.setState(state);app.api.getWorld().rebuild();await app.api.run();assert.equal(app.api.getFault().id,'q');assert.ok(app.document.querySelector('.local-fault[data-owner="q"]'));
+ app.c.I18n.setPreference('en');assert.match(app.document.querySelector('.local-fault strong').textContent,/query projection/i);
+ const before=JSON.stringify(app.api.getState());app.document.querySelector('.fault-close').dispatchEvent(new app.window.Event('click',{bubbles:true}));assert.equal(app.document.querySelector('.local-fault'),null);assert.equal(app.api.getFault(),null);assert.equal(JSON.stringify(app.api.getState()),before);
+});
 test('moving trays preserve feature columns and sequence rows through projection',async()=>{
  let app;const checked=new Set();
  app=await boot({reduced:false,frameMs:100,onFrame:()=>{

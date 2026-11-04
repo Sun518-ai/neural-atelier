@@ -14,6 +14,26 @@ function boot(storage=new Map(),hash='',languages=['zh-CN']){
  vm.runInContext(code+`\nworld={relocalize(){},labels(){},rebuild(){},beforeStage(){},setStage(){},clearPackets(){},focused(){return null},async animate(){}};refresh();`,c);
  return {c,document,window,storage,location,navigation,hashchange,eval:code=>vm.runInContext(code,c)};
 }
+test('QKV checks missing and incorrect branches only after running, then accepts the three projections',async()=>{
+ const app=boot(),M=app.c.NeuralPrologue;app.eval("switchLevel('qkv');state=M.solutions('qkv');state.nodes.find(n=>n.id==='q').links=[null];state.nodes.find(n=>n.id==='k').links=[null]");
+ let played=0;app.c.worldForTest={async animate(){played++;assert.equal(app.eval('fault'),null);assert.ok(app.document.querySelector('#run-report').hidden);}};
+ app.eval('world.animate=worldForTest.animate');await app.eval('run()');
+ assert.equal(played,1);assert.equal(app.eval('levelPassed()'),false);assert.equal(app.eval('fault.id'),'q');assert.equal(app.eval('fault.actual'),null);
+ assert.equal(app.document.querySelectorAll('.projection-checks .bad').length,2);assert.equal(app.document.querySelectorAll('.projection-checks .good').length,2);assert.ok(!app.document.querySelector('#level-complete').open);
+ app.eval("state.nodes.find(n=>n.id==='q').links=['R'];state.nodes.find(n=>n.id==='k').links=['q']");await app.eval('run()');assert.equal(app.eval('fault.id'),'k');assert.ok(app.eval('fault.actual'));
+ app.eval("state=M.solutions('qkv');state.sink='q'");await app.eval('run()');assert.equal(app.eval('fault.id'),'sink');assert.equal(app.document.querySelectorAll('.projection-checks .bad').length,1);
+ app.eval("state=M.solutions('qkv')");await app.eval('run()');assert.equal(app.eval('levelPassed()'),true);assert.equal(app.document.querySelector('#level-complete').open,true);assert.equal(app.document.querySelectorAll('.projection-checks .good').length,4);
+ assert.equal(app.eval("progress.completed('qkv')"),true);
+});
+test('old V-only completion is rechecked without changing its saved wiring or later level badges',()=>{
+ const setup=boot(),M=setup.c.NeuralPrologue,key='neural-atelier-level-qkv-v1',meta='neural-atelier-chapters-v1';
+ const saved=M.solutions('qkv');saved.nodes.find(n=>n.id==='q').links=[null];saved.nodes.find(n=>n.id==='k').links=[null];
+ const storage=new Map([[key,JSON.stringify(saved)],[meta,JSON.stringify({current:'qkv',completed:['qkv','scores']})]]),app=boot(storage,'#qkv');
+ assert.equal(app.eval("progress.completed('qkv')"),false);assert.equal(app.eval("progress.completed('scores')"),true);assert.deepEqual(JSON.parse(app.eval('JSON.stringify(state)')),JSON.parse(JSON.stringify(saved)));
+ const correct=M.solutions('qkv'),completeStorage=new Map([[key,JSON.stringify(correct)],[meta,JSON.stringify({current:'qkv',completed:['qkv']})]]),correctApp=boot(completeStorage,'#qkv');
+ assert.equal(correctApp.eval("progress.completed('qkv')"),true);
+ correctApp.eval("state.nodes.find(n=>n.id==='q').links=[null];save()");assert.equal(boot(completeStorage,'#qkv').eval("progress.completed('qkv')"),true,'a badge earned under the current goal is not revoked by later edits');
+});
 test('all levels automatically display their report beside the run controls',async()=>{
  const app=boot(),M=app.c.NeuralPrologue;
  for(const id of Object.keys(M.levels)){

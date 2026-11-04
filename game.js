@@ -1,5 +1,5 @@
-import {cardFor,exampleFor} from './module-cards.js?v=layernorm-placement-1';
-import {createProgress} from './level-progress.js?v=layernorm-placement-1';
+import {cardFor,exampleFor} from './module-cards.js?v=qkv-projections-1';
+import {createProgress} from './level-progress.js?v=qkv-projections-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -74,7 +74,8 @@ function renderReport(){
  const panel=$('#run-report'),attentionValues=M.valueForKind(state,current,'softmax')||M.valueForKind(state,current,'attentionweights')||M.valueForKind(state,current,'original-weights');let html=I18n.t("<div class=\"run-report-content\" tabindex=\"0\" aria-label=\"本次运行详情\">");
  if(stage().tokenOutput){html+='<div class="word-trials">'+results.map((r,i)=>`${I18n.t("<div><small>输入：")}${samples()[i].word}</small><strong class="${r.pass?'good':'bad'}">${r.actual?M.readTokens(r.actual):I18n.t("未得到输出")}${I18n.t("</strong><span>目标：")}${M.readTokens(r.expected)}</span></div>`).join('')+I18n.t("</div><p>文字来自词表分数最高的候选。计算出错可能改词，也可能碰巧仍是同一个词。</p>");}
  if(stage().attentionReadout&&attentionValues){const a=M.math.rows(attentionValues,3),words=samples()[sample].word.split(' / ');html+=I18n.t("<h3>各位置从哪里读取内容</h3><div class=\"attention-map\">")+a.map((r,i)=>`<div><b>${words[i]}${I18n.t(" · 位置 ")}${i}</b>${r.map((v,j)=>`<span style="--weight:${Math.max(0,Math.min(1,v))}">${words[j]} ${Math.round(v*100)}%</span>`).join('')}</div>`).join('')+I18n.t("</div><p>比例是这次计算的注意力权重，不是对真实语言理解的完整解释。</p>");}
- if(stage().sequence&&!stage().engine&&!stage().tokenOutput&&(!stage().attentionReadout||!attentionValues)){const r=results[results.length-1];html+=`<p>${r?.pass?I18n.t("数值匹配。"):I18n.t("数值不匹配。")}${I18n.t("输出特征仍对应原来的输入位置；下一词要在词表投影后才确定。</p>")}`;}
+ if(current?.goals?.length){const checks=[...current.goals,{kind:I18n.t('出口 V'),pass:results.at(-1)?.outletPass,actual:current.output}];html+='<div class="projection-checks">'+checks.map(g=>`<span class="${g.pass?'good':'bad'}">${g.pass?'✓':'×'} ${g.kind.toUpperCase()} · ${g.pass?I18n.t("数值匹配。"):g.actual?I18n.t("数值不匹配。"):I18n.t("未得到输出")}</span>`).join('')+'</div>';}
+ if(stage().sequence&&!stage().engine&&!stage().tokenOutput&&!current?.goals?.length&&(!stage().attentionReadout||!attentionValues)){const r=results[results.length-1];html+=`<p>${r?.pass?I18n.t("数值匹配。"):I18n.t("数值不匹配。")}${I18n.t("输出特征仍对应原来的输入位置；下一词要在词表投影后才确定。</p>")}`;}
  if(stageId==='vocabulary'&&current?.values.lmhead){const scores=M.math.rows(current.values.lmhead,6);html+=I18n.t("<h3>词表分数 · 各位置取最高分</h3><div class=\"vocab-scores\"><div><b>位置</b>")+M.math.vocab.map(v=>'<b>'+v+'</b>').join('')+'</div>'+scores.map((r,i)=>'<div><b>'+i+'</b>'+r.map(v=>`<span class="${v===Math.max(...r)?'winner':''}">${fmt(v)}</span>`).join('')+'</div>').join('')+'</div>';}
  if(stageId==='autoregressive'&&results.every(r=>r.pass)){const rollout=M.rollout(state,samples()[0].v);html+=I18n.t("<h3>把新词追加回去，连续解码六次</h3><div class=\"word-trials\"><div><strong>")+rollout.text+I18n.t("</strong><small>每次只采用最后一个位置的预测，再更新上下文。</small></div></div>");}
  if(stage().engine&&results.length){html+='<div class="word-trials">'+results.map((r,i)=>`${I18n.t("<div><small>提示：")}${samples()[i].word}</small><strong class="${r.pass?'good':'bad'}">${r.actual?M.decodeFeatures(r.actual):I18n.t("未输出")}${I18n.t("</strong><span>目标读出：")}${M.decodeFeatures(r.expected)}</span></div>`).join('')+'</div>';}
@@ -204,8 +205,8 @@ async function run(){
   refresh();world.labels();say(`${I18n.t("试跑：「")}${samples()[i].word}」`);
   await world.animate(current,650,id);
   if(id!==runId||!busy)return;
-  const pass=!current.error&&!!actual&&actual.length===expected.length&&actual.every((x,j)=>Number.isFinite(x)&&Math.abs(x-expected[j])<(stage().engine?(stage().limits?.error||.06):1e-9));results.push({pass,actual,expected});
-  if(!pass){fault={id:'sink',actual,expected};level=99;busy=paused=false;if(stage().engine)engineReport=M.engineReport(state);world.labels();refresh();renderReport();say(`「${samples()[i].word}${I18n.t("」未通过。")}`,'error');return;}
+  const failedGoal=current.goals?.find(g=>!g.pass),outletPass=!current.error&&!!actual&&actual.length===expected.length&&actual.every((x,j)=>Number.isFinite(x)&&Math.abs(x-expected[j])<(stage().engine?(stage().limits?.error||.06):1e-9)),pass=!failedGoal&&outletPass;results.push({pass,actual,expected,outletPass,goals:current.goals});
+  if(!pass){fault=failedGoal?{id:failedGoal.id||'sink',actual:failedGoal.actual,expected:failedGoal.expected,goalKind:failedGoal.kind}:{id:'sink',actual,expected};level=99;busy=paused=false;if(stage().engine)engineReport=M.engineReport(state);world.labels();refresh();renderReport();say(`「${samples()[i].word}${I18n.t("」未通过。")}`,'error');return;}
   level=99;world.labels();refresh();
  }
  busy=paused=false;if(stage().engine)engineReport=M.engineReport(state);if(levelPassed())progress.complete(stageId,state);world.labels();refresh();renderReport();say(stage().engine?(engineReport.pass?I18n.t("数值与性能约束全部通过。"):I18n.t("数值通过；性能验收未通过，查看运行报告。")):`${I18n.t("通过：")}${stage().sampleCount} / ${stage().sampleCount}。`,stage().engine&&!engineReport.pass?'error':'success');showCompletion();
@@ -224,7 +225,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=layernorm-placement-1');
+ const {createSceneArt}=await import('./scene-art.js?v=qkv-projections-1');
  const art=createSceneArt(T,scene,colors,{anisotropy:renderer.capabilities.getMaxAnisotropy()});art.surroundings(samples(),stage());
  const assembly=new T.Group(),wires=new T.Group();scene.add(assembly,wires);const neuronGeo=new T.SphereGeometry(.115,16,12);let elements=[],curves=[],packets=[],drag=null,preview=null,yaw=.05,pitch=.8,zoom=stage().zoom,lastDepth=-1;
  const cameraTarget=new T.Vector3();let focusId=null,shelfFocus=null,shelfModel=null,overview=null,cameraFrame=0,transitioning=false,lastTap=null;
@@ -269,11 +270,12 @@ try{
   addLabel('button','port input '+(state.sink?'connected ':''),String(shape(stage().sinkDim)),{'type':'button','data-input':'sink:0','aria-label':`${I18n.t("本层输出入口，")}${shape(stage().sinkDim)}${state.sink?I18n.t("，已连接"):''}`},()=>point('sink'));
   if(busy&&current?.output&&level===99&&!fault&&!stage().sequence)addLabel('span','node-value',vector(current.output),{},()=>new T.Vector3(stage().sinkX,.6,1.6));
   if(fault){
-   const pos=()=>point('sink'),vf=v=>v?'['+v.map(x=>fmt(x)).join(', ')+']':I18n.t("未得到输出");
+   const pos=()=>point(fault.id),vf=v=>v?'['+v.map(x=>fmt(x)).join(', ')+']':I18n.t("未得到输出");
    const tokenText=stage().tokenOutput?`${I18n.t("<p class=\"token-verdict\">实际：")}${fault.actual?M.readTokens(fault.actual):I18n.t("未输出")}${I18n.t("<br>目标：")}${M.readTokens(fault.expected)}</p>`:'';
    const content=`${I18n.t("<button type=\"button\" class=\"fault-close\" data-dismiss-result aria-label=\"关闭结果提示\" title=\"关闭结果提示\">×</button><strong>最终结果 · ")}${sample<3&&!stage().sequence?I18n.t("位置 ")+sample+I18n.t("（输入“")+samples()[sample].word+'”）':samples()[sample].word}</strong>${tokenText}${I18n.t("<div><span>你的结果</span><b>")}${vf(fault.actual)}${I18n.t("</b></div><div class=\"expected\"><span>预期结果</span><b>")}${vf(fault.expected)}</b></div>`;
-   addLabel('span','fault-pin','!',{'data-owner':'sink','aria-hidden':'true'},pos);
-   addLabel('div','local-fault',content,{'data-owner':'sink','role':'status'},pos);
+   addLabel('span','fault-pin','!',{'data-owner':fault.id,'aria-hidden':'true'},pos);
+   const notice=addLabel('div','local-fault',content,{'data-owner':fault.id,'role':'status'},pos);
+   if(fault.goalKind)notice.querySelector('strong').textContent+= ' · '+M.definitions[fault.goalKind].name;
   }
   render();
  }
@@ -320,7 +322,7 @@ try{
  }
  function fadePort(el,x,y,footprints,width,height){
   let fade=0;const halfWidth=(width||27)/2,halfHeight=(height||27)/2;
-  for(const p of packets)if((p.worked||p.tokenOperation||p.centering)&&(p.node.id===el.dataset.output||(p.paired||p.tokenOperation||p.centering)&&el.dataset.input?.startsWith(p.node.id+':')))fade=Math.max(fade,p.portFade||0);
+  for(const p of packets)if((p.worked||p.tokenOperation||p.centering)&&(p.node.id===el.dataset.output||(p.paired||p.tokenOperation||p.centering||p.sequenceProjection)&&el.dataset.input?.startsWith(p.node.id+':')))fade=Math.max(fade,p.portFade||0);
   for(const p of footprints){
    const gap=Math.hypot(Math.max(0,Math.abs(x-p.x)-halfWidth),Math.max(0,Math.abs(y-p.y)-halfHeight))-p.r;
    const t=Math.max(0,Math.min(1,gap/24)),ease=t*t*(3-2*t);
@@ -334,7 +336,7 @@ try{
   Object.assign(camera,{left:-width/2,right:width/2,top:height/2,bottom:-height/2});
   camera.position.set(cameraTarget.x+Math.sin(yaw)*24,cameraTarget.y+Math.sin(pitch)*24,cameraTarget.z+Math.cos(yaw)*Math.cos(pitch)*24);
   camera.lookAt(cameraTarget);camera.updateProjectionMatrix();art.updateDetail(camera,w,h);
-  for(const p of packets)if(p.tokenOperation||p.centering)for(const {label}of p.mesh.userData.featureRoutes)label.visible=label.material.opacity>0&&art.detailsVisible();
+  for(const p of packets)if(p.tokenOperation||p.centering||p.sequenceProjection)for(const {label}of p.mesh.userData.featureRoutes)label.visible=label.material.opacity>0&&art.detailsVisible();
   renderer.render(scene,camera);
   syncConnectionGuide(w,h);syncPlacementGuide(w,h);syncWireTargets(w,h);
   const flow=flowFootprints(w/width);
@@ -358,11 +360,13 @@ try{
     const radius=(p.normalizing||p.tokenOperation?.2:art.projectionRadius(p.node.id,p.column))*w/width,offset=radius+9*scale,side=cx+offset+cw<w-12?'right':'left';
     p.calculation.dataset.side=side;
     p.calculation.style.left=(side==='right'?cx+offset:cx-offset)+'px';p.calculation.style.top=cy+'px';
-    const accent=colorHex(p.tokenOperation?art.rowColor(p.tokenRow):p.centering&&!stage().sequence?p.color:p.normalizing?art.rowColor(p.rmsRow):p.paired?nodeColor(p.node.id):art.projectionColor);
+    const accent=colorHex(p.tokenOperation?art.rowColor(p.tokenRow):p.centering&&!stage().sequence?p.color:p.normalizing?art.rowColor(p.rmsRow):p.paired||p.sequenceProjection?nodeColor(p.node.id):art.projectionColor);
     p.calculation.style.setProperty('--calculation-color',accent);p.calculation.style.setProperty('--calculation-halo',accent+'33');
     p.calculation.style.setProperty('--calculation-focus',String(p.focus||0));
     for(const {el,bar}of p.outputLabels){
-     const [rx,ry]=project(bar.getWorldPosition(new T.Vector3())),[sx,sy]=project(art.projectionOutlet(p.node.id,bar.userData.feature)),g=p.outputMesh.userData.gather;
+     const [rx,ry]=project(bar.getWorldPosition(new T.Vector3()));
+     if(p.sequenceProjection){el.style.left=rx+'px';el.style.top=(ry-12*scale)+'px';el.style.setProperty('--calculation-scale',String(scale));el.style.visibility=p.equationVisible?'':'hidden';continue;}
+     const [sx,sy]=project(art.projectionOutlet(p.node.id,bar.userData.feature)),g=p.outputMesh.userData.gather;
      const aligned=p.tokenOperation||p.centering;
      el.style.left=((sx+(aligned?0:28)*scale)*(1-g)+(rx-(aligned?0:7)*scale)*g)+'px';el.style.top=((sy-(aligned?16:0)*scale)*(1-g)+(ry-12*scale)*g)+'px';
      el.style.setProperty('--calculation-scale',String(scale));el.style.visibility=p.equationVisible?'':'hidden';
@@ -463,7 +467,7 @@ try{
   for(let depth=1;depth<=lastWave;depth++){
    const durations=readyNodes.filter(n=>ev.depths[n.id]===depth).map(n=>{
     const d=definition(n.id),tokenOperation=art.tokenOperation(d);
-    return tokenOperation?art.tokenFrame(0,tokenOperation).duration:['norm','layernorm'].includes(d.type)?normalizationFrame(0,d.type==='layernorm').duration:!seq&&['linear','multiply','add'].includes(d.type)?art.projectionFrame(0,ev.values[n.id].length).duration:1;
+    return tokenOperation?art.tokenFrame(0,tokenOperation).duration:['norm','layernorm'].includes(d.type)?normalizationFrame(0,d.type==='layernorm').duration:seq&&d.type==='linear'?art.sequenceProjectionFrame(0,weightsFor(n.id)[0].length).duration:!seq&&['linear','multiply','add'].includes(d.type)?art.projectionFrame(0,ev.values[n.id].length).duration:1;
    });
    starts[depth]=ends[depth-1]+travelDuration;ends[depth]=starts[depth]+Math.max(1,...durations);
   }
@@ -493,9 +497,9 @@ try{
   readyNodes.forEach(n=>{
    const input=ev.values[n.links[0]],output=ev.values[n.id],p=movingPacket(input,n.id,n.id,'process');
    p.el.classList.add('processing-packet');p.el.dataset.node=n.id;p.mesh.userData.processing=n.id;
-   const detailed=!seq&&definition(n.id).type==='linear',paired=pairedNode(n.id),worked=detailed||paired,other=paired?ev.values[n.links[1]]:null;
+   const detailed=definition(n.id).type==='linear',sequenceProjection=seq&&detailed,paired=pairedNode(n.id),worked=detailed||paired,other=paired?ev.values[n.links[1]]:null;
    const operation=definition(n.id).type,tokenOperation=art.tokenOperation(definition(n.id)),centering=operation==='layernorm',normalizing=operation==='norm'||centering,pairTones=paired?art.pairColorsFor(n.id):null,operator=operation==='add'?'+':'×';
-   Object.assign(p,{detailed,paired,worked,other,normalizing,centering,tokenOperation});
+   Object.assign(p,{detailed,sequenceProjection,columns:detailed?weightsFor(n.id)[0].length:output.length,paired,worked,other,normalizing,centering,tokenOperation});
    if(worked||tokenOperation||centering)art.prepareProjectionPacket(p.mesh,paired?()=>pairTones[0]:undefined);
    if(paired){
     const otherMesh=art.packet(other,p.color);otherMesh.userData={processingSecondary:n.id,row:p.el.dataset.row};otherMesh.visible=false;scene.add(otherMesh);
@@ -510,7 +514,7 @@ try{
    if(worked||normalizing||tokenOperation){
     art.prepareProjectionOutput(outputMesh);
     p.outputLabels=output.map((value,j)=>{
-     const el=document.createElement('span');el.className='projection-result'+(tokenOperation||centering?' token-result':'');el.hidden=true;el.textContent=fmt(value);el.dataset.node=n.id;el.dataset.column=String(j);el.dataset.row=p.el.dataset.row;overlay.appendChild(el);
+     const el=document.createElement('span');el.className='projection-result'+(tokenOperation||centering||sequenceProjection?' token-result':'');el.hidden=true;el.textContent=fmt(value);el.dataset.node=n.id;el.dataset.column=String(j);el.dataset.row=p.el.dataset.row;overlay.appendChild(el);
      return {el,bar:outputMesh.children.find(o=>o.userData.feature===j)};
     });
    }
@@ -569,15 +573,22 @@ try{
     const calculation=document.createElement('span');calculation.className='projection-calculation';calculation.hidden=true;calculation.dataset.node=n.id;calculation.dataset.operation=operation;
     const equation=document.createElement('span');equation.className='projection-equation';calculation.appendChild(equation);
     const abstract=document.createElement('span');abstract.className='projection-sum-symbol';abstract.textContent=paired?operator:'∑';abstract.setAttribute('aria-hidden','true');calculation.appendChild(abstract);
-    const factor=v=>v<0?'('+fmt(v)+')':fmt(v),terms=[];
-    (paired?[input,other]:input).forEach((_,i)=>{if(i)equation.appendChild(document.createTextNode(paired?' '+operator+' ':' + '));const term=document.createElement('span');term.style.color=colorHex(paired?pairTones[i]:art.featureColor(i));equation.appendChild(term);terms.push(term);});
+    const factor=v=>v<0?'('+fmt(v)+')':fmt(v),terms=[],width=sequenceProjection?weightsFor(n.id).length:input.length;
+    const token=document.createElement('b');if(sequenceProjection){calculation.classList.add('sequence-projection-calculation');equation.append(token);p.words=()=>{
+     let from=n.links[0];const visited=new Set();
+     while(from&&!visited.has(from)){visited.add(from);const ids=ev.values[from];if(ids?.length===3&&ids.every(v=>Number.isInteger(v)&&M.math.vocab[v]!=null))return ids.map(i=>M.math.vocab[i]);if(from==='Z'&&stage().secondaryTokenIds)return stage().secondaryTokenIds.map(i=>M.math.vocab[i]);from=state.nodes.find(other=>other.id===from)?.links[0];}
+     return samples()[sample].word.split(' / ');
+    };}
+    (paired?[input,other]:input.slice(0,width)).forEach((_,i)=>{if(i)equation.appendChild(document.createTextNode(paired?' '+operator+' ':' + '));const term=document.createElement('span');term.style.color=colorHex(paired?pairTones[i]:art.featureColor(i));equation.appendChild(term);terms.push(term);});
     const sum=document.createElement('b');sum.style.opacity='0';equation.appendChild(sum);overlay.appendChild(calculation);
-    const updateEquation=column=>{
-     const operands=paired?[input[column],other[column]]:[...input,...weightsFor(n.id).map(w=>w[column])];
-     terms.forEach((term,i)=>term.textContent=paired?factor(operands[i]):factor(input[i])+' × '+factor(weightsFor(n.id)[i][column]));
-     const rounded=[...operands,output[column]].some(v=>Math.abs(v-Number(v.toFixed(2)))>1e-9);sum.textContent=(rounded?' ≈ ':' = ')+fmt(output[column]);
+    const updateEquation=(column,row=0)=>{
+     const values=sequenceProjection?input.slice(row*width,(row+1)*width):input,result=output[row*p.columns+column];
+     const operands=paired?[input[column],other[column]]:[...values,...weightsFor(n.id).map(w=>w[column])];
+     terms.forEach((term,i)=>term.textContent=paired?factor(operands[i]):factor(values[i])+' × '+factor(weightsFor(n.id)[i][column]));
+     const rounded=[...operands,result].some(v=>Math.abs(v-Number(v.toFixed(2)))>1e-9);sum.textContent=(rounded?' ≈ ':' = ')+fmt(result);
+     if(sequenceProjection){token.textContent=p.words()[row]+' · ';calculation.dataset.projectionRow=String(row);}
     };
-    updateEquation(0);Object.assign(p,{calculation,equation,sum,updateEquation,column:0});
+    updateEquation(0);Object.assign(p,{calculation,equation,sum,updateEquation,column:0,projectionRow:0});
    }
    Object.assign(p,{node:n,input,output,outputMesh,outputMaterials:fadeMaterials(outputMesh),morph,after,beforeWidth,afterWidth,start:starts[ev.depths[n.id]],end:ends[ev.depths[n.id]],path:processPaths.get(n.id)});
    p.p=p.path.getPoint(0);p.mesh.position.copy(p.p);p.outputMesh.position.copy(p.p);packets.push(p);
@@ -595,7 +606,7 @@ try{
    if(level!==lastDepth){lastDepth=level;labels();inspect();}
    art.pulseSource(reduced?1:t);
    packets.forEach(p=>{
-    const tt=t-p.start,timing=p.tokenOperation?art.tokenFrame(tt,p.tokenOperation):p.normalizing?normalizationFrame(tt,p.centering):p.worked?art.projectionFrame(tt,p.output.length):null,progress=timing?timing.phase:clamp(tt/(p.motion==='wire'?travelDuration:1));
+    const tt=t-p.start,timing=p.sequenceProjection?art.sequenceProjectionFrame(tt,p.columns):p.tokenOperation?art.tokenFrame(tt,p.tokenOperation):p.normalizing?normalizationFrame(tt,p.centering):p.worked?art.projectionFrame(tt,p.output.length):null,progress=timing?timing.phase:clamp(tt/(p.motion==='wire'?travelDuration:1));
     if(p.motion==='process'){
      p.progress=tt;
      const visible=tt>=0&&t<p.end&&(!focusId||focusId===p.node.id),blend=ramp(progress,p.worked?.76:.55,p.worked?.9:.83);
@@ -612,19 +623,23 @@ try{
        // the operator. The local paired equation carries the arithmetic.
        const entering=1-ramp(progress,.18,.35),leaving=ramp(progress,.8,.94);
        p.cells.style.opacity=String(entering);p.after.style.opacity=String(leaving);p.morph.style.width=(p.beforeWidth*entering+p.afterWidth*leaving)+'px';
+      }else if(p.sequenceProjection){
+       p.mesh.visible=visible&&tt<timing.end;p.el.hidden=!visible||(progress>.08&&progress<.9);
+       art.routeSequenceProjectionInput(p.node.id,p.mesh,tt,p.p,p.path.getPoint(.04));
       }else art.routeProjectionPacket(p.node.id,p.mesh,progress,p.p,p.path.getPoint(.12));
-      art.routeProjectionOutput(p.node.id,p.outputMesh,tt,p.p);
+      if(p.sequenceProjection)art.routeSequenceProjectionOutput(p.node.id,p.outputMesh,tt,p.p);else art.routeProjectionOutput(p.node.id,p.outputMesh,tt,p.p);
       p.outputMesh.visible=visible&&tt>=.67;
-      p.portFade=visible?ramp(progress,.2,.38):0;
-      const local=tt-timing.offset;
+      p.portFade=visible?ramp(progress,p.sequenceProjection?.04:.2,p.sequenceProjection?.12:.38):0;
+      const local=(p.sequenceProjection?timing.rowTime:tt)-timing.offset;
       p.focus=visible?timing.focus:0;
       p.calculation.hidden=!visible||local<.36||local>=.76;p.calculation.style.opacity=String(ramp(local,.36,.4)*(1-ramp(local,.71,.76)));p.sum.style.opacity=String(ramp(local,.61,.67));
       p.outputLabels.forEach(({el},j)=>{
-       const alpha=ramp(tt,.76+j*timing.step,.8+j*timing.step)*(1-ramp(progress,.89,.97));
+       const ready=p.sequenceProjection?Math.floor(j/p.columns)*timing.rowDuration+.97+j%p.columns*timing.step:.76+j*timing.step;
+       const alpha=ramp(tt,ready,ready+.04)*(1-ramp(progress,.89,.97));
        el.hidden=!visible||alpha<=0;el.style.opacity=String(alpha);
       });
       p.calculation.dataset.column=String(timing.column);
-      if(p.column!==timing.column){p.column=timing.column;p.updateEquation(p.column);}
+      if(p.column!==timing.column||p.sequenceProjection&&p.projectionRow!==timing.row){p.column=timing.column;p.projectionRow=timing.row||0;p.updateEquation(p.column,p.projectionRow);}
      }
      if(p.tokenOperation){
       p.el.hidden=!visible||(progress>.12&&progress<.88);p.mesh.visible=visible&&tt<timing.end;
@@ -700,6 +715,6 @@ try{
  $('#scene-expand').onclick=()=>{const expanded=document.body.classList.toggle('scene-expanded');$('#scene-expand').textContent=expanded?I18n.t("显示观察窗"):I18n.t("放大场景");$('#scene-expand').setAttribute('aria-pressed',String(expanded));render();};
  function beforeStage(){if(focusId)leaveFocus();cancelAnimationFrame(cameraFrame);transitioning=false;host.setAttribute('aria-busy','false');drag=lastTap=null;clearPreview();clearPlacement();clearPackets();elements=[];overlay.replaceChildren();}
  function setStage(){art.surroundings(samples(),stage());yaw=.05;pitch=.8;zoom=stage().zoom;cameraTarget.set(0,0,0);rebuild();}
- function relocalize(){art.surroundings(samples(),stage());rebuild();packets.forEach(p=>{p.el.querySelector('.packet-title').textContent=packetIdentity(p.el.dataset.from);if(p.normalizing&&p.progress!=null)p.updateRMS(normalizationFrame(p.progress,p.centering));if(p.tokenOperation&&p.progress!=null)p.updateToken(art.tokenFrame(p.progress,p.tokenOperation));if(p.motion==='process'&&p.progress!=null)art.processing(p.node.id,p.progress,p.input,p.output,p.color,{sequence:!!stage().sequence,detailed:p.detailed,paired:p.paired,other:p.other,words:p.words?.()});});render();}
+ function relocalize(){art.surroundings(samples(),stage());rebuild();packets.forEach(p=>{p.el.querySelector('.packet-title').textContent=packetIdentity(p.el.dataset.from);if(p.sequenceProjection)p.updateEquation(p.column,p.projectionRow);if(p.normalizing&&p.progress!=null)p.updateRMS(normalizationFrame(p.progress,p.centering));if(p.tokenOperation&&p.progress!=null)p.updateToken(art.tokenFrame(p.progress,p.tokenOperation));if(p.motion==='process'&&p.progress!=null)art.processing(p.node.id,p.progress,p.input,p.output,p.color,{sequence:!!stage().sequence,detailed:p.detailed,paired:p.paired,other:p.other,words:p.words?.()});});render();}
  new ResizeObserver(render).observe(host);world={relocalize,labels,rebuild,animate,clearPackets,clearPreview,clearPlacement,previewAt,previewPlacement,focus,focusShelf,focused:()=>focusId,beforeStage,setStage,syncShelf:()=>syncPlacementGuide(host.clientWidth,host.clientHeight)};$('#loading').hidden=true;rebuild();refresh();
 }catch(e){$('#loading').innerHTML=I18n.t("<strong>3D 台面没有加载成功，请刷新重试。</strong>");say(I18n.t("页面尚未开始运行。"),'error');console.error(e);}

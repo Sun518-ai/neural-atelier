@@ -68,6 +68,8 @@ The animated title screen introduces the workbench. Music starts after you enter
 
 SiLU has its own activation animation: values travel along curved channels and shrink according to their sigmoid gates. For vector projections, individual components leave the horizontal tray and align with their weight rows. Matching colors and a worked sum follow each output in turn, all at the same pace. Use the speed setting to speed up the whole animation. Drag modules to rearrange them or use **Rebuild** to start the level again.
 
+Q/K/V projections use that same per-output animation for every token: the active weight column lights up, the actual products travel to its output neuron, and completed vectors wait under their token names before gathering. The **Three roles** lesson checks Q, K, V, and the V outlet separately after running. V itself does not depend on Q or K; passing this lesson requires producing all three parallel projections. Earlier V-only completion badges are rechecked while preserving the saved circuit.
+
 Moving vectors share a small tray with features arranged left to right, matching the input and output racks. A sequence keeps its token rows separate. You can rotate and zoom during execution; wiring and module placement stay locked until the run stops.
 
 Progress and circuits are saved in this browser's `localStorage`. Links such as `#wire` or `#projection` select a level; they do not share your circuit or progress. The game requires a desktop browser with WebGL 2. Mobile layouts are not supported.
