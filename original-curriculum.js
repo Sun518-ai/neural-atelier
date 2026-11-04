@@ -194,11 +194,42 @@ lesson('multihead',L('让两个头各看一遍','Let two heads look independentl
  L('本例 d_model = 2、头数 = 2，每头 d_k = d_v = 1。缩放因此除以 √1。拼接沿特征方向进行，三个 token 仍然是三个。','Here d_model = 2 with two heads, so each has d_k = d_v = 1 and scales by √1. Concatenation is along features; three tokens remain three tokens.'),
  {'head-a':['R'],'head-b':['R'],concat:['head-a','head-b'],output:['concat'],sink:'output'},x=>multi(x),{shapes:{3:'3 × 1'}});
 lesson('encoder-layer',L('接成一层原版编码器','Build one original encoder layer'),['self-heads','residual1','ln-attn','original-ffn-block','residual2','ln-ffn'],
- L('两段子层，各自 Add & Norm','Give both sublayers their own Add & Norm'),
- L('输入已是带位置的词特征。先让自注意力交换信息，再让 FFN 加工各个位置；每段都加回自己的输入，再归一化。','The input already contains embeddings and positions. Exchange information with self-attention, then process each position with the FFN. Each sublayer adds back its own input before normalization.'),
- L('注意力负责跨 token 交换信息，FFN 负责各 token 内部加工。残差与归一化包住每个子层，才能按同样结构继续堆叠。','Attention exchanges information across tokens; the FFN processes features within each token. Residuals and normalization wrap each sublayer so the structure can be stacked.'),
- L('编码器可以看完整源序列，不使用因果遮罩。两次残差分别保留各自子层的输入，不都从最左侧取数。','The encoder can see the whole source sequence and uses no causal mask. Each residual uses its own sublayer input, not always the far-left input.'),
+ L('先交流，再加工','Exchange, then process'),
+ L('用双头自注意力让词之间交换信息，再用原版 FFN 加工每个词。两段各自沿用学过的“先相加，再归一化”。','Use two-head self-attention to exchange information between tokens, then an original FFN to process each token. Both stages reuse the familiar “add first, normalize second” pattern.'),
+ L('输入 X 已包含词向量和位置：仍是“我 / 爱 / 猫”，每个词有 4 个特征。这一层更新的是这些特征。','Input X already contains embeddings and positions: still I / Love / Cats, with four features per token. This layer updates those features.'),
+ L('两段都把计算结果当作修改量，加回本段输入，再用 LayerNorm 整理特征尺度。第二段收到的是交流后的特征，它的残差也从这里取。','Each stage adds its computed update to that stage’s input, then uses LayerNorm to adjust the feature scale. The second stage receives the features after exchange, so its residual starts there too.'),
  {'self-heads':['R'],residual1:['R','self-heads'],'ln-attn':['residual1'],'original-ffn-block':['ln-attn'],residual2:['ln-attn','original-ffn-block'],'ln-ffn':['residual2'],sink:'ln-ffn'},encoder,{buildable:true,maxModules:8,positioned:true});
+const encoderLesson=added['encoder-layer'];
+encoderLesson.rationale.kind='encoder-layer';
+encoderLesson.rationale.title=L('一层里的两类工作','Two jobs inside one layer');
+encoderLesson.rationale.scope=L('沿用 2017 原版的 Post-LN 顺序。输入、两段之间、输出都是 3 个词 × 4 个特征；整句互相可见。','Uses the original 2017 Post-LN order. The input, intermediate state and output all have three tokens × four features; every token can read the whole sentence.');
+// These pairs differ only in their old positional names, not their operation.
+// Do not rewrite stored nodes or wires when presenting a reusable operator.
+encoderLesson.componentAliases={'ffn-add':'encoder-add','ln-ffn':'ln-attn'};
+encoderLesson.componentNames={
+ 'encoder-add':L('残差相加','Residual addition'),
+ 'ln-attn':'LayerNorm'
+};
+encoderLesson.shelf={
+ featureWidth:12,
+ order:['self-heads','original-ffn-block','encoder-add','ln-attn','wide-position'],
+ current:L('四维组件','4 features'),
+ earlier:L('已学零件','Earlier parts'),
+ note:L('前面拆开的零件仍可查看、拖出。两维端口不能直接接到本关的四维特征。','Previously expanded parts can still be inspected and placed. Two-feature ports cannot connect directly to this lesson’s four-feature tensors.')
+};
+encoderLesson.packageLabel=L('熟悉组件的四维版本','A familiar module with four features');
+M.encoderGuide={
+ tokens:['我','爱','猫'].map(word=>I18n.t(word)),
+ exchange:{title:L('词与词之间交流','Exchange between tokens'),tag:labels.attn,text:L('每个词按注意力比例读取整句话的内容。例如，“猫”的特征会参与更新“爱”的特征。','Each token reads from the whole sentence in attention-weighted proportions. For example, features of Cats contribute to updating Love.')},
+ process:{title:L('每个词内部加工','Process within each token'),tag:L('原版 FFN','Original FFN'),text:L('再分别加工交流后的每个词：4 → 8 → ReLU → 4。同一套权重用在所有词上，这一步不再从别的词取数。','Process each token after the exchange: 4 → 8 → ReLU → 4. All tokens use the same weights; this step does not read other tokens.')},
+ pattern:L('两段都复用同一种结构','Both stages reuse one pattern'),
+ operations:[L('计算修改量','Compute an update'),L('残差相加','Residual addition'),'LayerNorm'],
+ formulaTitle:L('用公式对照两段','Compare the two stages in formulas'),
+ first:L('X1：交流这一段完成后的特征','X1: features after the exchange stage'),
+ second:L('Y：加工这一段完成后的特征','Y: features after the processing stage'),
+ formulaNote:L('LN 就是 LayerNorm。残差与归一化各用两块相同组件，不需要区分“Attention 专用”和“FFN 专用”。','LN means LayerNorm. Use two copies each of the same residual and normalization operators; there are no separate Attention-only and FFN-only versions.')
+};
+I18n.prepare(M.encoderGuide);
 lesson('decoder-self',L('只看已给出的目标词','Read only the available target prefix'),['masked-heads','residual1','ln-attn'],
  L('给因果自注意力接回残差','Add the residual around masked self-attention'),
  L('沿用双头计算，但目标位置只能看自己和前面。把更新加回目标输入，再做 LayerNorm。','Reuse two-head attention, but let each target position see only itself and earlier positions. Add the update to the target input, then apply LayerNorm.'),
@@ -507,7 +538,7 @@ M.outputProjectionGuide={
 I18n.prepare(M.outputProjectionGuide);
 I18n.prepare(cards);
 M.original={relu,ln,position,embed,wide,project,vocabulary,classicFFN,sequenceFFN,head,concat,multi,singleAttention,encoder,decoderSelf,decoder,sourceIds,
- exampleLabels(levelId){return {Oa:L('自注意力更新','Self-attention update'),Om:L('因果注意力更新','Masked attention update'),Oc:L('交叉注意力更新','Cross-attention update'),A:['relu','original-ffn'].includes(levelId)?L('ReLU 输出','ReLU output'):I18n.t('注意力'),E:L('编码器输出','Encoder output'),D:L('目标特征','Target features'),Xs:L('源词向量与位置','Source embeddings and positions'),Xt:L('目标词向量与位置','Target embeddings and positions'),Xp:L('含位置的特征','Position-enriched features'),H_A:L('头 A 的结果','Head A output'),H_B:L('头 B 的结果','Head B output'),C:L('拼接结果','Concatenated features'),X1:L('第一次归一化','First normalized state'),X2:L('交叉注意力后的特征','Features after cross-attention'),R1:L('Attention 残差结果','Attention residual result'),R2:L('FFN 残差结果','FFN residual result'),Rc:L('交叉注意力残差结果','Cross-attention residual result')};},
+ exampleLabels(levelId){return {Oa:L('自注意力更新','Self-attention update'),Om:L('因果注意力更新','Masked attention update'),Oc:L('交叉注意力更新','Cross-attention update'),A:['relu','original-ffn'].includes(levelId)?L('ReLU 输出','ReLU output'):I18n.t('注意力'),E:L('编码器输出','Encoder output'),D:L('目标特征','Target features'),Xs:L('源词向量与位置','Source embeddings and positions'),Xt:L('目标词向量与位置','Target embeddings and positions'),Xp:L('含位置的特征','Position-enriched features'),H_A:L('头 A 的结果','Head A output'),H_B:L('头 B 的结果','Head B output'),C:L('拼接结果','Concatenated features'),X1:levelId==='encoder-layer'?L('交流后的特征','Features after exchange'):L('第一次归一化','First normalized state'),X2:L('交叉注意力后的特征','Features after cross-attention'),R1:L('Attention 残差结果','Attention residual result'),R2:L('FFN 残差结果','FFN residual result'),Rc:L('交叉注意力残差结果','Cross-attention residual result')};},
  card(id,levelId){
   if(cards[id]){
    const c={...cards[id]},decoderLevel=levelId==='decoder-layer';
@@ -517,6 +548,23 @@ M.original={relu,ln,position,embed,wide,project,vocabulary,classicFFN,sequenceFF
    }
    const formulas={'self-heads':'Oa = MHA(X)','masked-heads':'Om = MaskedMHA('+(decoderLevel?'D':'X')+')','encoder-add':'R1 = '+(decoderLevel?'D': 'X')+' + '+(levelId==='encoder-layer'?'Oa':'Om'),'ln-attn':'X1 = LayerNorm(R1)','cross-heads':'Oc = CrossAttention(X1, E)','cross-add':'Rc = X1 + Oc','ln-cross':'X2 = LayerNorm(Rc)','original-ffn-block':'F = FFN('+(decoderLevel?'X2':'X1')+')','ffn-add':'R2 = '+(decoderLevel?'X2':'X1')+' + F','ln-ffn':'Y = LayerNorm(R2)'};
    if(formulas[id])c.formula=formulas[id];
+   if(levelId==='encoder-layer'){
+    if(['encoder-add','ffn-add'].includes(id)){
+     c.english='RESIDUAL ADDITION';c.ability=L('把修改量加回这一段的输入','Add the update to this stage’s input');
+     c.meaning=L('两个入口按同一个词、同一个特征对齐相加。例如 [1, 2] 加修改量 [0.3, −0.5]，得到 [1.3, 1.5]。这条旁路让原输入也参与结果，而不必全部经过支路的变换。','Align both inputs by token and feature, then add. For example, [1, 2] plus the update [0.3, −0.5] gives [1.3, 1.5]. This bypass lets the original input contribute directly without passing entirely through the branch transformation.');
+     c.purpose=L('两段使用相同的相加组件。第一段的输入是 X；第二段的输入已变成交流后的 X1。各自取本段输入与本段修改量相加，再归一化。卡片数值示例采用下面标出的输入。','Both stages use the same addition operator. The first stage starts with X; the second starts with X1, the features after exchange. Add each stage’s own input and update, then normalize. The worked example uses the inputs labeled below.');
+    }else if(['ln-attn','ln-ffn'].includes(id)){
+     c.english='LAYERNORM';c.ability=L('分别整理每个词的四个特征','Normalize each token’s four features');
+     c.meaning=L('每个词单独取自己的 4 个特征，减去这 4 个数的均值，再除以标准差。例如 [1, 1, 3, 3] 约变成 [−1, −1, 1, 1]。三个词分别计算，不把不同词混在一起。','For each token, center its four features by their mean and divide by their standard deviation. For example, [1, 1, 3, 3] becomes approximately [−1, −1, 1, 1]. Process the three tokens separately.');
+     c.purpose=L('残差相加后，数值的整体偏移和大小可能变化。LayerNorm 先整理这些尺度，再交给下一段。两段用的是同一种运算，本例两块都取 γ = 1、β = 0；真实模型可以分别学习各自的参数。','Residual addition can change the overall offset and scale. LayerNorm adjusts them before the next stage. Both copies use the same operation and γ = 1, β = 0 here; real models may learn different parameters for each copy.');
+    }else if(id==='self-heads'){
+     c.meaning=L('沿用前面的双头注意力：每个词分别按两套注意力比例读取整句话的 V，再拼接并经过 Wo。这里输入是每词 4 个特征，每个头处理 2 个；输出仍是 3 个词、每词 4 个特征。','Reuse the two-head attention structure: each token reads V from the whole sentence with two attention patterns, then concatenates the results and applies Wo. Here each token has four features, with two per head; the output still has three tokens with four features each.');
+     c.purpose=L('Q/K/V、打分、Softmax、A × V、拼接与 Wo 已经在这块内部。它负责跨词读取内容；残差相加和 LayerNorm 放在外面，由你搭建。','Q/K/V, scoring, Softmax, A × V, concatenation and Wo are inside this module. It reads across tokens; residual addition and LayerNorm remain outside for you to build.');
+    }else if(id==='original-ffn-block'){
+     c.meaning=L('把交流后的每个词分别送过 Linear → ReLU → Linear：4 个特征扩成 8 个，经 ReLU 再组合回 4 个。所有词用同一套权重，但各自计算；“爱”的 FFN 不会在这一步读取“猫”的向量。','Send each token after exchange through Linear → ReLU → Linear: expand four features to eight, apply ReLU, and combine back to four. All tokens share the weights but are processed independently; Love’s FFN does not read Cats’ vector at this step.');
+     c.purpose=L('注意力已经带回上下文，FFN 再对这些特征做非线性加工，产生本词的修改量。用残差把修改量加回交流后的输入，再整理尺度，才完成这一层。','Attention has brought in context. The FFN applies nonlinear processing to those features and produces an update for that token. Add it back to the input after exchange and normalize the scale to finish the layer.');
+    }
+   }
    return c;
   }
   if(!M.levels[levelId]?.original)return null;

@@ -389,6 +389,47 @@ test('the shelf remains usable after the placement tutorial and original lessons
  app.eval("switchLevel('workshop')");assert.equal(app.eval('state.nodes.length'),0,'the placement tutorial still requires taking a module');
 });
 
+test('encoder groups old parts without hiding useful distractors or prewiring the challenge',()=>{
+ const app=boot(new Map(),'#encoder-layer'),doc=app.document;
+ const current=()=>[...doc.querySelectorAll('.shelf-current [data-add-module]')].map(e=>e.dataset.addModule);
+ assert.deepEqual(current(),['self-heads','original-ffn-block','encoder-add','ln-attn','wide-position']);
+ assert.equal(doc.querySelector('[data-add-module="ffn-add"]'),null);assert.equal(doc.querySelector('[data-add-module="ln-ffn"]'),null);
+ assert.equal(doc.querySelector('[data-add-module="original-encoder"]'),null,'the answer package still requires a win');
+ assert.equal(doc.querySelector('[data-earlier-parts]').hasAttribute('open'),false);
+ assert.ok(doc.querySelector('.shelf-earlier [data-add-module="v"]'),'earlier learned choices remain inspectable and usable');
+ assert.ok(doc.querySelector('.shelf-current [data-add-module="wide-position"]'),'same-width distractor remains in the compact view');
+ assert.equal(app.eval('state.nodes.length'),0);assert.equal(app.eval('state.sink'),null);
+ doc.querySelector('[data-earlier-parts]').setAttribute('open','');app.eval("chooseModule('v');placeModule(0,0)");
+ assert.equal(app.eval("state.nodes[0].kind"),'v');assert.equal(doc.querySelector('[data-earlier-parts]').hasAttribute('open'),true);
+ const saved=app.eval('JSON.stringify(state)');
+ for(const language of ['en','zh']){
+  app.c.I18n.setPreference(language);
+  assert.equal(doc.querySelectorAll('[data-encoder-job]').length,2);assert.equal(doc.querySelectorAll('.encoder-job svg').length,2);
+  assert.equal(doc.querySelector('.encoder-formulas').hasAttribute('open'),false);
+  assert.equal(doc.querySelector('[data-earlier-parts]').hasAttribute('open'),true);
+  assert.equal(app.eval('JSON.stringify(state)'),saved);
+  if(language==='en')for(const selector of ['.mission','#module-shelf'])assert.doesNotMatch(doc.querySelector(selector).textContent,/[\u3400-\u9fff]/);
+ }
+ assert.deepEqual([...app.c.I18n.missing],[]);
+ app.eval("switchLevel('causal')");assert.equal(doc.querySelector('.encoder-primer'),null);assert.equal(doc.querySelector('[data-earlier-parts]'),null);
+});
+
+test('encoder retains saved named copies, wiring and badges while grouped stock refunds correctly',async()=>{
+ const base=boot(),M=base.c.NeuralPrologue,old=M.solutions('encoder-layer');old.nodes[0].x=-3.19;
+ const key='neural-atelier-level-encoder-layer-v1',meta='neural-atelier-chapters-v1';
+ const storage=new Map([[key,JSON.stringify(old)],[meta,JSON.stringify({current:'encoder-layer',completed:['multihead','encoder-layer']})]]),app=boot(storage,'#encoder-layer');
+ assert.equal(app.eval('JSON.stringify(state)'),JSON.stringify(old));assert.equal(app.eval("progress.completed('encoder-layer')"),true);
+ assert.equal(app.document.querySelector('[data-add-module="encoder-add"] .stock-count').textContent,'0');
+ assert.ok(app.document.querySelector('.shelf-current [data-add-module="original-encoder"]'),'earned composite stays visible for collection');
+ await app.eval('run()');assert.equal(app.eval('levelPassed()'),true);assert.equal(app.eval('JSON.stringify(state)'),JSON.stringify(old));
+ app.eval("removeModule('ffn-add')");assert.equal(app.document.querySelector('[data-add-module="encoder-add"] .stock-count').textContent,'1');
+ app.document.querySelector('#undo').onclick();assert.equal(app.eval('JSON.stringify(state)'),JSON.stringify(old));
+ const extra=JSON.parse(JSON.stringify(old));extra.nodes.push({id:'encoder-add-2',kind:'encoder-add',x:6,z:3,links:[null,null]});
+ const legacy=boot(new Map([[key,JSON.stringify(extra)]]),'#encoder-layer');
+ assert.equal(legacy.eval('JSON.stringify(state)'),JSON.stringify(extra),'preexisting extra copies are kept, even beyond the new shared shelf quota');
+ assert.equal(legacy.eval("M.stock(state,'encoder-add')"),0);
+});
+
 test('a lesson with a single reference module retains choices and saves manual placement',()=>{
  const app=boot(new Map(),'#layernorm'),M=app.c.NeuralPrologue;
  assert.equal(app.eval('state.nodes.length'),0);assert.ok(app.document.querySelectorAll('[data-add-module]').length>1);

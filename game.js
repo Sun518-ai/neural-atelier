@@ -1,5 +1,5 @@
-import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=fusion-width-1';
-import {createProgress} from './level-progress.js?v=fusion-width-1';
+import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=encoder-guide-1';
+import {createProgress} from './level-progress.js?v=encoder-guide-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -34,6 +34,15 @@ const moduleShape=(kind,dim)=>M.moduleShape?.(kind,dim)??shape(dim);
 function packageDiagram(kind){
  const p=M.packages?.[kind];if(!p)return '';
  return `<div class="package-diagram" data-package="${kind}">${p.stages.map((names,i)=>`${i?'<span class="package-arrow" aria-hidden="true">↓</span>':''}<div class="package-stage">${names.map(name=>`<span>${name}</span>`).join('')}</div>`).join('')}</div><p class="package-note">${p.note}</p>`;
+}
+function encoderPrimer(){
+ const g=M.encoderGuide,x=[30,92,154];
+ const jobs=['exchange','process'].map((key,index)=>{
+  const job=g[key],paths=x.flatMap((from,i)=>x.filter((_,j)=>key==='exchange'||i===j).map(to=>`<path d="M${from} 20 L${to} 44" class="${to===92?'emphasized':''}"/>`)).join('');
+  const features=x.map((center,i)=>[0,1,2,3].map(j=>`<rect x="${center-15+j*8}" y="47" width="6" height="8" rx="1" opacity="${.3+((i+j)%4)*.2}"/>`).join('')).join('');
+  return `<section class="encoder-job" data-encoder-job="${key}"><h4><span>${index+1}</span>${job.title}</h4><small>${job.tag}</small><svg viewBox="0 0 184 58" aria-hidden="true">${paths}${x.map((center,i)=>`<text x="${center}" y="12" text-anchor="middle">${g.tokens[i]}</text>`).join('')}${features}</svg><p>${job.text}</p></section>`;
+ }).join('');
+ return `<div class="encoder-primer">${jobs}<div class="encoder-pattern"><b>${g.pattern}</b><span>${g.operations.join(' → ')}</span></div><details class="encoder-formulas"><summary>${g.formulaTitle}</summary><p>${g.first}</p><code>X1 = LN(X + MHA(X))</code><p>${g.second}</p><code>Y = LN(X1 + FFN(X1))</code><p>${g.formulaNote}</p></details></div>`;
 }
 const playbackSpeedKey='neural-atelier-playback-speed-v1';
 const defaultPlaybackSpeed=.25;
@@ -108,6 +117,8 @@ function stageChrome(){
  }
  if(reason?.kind==='swiglu'){
   $('#mission-reason-example').innerHTML=`<div class="swiglu-primer"><h4>${I18n.t("SwiGLU 是哪一段？")}</h4><p>${I18n.t("前面的进阶关已经把双路门控与降维组成 SwiGLU FFN；本关再接入归一化输入和残差。")}</p><div class="swiglu-source">${I18n.t("同一份输入 Z")}</div><div class="swiglu-branches"><div><b>${I18n.t("线性投影")}</b><span>${I18n.t("内容特征")}</span></div><div class="swiglu-gate"><b>${I18n.t("门投影 → SiLU")}</b><span>${I18n.t("调节系数")}</span></div></div><div class="swiglu-merge"><span aria-hidden="true">↓</span><b>${I18n.t("逐元素相乘")}</b><span aria-hidden="true">↓</span><b>${I18n.t("降维投影")}</b></div><p>${I18n.t("同样的内容值 2，乘系数 0.3 得到 0.6，乘 1.5 得到 3。系数随输入变化，决定这个特征贡献多少。")}</p></div>`;
+ }else if(reason?.kind==='encoder-layer'){
+  $('#mission-reason-example').innerHTML=encoderPrimer();
  }else if(reason?.kind==='embedding-width'){
   const ex=M.embeddingWidthExample;
   $('#mission-reason-example').innerHTML=`<div class="embedding-width-example">${[[ex.beforeLabel,ex.before],[ex.afterLabel,ex.after]].map(([label,values])=>`<div data-width="${values.length}"><small>${label}</small><div class="embedding-lookup"><b>${ex.token}</b><span aria-hidden="true">→</span><div class="embedding-coordinates">${values.map((value,i)=>`<span style="--feature-color:${['#397aa2','#8862aa','#b68036','#288778'][i]}">${fmt(value)}</span>`).join('')}</div></div></div>`).join('')}</div>`;
@@ -120,7 +131,7 @@ function stageChrome(){
  }).join('')}</tbody></table>`:'';
  if(c.packages?.length){
   const introduction=c.id==='pack-ffn'||c.id==='pack-scores';
-  $('#mission-reason-example').innerHTML+=c.packages.map(kind=>`<details class="package-primer" ${introduction?'open':''}><summary>${I18n.t('新组合组件')} · ${M.definitions[kind].name}</summary>${packageDiagram(kind)}</details>`).join('');
+  $('#mission-reason-example').innerHTML+=c.packages.map(kind=>`<details class="package-primer" ${introduction?'open':''}><summary>${c.packageLabel||I18n.t('新组合组件')} · ${M.definitions[kind].name}</summary>${packageDiagram(kind)}</details>`).join('');
  }
  $('#mission-reason-example').hidden=!$('#mission-reason-example').hasChildNodes();
  $('.route').innerHTML=`${I18n.t("<span>输入 token</span><i>→</i>")}${c.id==='ffn'?I18n.t("<span>归一化输入 · 已就绪</span><i>→</i>"):''}<strong>${c.concept}</strong><i>→</i><span>${c.outputTitle}${I18n.t("</span><span class=\"route-tail\">教学缩尺 ")}${c.shape}</span>`;
@@ -196,15 +207,24 @@ function renderShelf(){
  if(shelf.hidden)return;
  const cap=M.moduleLimit(stage());$('#module-count').textContent=collection?M.fusionCopy.collectedShort:state.nodes.length+' / '+cap;$('#module-count').setAttribute('aria-label',collection?M.fusionCopy.collected:I18n.t('台面数量 / 上限'));
  shelf.querySelector('summary').title=shelf.hasAttribute('open')?I18n.t("收起组件架"):I18n.t("展开组件架");
- $('#module-palette').innerHTML=(collection?Object.keys(available):state.palette||Object.keys(available)).filter(shelfUnlocked).map(kind=>{
-  const d=M.definitions[kind],remaining=collection?1:M.stock(state,kind),disabled=busy||collection||!M.canAdd(state,kind),w=M.weights[kind];
+ const palette=$('#module-palette'),earlier=palette.querySelector('[data-earlier-parts]'),earlierOpen=earlier?.dataset.level===stageId&&earlier.hasAttribute('open'),scrollTop=palette.scrollTop;
+ const kinds=[...new Set((collection?Object.keys(available):state.palette||Object.keys(available)).filter(shelfUnlocked).map(kind=>M.shelfKind(stage(),kind)))];
+ const renderStock=kind=>{
+  const d=M.definitions[kind],name=M.moduleName(stage(),kind),remaining=collection?1:M.stock(state,kind),disabled=busy||collection||!M.canAdd(state,kind),w=M.weights[kind];
   const symbols={layernorm:'LN',position:'sin',concat:'∥',encoder:'Enc',decoder:'Dec',activation:'∿',add:'+',residual:'+',multiply:'×',norm:'RMS',rope:'↻',score:'QKᵀ',mask:'◩',softmax:'σ',mix:'AV',attention:'Attn',ffn:'FFN'};
   const visual=w?`<span class="stock-matrix" aria-hidden="true" style="grid-template-columns:repeat(${w[0].length},1fr)">`+w.flat().slice(0,8).map(v=>`<i class="${v<0?'negative':''}"></i>`).join('')+'</span>':`<span class="stock-symbol" aria-hidden="true">${symbols[d.type]||'◇'}</span>`;
   const color=M.extraColors?.[kind]?'#'+M.extraColors[kind].toString(16).padStart(6,'0'):({project:'#5eaa9c',down:'#90a79a',add:'#c3a26f',gate:'#a894bf'})[kind]||'#8aa59a';
   const code=({'silu-ffn':'SiLU','swiglu-ffn':'SwiGLU','swiglu-residual':'+ FFN','original-transformer':'Enc/Dec','modern-block':'Block','single-attention':'1H','two-head-attention':'2H','single-cross-attention':'Cross',relu:'ReLU',layernorm2:'LN','ln-attn':'LN','ln-ffn':'LN','ln-cross':'LN',concat:'A ∥ B',position:'PE',project:'W',gate:'Wg',down:'Wd',output:'Wo',q:'Q',k:'K',v:'V',ropeq:'Q ↻',ropek:'K ↻',residual1:'+ A',residual2:'+ F'})[kind]||({activation:'SiLU',add:'+',residual:'+',multiply:'×',norm:'RMS',score:'QKᵀ',mask:'◩',softmax:'σ',mix:'AV',attention:'Attn',ffn:'FFN'})[d.type]||kind;
-  const description=`${d.name} · ${d.ins.map(dim=>moduleShape(kind,dim)).join(' + ')} → ${moduleShape(kind,d.out)} · ${collection?M.fusionCopy.useLater:I18n.t("可用数量")+' '+remaining+' / '+available[kind]} · ${I18n.t("双击查看说明")}`;
-  return `<div class="module-stock ${lastFusionKind===kind?'recently-crafted':''}" role="button" tabindex="${busy?'-1':'0'}" aria-disabled="${busy}" data-add-disabled="${disabled}" aria-label="${description}" title="${description}" data-add-module="${kind}" style="--stock-color:${color}">${visual}<span class="stock-description"><b class="stock-name">${d.name}</b><small>${d.ins.map(dim=>moduleShape(kind,dim)).join(' + ')} → ${moduleShape(kind,d.out)}</small></span><b class="stock-code" aria-hidden="true">${code}</b><span class="stock-count" aria-hidden="true">${remaining}</span></div>`;
- }).join('');
+  const description=`${name} · ${d.ins.map(dim=>moduleShape(kind,dim)).join(' + ')} → ${moduleShape(kind,d.out)} · ${collection?M.fusionCopy.useLater:I18n.t("可用数量")+' '+remaining+' / '+available[kind]} · ${I18n.t("双击查看说明")}`;
+  return `<div class="module-stock ${lastFusionKind===kind?'recently-crafted':''}" role="button" tabindex="${busy?'-1':'0'}" aria-disabled="${busy}" data-add-disabled="${disabled}" aria-label="${description}" title="${description}" data-add-module="${kind}" style="--stock-color:${color}">${visual}<span class="stock-description"><b class="stock-name">${name}</b><small>${d.ins.map(dim=>moduleShape(kind,dim)).join(' + ')} → ${moduleShape(kind,d.out)}</small></span><b class="stock-code" aria-hidden="true">${code}</b><span class="stock-count" aria-hidden="true">${remaining}</span></div>`;
+ };
+ const grouping=stage().shelf;
+ if(grouping){
+  const current=kinds.filter(kind=>{const d=M.definitions[kind];return d.out===grouping.featureWidth&&d.ins.every(dim=>dim===grouping.featureWidth);});
+  const ordered=[...grouping.order.filter(kind=>current.includes(kind)),...current.filter(kind=>!grouping.order.includes(kind))],older=kinds.filter(kind=>!current.includes(kind));
+  palette.innerHTML=`<section class="shelf-current" aria-label="${grouping.current}"><h4>${grouping.current}</h4>${ordered.map(renderStock).join('')}</section><details class="shelf-earlier" data-earlier-parts data-level="${stageId}" ${earlierOpen?'open':''}><summary>${grouping.earlier}<span>${older.length}</span></summary><p>${grouping.note}</p><div class="shelf-earlier-list">${older.map(renderStock).join('')}</div></details>`;
+ }else palette.innerHTML=kinds.map(renderStock).join('');
+ palette.scrollTop=scrollTop;
  world?.syncShelf?.();
 }
 function chooseModule(kind){if(busy||!stage().buildable||!shelfUnlocked(kind)||!M.canAdd(state,kind)||world?.focused())return;pending=selectedWire=actionNode=null;placing=kind;world?.clearConnectionError?.();world?.clearPreview?.();world?.labels();say(I18n.t("拖到台面松开；也可以点空位放下。"));}
@@ -258,7 +278,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=fusion-width-1');
+ const {createSceneArt}=await import('./scene-art.js?v=encoder-guide-1');
  const art=createSceneArt(T,scene,colors,{anisotropy:renderer.capabilities.getMaxAnisotropy()});art.surroundings(samples(),stage());
  let fusionEffect=null;
  const assembly=new T.Group(),wires=new T.Group();scene.add(assembly,wires);const neuronGeo=new T.SphereGeometry(.115,16,12);let elements=[],curves=[],packets=[],drag=null,preview=null,yaw=.05,pitch=.8,zoom=stage().zoom,lastDepth=-1;
@@ -316,10 +336,10 @@ try{
   if(busy&&!stage().sequence){const marker=addLabel('span','row-marker',flowIdentity(),{'data-owner':'R','data-row':sample<3?String(sample):'validation'},()=>sample<3?new T.Vector3(stage().sourceX-1,.99,art.rowZ(sample)):new T.Vector3(stage().sourceX,1.4,2));marker.style.setProperty('--row-color',colorHex(art.rowColor(sample)));}
   stage().sources.forEach(id=>addLabel('button','port '+(pending===id?'pending':''),(stage().sourcePorts?.[id]||(id==='R'&&stageId!=='ffn'?'X':id))+' · '+shape(stage().sourceDim||2),{'type':'button','data-output':id,'aria-label':`${outputName(id)}${I18n.t(" 输出口，")}${shape(stage().sourceDim||2)}`},()=>point(id)));
   if(stageId==='ffn')addLabel('span','source-label','Z = RMSNorm(R)',{},()=>new T.Vector3(stage().sourceX,.65,2.55));
-  state.nodes.forEach(n=>{const d=definition(n.id);addLabel('button','node-label '+(selected===n.id?'selected ':''),`${nodeName(n.id)}<small>${d.ins.map(dim=>moduleShape(M.nodeKind(n),dim)).join(' / ')} → ${moduleShape(M.nodeKind(n),d.out)}</small>`,{'type':'button','data-node':n.id,'aria-label':`${d.name}${I18n.t(" 模块，拖动移动")}`},()=>new T.Vector3(n.x,1.85,n.z-1.15));
+  state.nodes.forEach(n=>{const d=definition(n.id);addLabel('button','node-label '+(selected===n.id?'selected ':''),`${nodeName(n.id)}<small>${d.ins.map(dim=>moduleShape(M.nodeKind(n),dim)).join(' / ')} → ${moduleShape(M.nodeKind(n),d.out)}</small>`,{'type':'button','data-node':n.id,'aria-label':`${nodeName(n.id)}${I18n.t(" 模块，拖动移动")}`},()=>new T.Vector3(n.x,1.85,n.z-1.15));
    if(stage().engine)addLabel('button','device-badge device-'+n.device+(busy&&current?.depths[n.id]===level?' processing':''),n.device.toUpperCase(),{'type':'button','data-assign':n.id,'data-owner':n.id,'aria-label':definition(n.id).name+I18n.t(" 当前在 ")+n.device+I18n.t("，选择后点击芯片区域")},()=>new T.Vector3(n.x,1.9,n.z-.45));
-   d.ins.forEach((dim,i)=>addLabel('button','port input '+(n.links[i]?'connected ':''),n.id==='enattn'?'Q/K/V':moduleShape(M.nodeKind(n),dim),{'type':'button','data-input':`${n.id}:${i}`,'aria-label':`${d.name}${I18n.t(" 输入 ")}${i+1}，${moduleShape(M.nodeKind(n),dim)}${n.links[i]?I18n.t("，已连接"):''}`},()=>point(n.id,'in',i)));
-   addLabel('button','port '+(pending===n.id?'pending':''),n.id==='enqkv'?'Q/K/V':moduleShape(M.nodeKind(n),d.out),{'type':'button','data-output':n.id,'aria-label':`${d.name}${I18n.t(" 输出口，")}${moduleShape(M.nodeKind(n),d.out)}`},()=>point(n.id));
+   d.ins.forEach((dim,i)=>addLabel('button','port input '+(n.links[i]?'connected ':''),n.id==='enattn'?'Q/K/V':moduleShape(M.nodeKind(n),dim),{'type':'button','data-input':`${n.id}:${i}`,'aria-label':`${nodeName(n.id)}${I18n.t(" 输入 ")}${i+1}，${moduleShape(M.nodeKind(n),dim)}${n.links[i]?I18n.t("，已连接"):''}`},()=>point(n.id,'in',i)));
+   addLabel('button','port '+(pending===n.id?'pending':''),n.id==='enqkv'?'Q/K/V':moduleShape(M.nodeKind(n),d.out),{'type':'button','data-output':n.id,'aria-label':`${nodeName(n.id)}${I18n.t(" 输出口，")}${moduleShape(M.nodeKind(n),d.out)}`},()=>point(n.id));
    if(busy&&current?.values[n.id]&&!stage().sequence&&(current.depths[n.id]||0)<=level&&fault?.id!==n.id)addLabel('span','node-value',`${flowIdentity()} · ${vector(current.values[n.id])}`,{'data-owner':n.id},()=>new T.Vector3(n.x,.5,n.z+1.45));
   });
   addLabel('button','port input '+(state.sink?'connected ':''),String(shape(stage().sinkDim)),{'type':'button','data-input':'sink:0','aria-label':`${I18n.t("本层输出入口，")}${shape(stage().sinkDim)}${state.sink?I18n.t("，已连接"):''}`},()=>point('sink'));
@@ -448,7 +468,7 @@ try{
   overview={target:cameraTarget.clone(),zoom,yaw,pitch};shelfFocus={kind,selected};focusId='shelf-card';
   selected=actionNode=pending=placing=selectedWire=null;drag=lastTap=null;clearPreview();clearPlacement();
   const d=M.definitions[kind];shelfModel=art.module(scene,{id:'shelf-card',kind,x:0,z:0,links:d.ins.map(()=>null)},d,M.weights,{register:false});shelfModel.userData.shelfPreview=true;
-  document.body.classList.add('module-focused');openModuleCard(null,kind,d.name);
+  document.body.classList.add('module-focused');openModuleCard(null,kind,M.moduleName(stage(),kind));
   assembly.visible=false;wires.visible=false;art.focus(true);labels();inspect();
   const width=Math.max(4.1,3.5*host.clientWidth/host.clientHeight);transition(new T.Vector3(0,.7,0),width/23,.32,.92);
  }

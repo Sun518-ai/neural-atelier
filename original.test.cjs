@@ -199,6 +199,28 @@ test('a complete original encoder has two separate post-norm residual wrappers',
  differs('encoder-layer',s=>s.nodes.find(n=>n.id==='ffn-add').links[0]='R');
 });
 
+test('encoder shelf aliases share stock and build the same layer with repeated generic operators',()=>{
+ const level=M.levels['encoder-layer'],s=M.solutions(level.id);
+ const rename=id=>({'ffn-add':'encoder-add-2','ln-ffn':'ln-attn-2'})[id]||id;
+ for(const n of s.nodes){n.kind=M.shelfKind(level,n.kind);n.id=rename(n.id);n.links=n.links.map(rename);}
+ s.sink=rename(s.sink);
+ for(const {v}of M.samplesFor(level.id)){
+  const ev=M.evaluate(s,v);assert.equal(ev.error,null);assert.ok(close(ev.output,M.reference(v,level.id)));
+ }
+ for(const [kind,alias]of [['encoder-add','ffn-add'],['ln-attn','ln-ffn']]){
+  assert.equal(M.stock(s,kind),0);assert.equal(M.stock(s,alias),0);assert.equal(M.canAdd(s,alias),false);
+  assert.notEqual(M.nodeName(s,kind),M.nodeName(s,kind+'-2'));
+  assert.ok(M.validNodeId(kind+'-2',kind));
+  assert.ok(M.removeNode(s,kind+'-2'));assert.equal(M.stock(s,kind),1);assert.equal(M.stock(s,alias),1);
+ }
+ const old=M.solutions(level.id);
+ assert.equal(M.stock(old,'encoder-add'),0);assert.equal(M.stock(old,'ln-attn'),0);
+ assert.equal(M.nodeName(old,'encoder-add'),'残差相加 · 1');assert.equal(M.nodeName(old,'ffn-add'),'残差相加 · 2');
+ assert.equal(M.nodeName(old,'ln-attn'),'LayerNorm · 1');assert.equal(M.nodeName(old,'ln-ffn'),'LayerNorm · 2');
+ assert.ok(M.removeNode(old,'ffn-add'));assert.equal(M.stock(old,'encoder-add'),1);
+ const decoder=M.solutions('decoder-layer');assert.equal(M.stock(decoder,'encoder-add'),1,'other lessons retain their stock rules');
+});
+
 test('masked decoder attention cannot read future target positions',()=>{
  const a=[1,0,0,1,1,1],b=[1,0,0,1,-8,3];
  const x=O.multi(a,a,true),y=O.multi(b,b,true);assert.ok(close(x.slice(0,4),y.slice(0,4)));assert.ok(!close(x.slice(4),y.slice(4)));

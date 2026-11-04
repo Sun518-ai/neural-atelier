@@ -68,11 +68,15 @@ const kindOf=(state,id)=>nodeKind(state.nodes.find(n=>n.id===id))||id;
 const definitionFor=(state,id)=>definitions[kindOf(state,id)];
 const inventory=level=>level.inventory||Object.fromEntries(level.nodes.map(k=>[k,1]));
 const moduleLimit=level=>level.maxModules??level.nodes.length;
-function stock(state,kind){return Math.max(0,(inventory(levelFor(state))[kind]||0)-state.nodes.filter(n=>nodeKind(n)===kind).length);}
+// Some lessons reuse an identical operator at several named positions. Keep
+// those saved kinds intact, but offer one shelf entry with a shared copy limit.
+const shelfKind=(level,kind)=>level.componentAliases?.[kind]||kind;
+const moduleName=(level,kind)=>level.componentNames?.[shelfKind(level,kind)]||definitions[kind]?.name||kind;
+function stock(state,kind){const level=levelFor(state),representative=shelfKind(level,kind);return Math.max(0,(inventory(level)[kind]?(inventory(level)[representative]||0):0)-state.nodes.filter(n=>shelfKind(level,nodeKind(n))===representative).length);}
 function canAdd(state,kind){const level=levelFor(state);return !!level.buildable&&stock(state,kind)>0&&state.nodes.length<moduleLimit(level);}
 function nextId(state,kind){if(!state.nodes.some(n=>n.id===kind))return kind;let i=2;while(state.nodes.some(n=>n.id===kind+'-'+i))i++;return kind+'-'+i;}
 function validNodeId(id,kind){return typeof id==='string'&&typeof kind==='string'&&(id===kind||new RegExp('^'+kind+'-(?:[2-9]|[1-9][0-9]+)$').test(id));}
-function nodeName(state,id){const kind=kindOf(state,id),d=definitions[kind];if(!d)return id;const copies=state.nodes.filter(n=>nodeKind(n)===kind);return d.name+(copies.length>1?' · '+(id===kind?'1':id.slice(kind.length+1)):'');}
+function nodeName(state,id){const kind=kindOf(state,id),d=definitions[kind];if(!d)return id;const level=levelFor(state),representative=shelfKind(level,kind),copies=state.nodes.filter(n=>shelfKind(level,nodeKind(n))===representative),grouped=Object.values(level.componentAliases||{}).includes(representative);return moduleName(level,kind)+(copies.length>1?' · '+(grouped?copies.findIndex(n=>n.id===id)+1:id===kind?'1':id.slice(kind.length+1)):'');}
 
 function bounds(level){return {left:level.sourceX+2.8,right:level.sinkX-2.8,back:-(level.boardDepth||(level.id==='ffn'?11:7))/2+1.6,front:(level.boardDepth||(level.id==='ffn'?11:7))/2-1.6};}
 function shuffled(items,random=Math.random){const list=[...items];for(let i=list.length-1;i>0;i--){const j=Math.floor(random()*(i+1));[list[i],list[j]]=[list[j],list[i]];}return list;}
@@ -108,7 +112,7 @@ function reference(v,levelId='ffn'){
 const sourceValues=(state,v)=>Object.fromEntries(levelFor(state).sources.map(id=>[id,id==='Z'?norm(v):v]));
 function evaluate(state,v){const level=levelFor(state),context={state,level,input:v},values=api.sourceValues(state,v),depths=Object.fromEntries(level.sources.map(id=>[id,0])),visiting=new Set(),order=[];let error=null,bad=null;
  function run(id){if(id==null)throw {message:I18n.t("有一个输入口还没有接线。")};if(values[id])return values[id];const node=state.nodes.find(n=>n.id===id),kind=nodeKind(node),d=definitions[kind];if(!node||!d)throw {message:I18n.t("线路指向了不存在的模块。")};if(visiting.has(id))throw {message:I18n.t("线路绕成了环，数值走不出来。"),node:id};visiting.add(id);
- const inputs=d.ins.map((dim,i)=>{if(!node.links[i])throw {message:`「${d.name}${I18n.t("」的输入 ")}${i+1}${I18n.t(" 还没接上。")}`,node:id,port:i};const a=run(node.links[i]);if(a.length!==dim)throw {message:`「${d.name}${I18n.t("」需要 ")}${dim}${I18n.t(" 维，收到 ")}${a.length}${I18n.t(" 维。")}`,node:id,port:i};return a;});
+ const inputs=d.ins.map((dim,i)=>{if(!node.links[i])throw {message:`「${moduleName(level,kind)}${I18n.t("」的输入 ")}${i+1}${I18n.t(" 还没接上。")}`,node:id,port:i};const a=run(node.links[i]);if(a.length!==dim)throw {message:`「${moduleName(level,kind)}${I18n.t("」需要 ")}${dim}${I18n.t(" 维，收到 ")}${a.length}${I18n.t(" 维。")}`,node:id,port:i};return a;});
  let out;if(api.operations?.[kind])out=api.operations[kind](inputs,context);else if(weights[kind])out=linear(inputs[0],weights[kind]);else if(kind==='silu')out=inputs[0].map(silu);else out=inputs[0].map((x,i)=>kind==='multiply'?x*inputs[1][i]:x+inputs[1][i]);
  values[id]=out;depths[id]=1+Math.max(...node.links.map(k=>depths[k]));order.push(id);visiting.delete(id);return out;}
  const dim=levelFor(state).sinkDim;
@@ -124,5 +128,5 @@ function valueForKind(state,ev,kind){
  return null;
 }
 function connect(state,from,to,port){const level=levelFor(state);if(!level.sources.includes(from)&&!state.nodes.some(n=>n.id===from))return I18n.t("没有找到这个端口");if(to!=='sink'&&!state.nodes.some(n=>n.id===to))return I18n.t("没有找到这个端口");const out=from==='R'||from==='Z'?(level.sourceDim||2):definitionFor(state,from)?.out,dim=to==='sink'?level.sinkDim:definitionFor(state,to)?.ins[port];if(!out||!dim)return I18n.t("没有找到这个端口");if(from===to)return I18n.t("不能把输出接回自己");if(out!==dim)return `${I18n.t("维度接不上：输出 ")}${out}${I18n.t(" 维，入口需要 ")}${dim}${I18n.t(" 维。")}`;if(to==='sink')state.sink=from;else state.nodes.find(n=>n.id===to).links[port]=from;return null;}
-const api={sourceValues,valueForKind,nodeKind,kindOf,definitionFor,inventory,moduleLimit,stock,canAdd,validNodeId,nodeName,weights,norm,linear,silu,definitions,levels,levelFor,initial,samples,reference,evaluate,connect,disconnect,bounds,arrange,placement,addNode,removeNode};if(typeof module!=='undefined'&&module.exports)module.exports=api;else scope.NeuralPrologue=api;
+const api={sourceValues,valueForKind,nodeKind,kindOf,definitionFor,inventory,moduleLimit,shelfKind,moduleName,stock,canAdd,validNodeId,nodeName,weights,norm,linear,silu,definitions,levels,levelFor,initial,samples,reference,evaluate,connect,disconnect,bounds,arrange,placement,addNode,removeNode};if(typeof module!=='undefined'&&module.exports)module.exports=api;else scope.NeuralPrologue=api;
 })(globalThis);
