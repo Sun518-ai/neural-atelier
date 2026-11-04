@@ -15,6 +15,67 @@ async function boot({reduced=true,frameMs=1000,onFrame=()=>{},languages=['zh-CN'
  await vm.runInContext('(async()=>{'+src+'})()',c);
  assert.ok(c.testAPI.getWorld(),'3D boot failed');return {c,document,window,api:c.testAPI,scenes,time:()=>now,view:()=>view,camera:()=>renderedCamera};
 }
+test('calculation focus fades the projection scaffold for every token while keeping matrices, highlights and contributions readable',async()=>{
+ let app;const seen=new Set(),sparks=new Set();
+ const units=()=>app.scenes.at(-1).children.flatMap(g=>g.children).filter(g=>['q','k','v'].includes(g.userData.node));
+ app=await boot({reduced:false,frameMs:120,onFrame:({document})=>{
+  if(!app)return;
+  for(const unit of units()){
+   const data=unit.userData.sequenceProjection;if(!data||unit.children[0].material.opacity>.13)continue;
+   const id=unit.userData.node;seen.add(id+'/'+data.row);
+   assert.equal(document.querySelector('.node-label[data-node="'+id+'"]').hidden,true,'the name stays out of the running calculation');
+   for(const base of unit.children.slice(0,2)){assert.ok(base.material.opacity<=.13);assert.equal(base.material.depthWrite,false);assert.equal(base.castShadow,false);}
+   const faces=unit.children.filter(o=>o.userData.detailText);assert.equal(faces.length,4);
+   faces.forEach(face=>assert.equal(face.material.opacity,1,'weight numbers remain opaque'));
+   unit.children.filter(o=>o.geometry?.type==='TubeGeometry').forEach(path=>assert.ok(path.material.opacity<.081,'the static weight web recedes'));
+   const active=unit.children.find(o=>o.userData.projectionColumn===unit.userData.activeColumn);if(active)assert.ok(active.visible,'column emphasis remains visible');
+   if(unit.children.some(o=>o.userData.contribution&&o.visible&&o.material.opacity>.4))sparks.add(id);
+   app.scenes.at(-1).traverse(o=>{const edge=o.userData.wire;if(edge&&(edge.from===id||edge.to===id))assert.ok(o.material.opacity<.15,'nearby permanent wires recede without changing moving packets');});
+  }
+ }});
+ const M=app.c.NeuralPrologue;app.api.switchLevel('qkv');app.api.setState(M.solutions('qkv'));app.api.getWorld().rebuild();const saved=JSON.stringify(app.api.getState());await app.api.run();
+ assert.equal(seen.size,9);assert.deepEqual([...sparks].sort(),['k','q','v']);assert.equal(JSON.stringify(app.api.getState()),saved);
+ for(const unit of units()){
+  assert.equal(app.document.querySelector('.node-label[data-node="'+unit.userData.node+'"]').hidden,false);
+  for(const base of unit.children.slice(0,2)){assert.equal(base.material.opacity,1);assert.equal(base.material.transparent,false);assert.equal(base.material.depthWrite,true);assert.equal(base.castShadow,true);}
+ }
+ app.scenes.at(-1).traverse(o=>{if(o.userData.wire){assert.equal(o.material.opacity,1);assert.equal(o.material.transparent,false);assert.equal(o.material.depthWrite,true);}});
+ assert.equal(app.document.querySelectorAll('#test-results .pass').length,3);
+});
+
+test('the same focus treatment restores all module families exactly and does not accumulate opacity loss',async()=>{
+ const app=await boot(),M=app.c.NeuralPrologue,T=app.c.T,scene=new T.Scene(),colors=Object.fromEntries(Object.keys(M.definitions).map(id=>[id,0x6e9e90])),art=app.c.createSceneArt(T,scene,colors);
+ for(const kind of ['project','gate','silu','multiply','add','norm','layernorm2','wide-embedding','position','score','mask','softmax','aggregate','ropeq','self-heads']){
+  const levelId=M.exampleLevel(kind,'wire'),level=M.levels[levelId],d=M.definitions[kind],ex=M.extraExample(kind,levelId)||app.c.exampleFor(M,kind,levelId);
+  const unit=art.module(scene,{id:kind,x:0,z:0,links:d.ins.map(()=>null)},d,M.weights);
+  const snapshot=()=>{const values=[];unit.traverse(o=>{if(o.userData.computationBackdrop)values.push([o.material.opacity,o.material.transparent,o.material.depthWrite,o.castShadow,o.receiveShadow]);});return values;};
+  const idle=snapshot(),options={sequence:!!level.sequence,detailed:d.type==='linear',paired:!level.sequence&&['multiply','add'].includes(d.type),other:ex.inputs[1]?.[1],words:M.samplesFor(levelId)[ex.sampleIndex||0].word.split(' / ')};
+  art.processing(kind,.55,ex.inputs[0][1],ex.output[1],colors[kind],options);assert.ok(art.focusCalculations().has(kind),kind);
+  assert.ok(unit.children[0].material.opacity<.13,kind+' base fades');const focused=snapshot();
+  for(let i=0;i<4;i++){art.focusCalculations();assert.deepEqual(snapshot(),focused,kind+' camera render must not compound alpha');}
+  if(d.type==='linear')unit.children.filter(o=>o.userData.detailText).forEach(face=>assert.equal(face.material.opacity,1));
+  if(d.type==='activation')unit.children.filter(o=>o.geometry?.type==='TubeGeometry').forEach(curve=>assert.equal(curve.material.opacity,1,'the activation curve explains the operation'));
+  art.processing(kind,.55,ex.inputs[0][1],ex.output[1],colors[kind],options);art.focusCalculations();assert.deepEqual(snapshot(),focused,kind+' repeated animation time preserves focus');
+  art.clearProcessing();assert.equal(art.focusCalculations().size,0);assert.deepEqual(snapshot(),idle,kind+' stop restores materials and shadows');
+ }
+});
+
+test('paused calculation focus survives camera and language changes, then clears immediately on stop and level change',async()=>{
+ let app,phase='waiting',frames=0,stop;
+ const unit=()=>app.scenes.at(-1).children.flatMap(g=>g.children).find(g=>g.userData.node==='project');
+ const event=(target,type,props={})=>{const e=new app.window.Event(type,{bubbles:true,cancelable:true});Object.assign(e,props);target.dispatchEvent(e);};
+ app=await boot({reduced:false,frameMs:80,onFrame:({document})=>{
+  if(!app||!unit())return;
+  if(phase==='waiting'&&unit().children[0].material.opacity<.13){app.api.togglePause();phase='paused';return;}
+  if(phase!=='paused')return;
+  assert.ok(unit().children[0].material.opacity<.13);assert.equal(document.querySelector('.node-label[data-node="project"]').hidden,true);
+  if(++frames===2){event(document.querySelector('#scene'),'wheel',{deltaY:-100});app.c.I18n.setPreference('en');assert.ok(unit().children[0].material.opacity<.13);assert.equal(document.querySelector('.node-label[data-node="project"]').hidden,true);}
+  if(frames===5){phase='stopped';stop=app.api.run();assert.equal(unit().children[0].material.opacity,1);assert.equal(document.querySelector('.node-label[data-node="project"]').hidden,false);}
+ }});
+ app.api.switchLevel('projection');app.api.setState(app.c.NeuralPrologue.solutions('projection'));app.api.getWorld().rebuild();const saved=JSON.stringify(app.api.getState());await app.api.run();await stop;
+ assert.equal(phase,'stopped');assert.equal(JSON.stringify(app.api.getState()),saved);app.api.switchLevel('scores');assert.equal(app.document.querySelector('.node-label[hidden]'),null);assert.equal(app.document.querySelectorAll('.processing-packet').length,0);
+});
+
 test('QKV projections animate every token and weight column at the gate-projection pace, then gather the actual results',async()=>{
  let app;const starts=new Map(),seen=new Set(),paths=new Map();
  app=await boot({reduced:false,frameMs:100,onFrame:({now,document})=>{

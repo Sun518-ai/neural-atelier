@@ -1,5 +1,5 @@
-import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=wire-av-1';
-import {createProgress} from './level-progress.js?v=wire-av-1';
+import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=compute-focus-1';
+import {createProgress} from './level-progress.js?v=compute-focus-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -241,7 +241,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=wire-av-1');
+ const {createSceneArt}=await import('./scene-art.js?v=compute-focus-1');
  const art=createSceneArt(T,scene,colors,{anisotropy:renderer.capabilities.getMaxAnisotropy()});art.surroundings(samples(),stage());
  const assembly=new T.Group(),wires=new T.Group();scene.add(assembly,wires);const neuronGeo=new T.SphereGeometry(.115,16,12);let elements=[],curves=[],packets=[],drag=null,preview=null,yaw=.05,pitch=.8,zoom=stage().zoom,lastDepth=-1;
  const cameraTarget=new T.Vector3();let focusId=null,shelfFocus=null,shelfModel=null,overview=null,cameraFrame=0,transitioning=false,lastTap=null;
@@ -280,9 +280,9 @@ try{
  const packetIdentity=from=>stage().dualSource?(['Z','source-embed','original-encoder','original-k','original-v'].includes(kindOf(from))?I18n.t('源序列'):I18n.t('目标前缀')):flowIdentity();
  function rowEndpoint(kind){return new T.Vector3(kind==='source'?stage().sourceX+.34:stage().sinkX+.18,kind==='source'?.95:.98,art.rowZ(sample));}
  function wire(from,to,index){
-  const cv=curve(point(from),point(to,'in',index)),color=nodeColor(from),dim=Math.min(4,(from==='R'||from==='Z')?(stage().sourceDim||2):definition(from).out);
-  for(let j=0;j<dim;j++){const offset=(j-(dim-1)/2)*.035,points=cv.getPoints(32).map(p=>p.add(new T.Vector3(0,0,offset))),lane=new T.CatmullRomCurve3(points);wires.add(new T.Mesh(new T.TubeGeometry(lane,32,.012,6,false),material(color)));}
-  const arrow=new T.Mesh(new T.ConeGeometry(.08,.19,8),material(color));arrow.position.copy(cv.getPoint(.6));arrow.quaternion.setFromUnitVectors(new T.Vector3(0,1,0),cv.getTangent(.6).normalize());wires.add(arrow);curves.push({from,to,index,curve:cv});
+  const cv=curve(point(from),point(to,'in',index)),color=nodeColor(from),dim=Math.min(4,(from==='R'||from==='Z')?(stage().sourceDim||2):definition(from).out),visuals=[];
+  for(let j=0;j<dim;j++){const offset=(j-(dim-1)/2)*.035,points=cv.getPoints(32).map(p=>p.add(new T.Vector3(0,0,offset))),lane=new T.CatmullRomCurve3(points),mesh=new T.Mesh(new T.TubeGeometry(lane,32,.012,6,false),material(color));wires.add(mesh);visuals.push(mesh);}
+  const arrow=new T.Mesh(new T.ConeGeometry(.08,.19,8),material(color));arrow.position.copy(cv.getPoint(.6));arrow.quaternion.setFromUnitVectors(new T.Vector3(0,1,0),cv.getTangent(.6).normalize());wires.add(arrow);visuals.push(arrow);visuals.forEach(mesh=>mesh.userData.wire={from,to});curves.push({from,to,index,curve:cv,visuals});
  }
  function neuralModule(n){art.module(assembly,n,definition(n.id),M.weights);}
  function rebuild(){if(focusId)leaveFocus();clearPreview();dispose(assembly);dispose(wires);art.resetUnits();curves=[];state.nodes.forEach(neuralModule);state.nodes.forEach(n=>n.links.forEach((id,i)=>{if(id)wire(id,n.id,i);}));if(state.sink)wire(state.sink,'sink',0);labels();}
@@ -356,8 +356,8 @@ try{
   }
   return footprints;
  }
- function fadePort(el,x,y,footprints,width,height){
-  let fade=0;const halfWidth=(width||27)/2,halfHeight=(height||27)/2;
+ function fadePort(el,x,y,footprints,width,height,calculating){
+  let fade=calculating.get(el.dataset.owner)||0;const halfWidth=(width||27)/2,halfHeight=(height||27)/2;
   for(const p of packets)if((p.worked||p.tokenOperation||p.centering)&&(p.node.id===el.dataset.output||(p.paired||p.tokenOperation||p.centering||p.sequenceProjection)&&el.dataset.input?.startsWith(p.node.id+':')))fade=Math.max(fade,p.portFade||0);
   for(const p of footprints){
    const gap=Math.hypot(Math.max(0,Math.abs(x-p.x)-halfWidth),Math.max(0,Math.abs(y-p.y)-halfHeight))-p.r;
@@ -368,6 +368,8 @@ try{
  }
  function render(){
   const w=host.clientWidth,h=host.clientHeight;if(!w||!h)return;
+  const calculating=art.focusCalculations();
+  for(const edge of curves){const fade=Math.max(calculating.get(edge.from)||0,calculating.get(edge.to)||0);for(const mesh of edge.visuals){const m=mesh.material,transparent=fade>0;if(m.transparent!==transparent){m.transparent=transparent;m.needsUpdate=true;}m.opacity=1-.86*fade;m.depthWrite=!transparent;}}
   renderer.setSize(w,h,false);const width=23*zoom,height=width*h/w;
   Object.assign(camera,{left:-width/2,right:width/2,top:height/2,bottom:-height/2});
   camera.position.set(cameraTarget.x+Math.sin(yaw)*24,cameraTarget.y+Math.sin(pitch)*24,cameraTarget.z+Math.cos(yaw)*Math.cos(pitch)*24);
@@ -379,8 +381,8 @@ try{
   // Measure overlays together before moving them, avoiding layout per port.
   const layouts=elements.map(({el,pos})=>({el,xy:project(pos()),width:el.offsetWidth,height:el.offsetHeight}));
   layouts.forEach(({el,xy:[x,y],width,height})=>{
-   el.hidden=!!focusId&&(el.dataset.owner!==focusId||el.classList.contains('node-label')||el.classList.contains('local-fault')||el.classList.contains('fault-pin'));
-   if(el.classList.contains('port')){el.disabled=!!focusId;fadePort(el,x,y,flow,width,height);}
+   el.hidden=!!focusId&&(el.dataset.owner!==focusId||el.classList.contains('node-label')||el.classList.contains('local-fault')||el.classList.contains('fault-pin'))||el.classList.contains('node-label')&&calculating.has(el.dataset.owner);
+   if(el.classList.contains('port')){el.disabled=!!focusId;fadePort(el,x,y,flow,width,height,calculating);}
    if(el.classList.contains('local-fault')||el.classList.contains('wire-actions')){
     el.style.left=Math.max(12,Math.min(w-width-12,x+18))+'px';el.style.top=Math.max(12,Math.min(h-height-46,y+15))+'px';
    }else{el.style.left=x+'px';el.style.top=y+'px';}
