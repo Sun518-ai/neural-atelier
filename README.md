@@ -8,7 +8,7 @@
 
 **[Play in your browser →](https://hacking.pub/games/neural-atelier/)** · [Run locally](#run-locally) · [How to play](#how-to-play)
 
-49 levels · Desktop / WebGL 2 · English + Chinese · No account required
+51 levels · Desktop / WebGL 2 · English + Chinese · No account required
 
 ## Inside the workshop
 
@@ -24,16 +24,19 @@ The circuit you build determines the result. Run it to see data move through the
 
 ## From the first wire to an inference engine
 
-The **27-level main track** teaches the original Transformer first. **13 modern extensions** then compare SiLU, SwiGLU, RMSNorm, Pre-LN, and RoPE. A separate **9-level bonus track** explores on-device inference inspired by Qwen 27B, Kapitsa, and Apple ANE. Choose a track from the level menu; finishing one does not automatically enter another.
+The **29-level main track** teaches the original Transformer first. **13 modern extensions** then compare SiLU, SwiGLU, RMSNorm, Pre-LN, and RoPE. A separate **9-level bonus track** explores on-device inference inspired by Qwen 27B, Kapitsa, and Apple ANE. Choose a track from the level menu; finishing one does not automatically enter another.
 
 | Stage | What you build and explore |
 | --- | --- |
 | **Prologue · 7 levels** | Route a vector, project, apply ReLU, down-project, assemble the original FFN, add a residual, and practice placing modules. |
 | **Original network · 20 levels** | Embeddings, sinusoidal positions, LayerNorm and Post-LN; Q/K/V, scores, Softmax, weighted aggregation, single-head and multi-head attention; a four-feature bridge, encoder, masked attention, cross-attention, decoder, and the complete encoder–decoder. Finish with vocabulary scores, selection and a separate generation-loop exercise. |
+| **Packaging bridges · 2 levels** | Rebuild the familiar ReLU FFN and Q/K scoring pipeline with a packaged module. Internal operations remain unchanged; the old modules remain available. |
 | **Modern extensions · 13 levels** | Compare SiLU, single-branch and gated FFNs, SwiGLU, RMSNorm, Pre-LN, RoPE and a modern decoder block. |
 | **On-device inference · 9 levels** | Place work on CPU, GPU, and ANE; explore tensor layouts, batching, KV caching, quantization, fusion, parallel execution, and prefix reuse. |
 
 The main track follows the operation order in [Attention Is All You Need (2017)](https://arxiv.org/abs/1706.03762): ReLU FFNs, additive sinusoidal positions and **Post-LN**, including both the encoder and decoder. Basic operators use two features; complete layers use **four features, two heads and one layer** so repeated normalization still leaves visible feature differences. LayerNorm uses scale 1 and shift 0, FFN biases are zero, and inference disables dropout. The fixed weights are for learning, not a trained translation model. The final generation-loop exercise uses a separate transition table to explain control flow.
+
+After the placement tutorial, shelves accumulate previously taught modules for the current vector or sequence format. They include optional choices, not just a reference circuit’s parts; future modules stay locked until introduced. Original and modern chapters share learned components, while engine lessons group work into costed scheduling tasks. Module cards show the internals of packaged computations. Existing circuits, completion badges and chapter URLs are preserved.
 
 The later puzzles add memory and execution-cost constraints to the numerical goals. A correct circuit is the starting point; choosing where and how it runs becomes part of the puzzle.
 

@@ -67,6 +67,15 @@ body{min-width:1080px}#game{max-width:1920px;padding:18px 24px}main{grid-templat
 #mission-reason-example th{text-align:left;font-size:9px;font-weight:500;color:#718477;padding-bottom:5px}#mission-reason-example td{padding:5px 0;border-top:1px solid #d3decd;font:10px/1.5 ui-monospace,monospace;white-space:nowrap}
 #mission-reason-example [data-factor="scale"]{color:#75628e}#mission-reason-example strong{color:#397f71}
 #mission-reason-scope{display:block;margin-top:8px;font-size:10px;line-height:1.6;color:#758278}
+.package-primer{margin-top:9px;border:1px solid #cbd6c5;border-radius:6px;padding:8px;background:#f4f5ea80}
+.package-primer>summary{cursor:pointer;font-size:11px;line-height:1.6;color:#365a4d;font-weight:600}
+.package-primer>summary:focus-visible{outline:2px solid #648b78;outline-offset:3px}
+.package-diagram{display:grid;justify-items:center;gap:3px;margin:10px 0 6px}
+.package-stage{display:flex;flex-wrap:wrap;justify-content:center;gap:5px;max-width:100%}
+.package-stage>span{padding:5px 9px;background:#e5ecdd;border:1px solid #b9cdbd;border-radius:5px;font:11px/1.45 ui-monospace,monospace;color:#365a4d;overflow-wrap:anywhere;text-align:center}
+.package-arrow{font-size:12px;line-height:1;color:#839b87}
+#card-package{margin:12px 0;padding:10px 12px;border:1px solid #cbd6c5;border-radius:6px;background:#f5f4e780}
+#card-package[hidden]{display:none}.package-note{font-size:11px;line-height:1.65;color:#657064}
 .swiglu-primer{padding:10px;border:1px solid #cbd8c6;border-radius:8px;background:#fffdf666}.swiglu-primer h4{margin:0;font-size:11px;font-weight:600;color:#365a4d}
 .swiglu-source{margin-top:10px;text-align:center;font-size:10px;color:#60736c}.swiglu-source::after{content:"↙　↘";display:block;color:#91a58f;font-size:12px;line-height:1.2}
 .swiglu-branches{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:4px}.swiglu-branches>div{display:flex;flex-direction:column;justify-content:center;gap:3px;padding:7px 4px;border-radius:5px;background:#dce9dc;text-align:center;color:#397f71}

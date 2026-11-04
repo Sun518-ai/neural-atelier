@@ -36,7 +36,7 @@ test('all levels automatically display their report beside the run controls',asy
  for(const id of Object.keys(M.levels)){
   app.eval(`switchLevel('${id}');state=M.solutions(stageId);if(stage().engine)state.settings.precision=16;`);
   assert.ok(app.document.querySelector('.mission h2').textContent.length);
-  const reason=app.document.querySelector('#mission-reason'),example=app.document.querySelector('#mission-reason-example'),hasExample=['gating','residual','ffn'].includes(id);
+  const reason=app.document.querySelector('#mission-reason'),example=app.document.querySelector('#mission-reason-example'),hasExample=['gating','residual','ffn'].includes(id)||!!M.levels[id].packages?.length;
   assert.equal(reason.hidden,false,id+' explains its purpose');
   for(const field of ['title','text','takeaway'])assert.ok(app.document.querySelector('#mission-reason-'+field).textContent.trim(),id+' '+field);
   assert.equal(example.hidden,!hasExample);assert.equal(example.hasChildNodes(),hasExample,'text-only lessons clear earlier worked examples');
@@ -96,7 +96,7 @@ test('partially constructed tables and older complete saves retain their positio
  const legacy=boot(new Map([['neural-atelier-prologue-v1',JSON.stringify(old)]]));assert.equal(legacy.eval('stageId'),'ffn');assert.equal(legacy.eval('state.nodes.length'),6);assert.equal(legacy.eval('state.nodes[0].x'),1.234);assert.equal(legacy.eval('state.sink'),'add');
 });
 test('bonus levels are accessible separately and never follow the main finale',()=>{
- const app=boot(new Map(),'', ['en-US']);app.eval('levelMenu()');assert.equal(app.document.querySelectorAll('[data-level]').length,27);assert.equal(app.document.querySelector('[data-level="placement"]'),null);
+ const app=boot(new Map(),'', ['en-US']);app.eval('levelMenu()');assert.equal(app.document.querySelectorAll('[data-level]').length,29);assert.equal(app.document.querySelector('[data-level="placement"]'),null);
  app.document.querySelector('[data-track="engine"]').dispatchEvent(new app.window.Event('click',{bubbles:true}));assert.equal(app.document.querySelectorAll('[data-level]').length,9);assert.ok(app.document.querySelector('[data-level="placement"]'));assert.doesNotMatch(app.document.querySelector('#level-menu').textContent,/[\u3400-\u9fff]/);
  app.eval("switchLevel('autoregressive');progress.complete(stageId);refresh()");assert.equal(app.document.querySelector('#next-level').hidden,true);app.eval("switchLevel('kv-cache');levelMenu()");assert.equal(app.eval('menuTrack'),'engine');
 });
@@ -325,13 +325,34 @@ test('the shelf remains usable after the placement tutorial and original lessons
  app.eval("switchLevel('workshop')");assert.equal(app.eval('state.nodes.length'),0,'the placement tutorial still requires taking a module');
 });
 
-test('a single-stock original lesson requires placement and keeps a manually placed unconnected module on reload',()=>{
+test('a lesson with a single reference module retains choices and saves manual placement',()=>{
  const app=boot(new Map(),'#layernorm'),M=app.c.NeuralPrologue;
- assert.equal(app.eval('state.nodes.length'),0);assert.equal(app.document.querySelectorAll('[data-add-module]').length,1);
- assert.equal(app.document.querySelector('#module-count').textContent,'0 / 1');
- app.eval("chooseModule('layernorm2');placeModule(0,0)");assert.equal(app.eval('state.nodes.length'),1);assert.equal(app.eval("M.canAdd(state,'layernorm2')"),false);
+ assert.equal(app.eval('state.nodes.length'),0);assert.ok(app.document.querySelectorAll('[data-add-module]').length>1);
+ assert.equal(app.document.querySelector('#module-count').textContent,'0 / 3');
+ app.eval("chooseModule('layernorm2');placeModule(0,0)");assert.equal(app.eval('state.nodes.length'),1);assert.equal(app.eval("M.canAdd(state,'layernorm2')"),true);
  const saved=app.eval('JSON.stringify(state)'),reopened=boot(app.storage,'#layernorm');assert.equal(reopened.eval('JSON.stringify(state)'),saved);
- reopened.document.querySelector('#reset').onclick();assert.equal(reopened.eval('state.nodes.length'),0);assert.equal(reopened.eval("M.stock(state,'layernorm2')"),1);
+ reopened.document.querySelector('#reset').onclick();assert.equal(reopened.eval('state.nodes.length'),0);assert.equal(reopened.eval("M.stock(state,'layernorm2')"),2);
+});
+
+test('expanded shelves preserve an old circuit, palette order and completion badges',()=>{
+ const base=boot(),M=base.c.NeuralPrologue,old=M.solutions('scores');
+ old.palette=['k','score','q'];old.nodes[0].x=-3.25;old.nodes[0].z=1.75;
+ const key='neural-atelier-level-scores-v1',storage=new Map([[key,JSON.stringify(old)],['neural-atelier-chapters-v1',JSON.stringify({current:'scores',completed:['qkv','scores','softmax']})]]);
+ const app=boot(storage,'#scores'),state=JSON.parse(app.eval('JSON.stringify(state)'));
+ assert.deepEqual(state.nodes,JSON.parse(JSON.stringify(old.nodes)));assert.equal(state.sink,old.sink);
+ assert.deepEqual(state.palette.slice(0,3),old.palette);assert.ok(state.palette.includes('v'));
+ assert.equal(app.eval("progress.completed('qkv')&&progress.completed('scores')&&progress.completed('softmax')"),true);
+ assert.ok(app.document.querySelector('[data-add-module="v"]'));assert.equal(app.document.querySelector('[data-add-module="softmax"]'),null);
+});
+
+test('packaging introductions explain the old operations in both languages',()=>{
+ for(const language of ['zh-CN','en-US'])for(const [id,kind]of [['pack-ffn','relu-ffn'],['pack-scores','original-weights']]){
+  const app=boot(new Map(),'#'+id,[language]),doc=app.document;
+  assert.equal(app.eval('state.nodes.length'),0);assert.equal(app.eval('state.sink'),null);
+  assert.ok(doc.querySelector('.package-primer[open]'));assert.ok(doc.querySelector('[data-package="'+kind+'"]'));
+  assert.match(doc.querySelector('#mission-reason-example').textContent,id==='pack-ffn'?/ReLU/:/QKᵀ/);
+  if(language==='en-US')assert.doesNotMatch(doc.querySelector('.mission').textContent,/[\u3400-\u9fff]/);
+ }
 });
 
 test('old auto-filled original starts are archived once and can be restored without running',()=>{
@@ -370,8 +391,8 @@ test('formerly fixed saved modules can be returned, placed and reconnected with 
  const first=boot(),storage=new Map(),saved=first.eval("M.solutions('normalize')");saved.nodes[0].x=-.75;saved.nodes[0].z=.8;
  storage.set('neural-atelier-level-normalize-v1',JSON.stringify(saved));const app=boot(storage,'#normalize');
  assert.equal(app.eval('state.nodes[0].x'),-.75);assert.equal(app.eval('state.sink'),'norm');
- app.eval("select('norm');removeModule()");assert.equal(app.eval('state.nodes.length'),0);assert.equal(app.eval('state.sink'),null);assert.equal(app.eval("M.stock(state,'norm')"),1);
- app.eval("chooseModule('norm');placeModule(0,0);link('R','norm',0);link('norm','sink',0)");assert.equal(app.eval("M.stock(state,'norm')"),0);
+ app.eval("select('norm');removeModule()");assert.equal(app.eval('state.nodes.length'),0);assert.equal(app.eval('state.sink'),null);assert.equal(app.eval("M.stock(state,'norm')"),2);
+ app.eval("chooseModule('norm');placeModule(0,0);link('R','norm',0);link('norm','sink',0)");assert.equal(app.eval("M.stock(state,'norm')"),1);
  const again=boot(storage,'#normalize');assert.equal(again.eval('state.nodes.length'),1);assert.equal(again.eval('state.nodes[0].x'),0);assert.equal(again.eval('state.sink'),'norm');
  app.eval("$('#undo').onclick()");assert.equal(app.eval('state.sink'),null);assert.equal(app.eval('state.nodes[0].links[0]'),'R');
  app.eval("switchLevel('placement');const removed=state.nodes.find(n=>n.id==='enqkv');const position=[removed.x,removed.z];removeModule('enqkv');chooseModule('enqkv');placeModule(...position)");

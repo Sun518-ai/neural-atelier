@@ -1074,7 +1074,7 @@ test('dragging a module card previews the operator, places one copy and dismisse
 test('shelf cards inspect every available kind without placing a node, including exhausted stock',async()=>{
  const app=await boot({languages:['en-US']}),doc=app.document,M=app.c.NeuralPrologue;doc.querySelector('#welcome').close();
  const event=(target,type,properties={})=>{const e=new app.window.Event(type,{bubbles:true,cancelable:true});Object.assign(e,properties);target.dispatchEvent(e);};
- for(const level of ['workshop','ffn','attention','block']){
+ for(const level of ['workshop','scores','pack-ffn','pack-scores','multihead','encoder-layer','encoder-decoder','ffn','attention','block']){
   app.api.switchLevel(level);const saved=JSON.stringify(app.api.getState()),view=app.view();
   for(const kind of Object.keys(M.inventory(M.levels[level]))){
    const card=doc.querySelector(`[data-add-module="${kind}"]`);event(card,'click');event(card,'dblclick');await new Promise(setImmediate);

@@ -1,5 +1,5 @@
-import {cardFor,exampleFor} from './module-cards.js?v=qkv-v-outlet-1';
-import {createProgress} from './level-progress.js?v=qkv-v-outlet-1';
+import {cardFor,exampleFor} from './module-cards.js?v=learned-shelf-1';
+import {createProgress} from './level-progress.js?v=learned-shelf-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -30,6 +30,11 @@ try{const saved=localStorage.getItem(shelfSizeKey);setShelfSize(saved===null?0:s
 $('#shelf-smaller').onclick=()=>setShelfSize(shelfSize-1);
 $('#shelf-larger').onclick=()=>setShelfSize(shelfSize+1);
 const shape=dim=>stage().shapes?.[dim]||(stage().sequence?({3:I18n.t("3 个 ID"),6:'3 × 2',9:'3 × 3',12:'3 × 4',18:'3 × 6'}[dim]||dim):dim);
+const moduleShape=(kind,dim)=>M.moduleShape?.(kind,dim)??shape(dim);
+function packageDiagram(kind){
+ const p=M.packages?.[kind];if(!p)return '';
+ return `<div class="package-diagram" data-package="${kind}">${p.stages.map((names,i)=>`${i?'<span class="package-arrow" aria-hidden="true">↓</span>':''}<div class="package-stage">${names.map(name=>`<span>${name}</span>`).join('')}</div>`).join('')}</div><p class="package-note">${p.note}</p>`;
+}
 const playbackSpeedKey='neural-atelier-playback-speed-v1';
 const defaultPlaybackSpeed=.25;
 let playbackSpeed=defaultPlaybackSpeed;
@@ -107,6 +112,10 @@ function stageChrome(){
   const i=reason.feature,u=M.linear(input,M.weights.up)[i],g=M.linear(input,M.weights.gate)[i],s=M.silu(g);
   return `<tr><td>${vector(input)}</td><td><span data-factor="content">${fmt(u)}</span> × <span data-factor="scale">${fmt(s)}</span> ≈ <strong data-factor="result">${fmt(u*s)}</strong></td></tr>`;
  }).join('')}</tbody></table>`:'';
+ if(c.packages?.length){
+  const introduction=c.id==='pack-ffn'||c.id==='pack-scores';
+  $('#mission-reason-example').innerHTML+=c.packages.map(kind=>`<details class="package-primer" ${introduction?'open':''}><summary>${I18n.t('新组合组件')} · ${M.definitions[kind].name}</summary>${packageDiagram(kind)}</details>`).join('');
+ }
  $('#mission-reason-example').hidden=!$('#mission-reason-example').hasChildNodes();
  $('.route').innerHTML=`${I18n.t("<span>输入 token</span><i>→</i>")}${c.id==='ffn'?I18n.t("<span>归一化输入 · 已就绪</span><i>→</i>"):''}<strong>${c.concept}</strong><i>→</i><span>${c.outputTitle}${I18n.t("</span><span class=\"route-tail\">教学缩尺 ")}${c.shape}</span>`;
 }
@@ -177,8 +186,8 @@ function renderShelf(){
   const visual=w?`<span class="stock-matrix" aria-hidden="true" style="grid-template-columns:repeat(${w[0].length},1fr)">`+w.flat().slice(0,8).map(v=>`<i class="${v<0?'negative':''}"></i>`).join('')+'</span>':`<span class="stock-symbol" aria-hidden="true">${symbols[d.type]||'◇'}</span>`;
   const color=M.extraColors?.[kind]?'#'+M.extraColors[kind].toString(16).padStart(6,'0'):({project:'#5eaa9c',down:'#90a79a',add:'#c3a26f',gate:'#a894bf'})[kind]||'#8aa59a';
   const code=({relu:'ReLU',layernorm2:'LN','ln-attn':'LN','ln-ffn':'LN','ln-cross':'LN',concat:'A ∥ B',position:'PE',project:'W',gate:'Wg',down:'Wd',output:'Wo',q:'Q',k:'K',v:'V',ropeq:'Q ↻',ropek:'K ↻',residual1:'+ A',residual2:'+ F'})[kind]||({activation:'SiLU',add:'+',residual:'+',multiply:'×',norm:'RMS',score:'QKᵀ',mask:'◩',softmax:'σ',mix:'AV',attention:'Attn',ffn:'FFN'})[d.type]||kind;
-  const description=`${d.name} · ${d.ins.map(shape).join(' + ')} → ${shape(d.out)} · ${I18n.t("可用数量")} ${remaining} / ${available[kind]} · ${I18n.t("双击查看说明")}`;
-  return `<div class="module-stock" role="button" tabindex="${busy?'-1':'0'}" aria-disabled="${busy}" data-add-disabled="${disabled}" aria-label="${description}" title="${description}" data-add-module="${kind}" style="--stock-color:${color}">${visual}<span class="stock-description"><b class="stock-name">${d.name}</b><small>${d.ins.map(shape).join(' + ')} → ${shape(d.out)}</small></span><b class="stock-code" aria-hidden="true">${code}</b><span class="stock-count" aria-hidden="true">${remaining}</span></div>`;
+  const description=`${d.name} · ${d.ins.map(dim=>moduleShape(kind,dim)).join(' + ')} → ${moduleShape(kind,d.out)} · ${I18n.t("可用数量")} ${remaining} / ${available[kind]} · ${I18n.t("双击查看说明")}`;
+  return `<div class="module-stock" role="button" tabindex="${busy?'-1':'0'}" aria-disabled="${busy}" data-add-disabled="${disabled}" aria-label="${description}" title="${description}" data-add-module="${kind}" style="--stock-color:${color}">${visual}<span class="stock-description"><b class="stock-name">${d.name}</b><small>${d.ins.map(dim=>moduleShape(kind,dim)).join(' + ')} → ${moduleShape(kind,d.out)}</small></span><b class="stock-code" aria-hidden="true">${code}</b><span class="stock-count" aria-hidden="true">${remaining}</span></div>`;
  }).join('');
  world?.syncShelf?.();
 }
@@ -189,7 +198,7 @@ $('#module-palette').ondblclick=e=>{const b=e.target.closest('[data-add-module]'
 $('#module-palette').addEventListener('keydown',e=>{if(e.key!=='Enter'&&e.key!==' ')return;const b=e.target.closest('[data-add-module]');if(!b||busy)return;e.preventDefault();if(e.key==='Enter')world?.focusShelf?.(b.dataset.addModule);else if(b.dataset.addDisabled!=='true')chooseModule(b.dataset.addModule);});
 function removeModule(id=selected){if(busy)return;const next=clone(state);if(!M.removeNode(next,id))return;checkpoint();state=next;if(selected===id)selected=null;pending=placing=actionNode=null;world?.clearPlacement?.();changed();say(I18n.t("组件已收回，相关连线已移除。"));}
 $('#remove-module').onclick=()=>removeModule();
-function inspect(){renderShelf();const d=state.nodes.some(n=>n.id===selected)?definition(selected):null;$('#inspect-focus').disabled=!d||world?.focused()===selected;if(!d){$('#inspect-name').textContent=I18n.t("点一个模块，看看里面");$('#inspect-desc').textContent=stage().sequence?I18n.t("这里的每条线传递整段输入的张量，包含各位置的特征。接线会决定真实计算。"):I18n.t("这里的每条线传递一个完整向量。你接的线路会决定真实计算结果。");$('#inspect-visual').innerHTML='';$('#inspect-values').innerHTML='';return;}$('#inspect-name').textContent=nodeName(selected);$('#inspect-desc').textContent=(cardFor(kindOf(selected),stageId)||M.extraCard?.(kindOf(selected),stageId))?.meaning||d.hint;const w=weightsFor(selected);$('#inspect-visual').innerHTML=w?`<div class="matrix-label">${w.length} × ${w[0].length}${I18n.t(" 权重矩阵 · 每格为一个权重</div><div class=\"matrix\" style=\"grid-template-columns:repeat(")}${w[0].length},1fr)">${w.flat().map(x=>`<span>${fmt(x)}</span>`).join('')}</div>`:`<div class="matrix-label">${d.ins.map(shape).join(I18n.t(" 与 "))} → ${shape(d.out)}</div>`;
+function inspect(){renderShelf();const d=state.nodes.some(n=>n.id===selected)?definition(selected):null;$('#inspect-focus').disabled=!d||world?.focused()===selected;if(!d){$('#inspect-name').textContent=I18n.t("点一个模块，看看里面");$('#inspect-desc').textContent=stage().sequence?I18n.t("这里的每条线传递整段输入的张量，包含各位置的特征。接线会决定真实计算。"):I18n.t("这里的每条线传递一个完整向量。你接的线路会决定真实计算结果。");$('#inspect-visual').innerHTML='';$('#inspect-values').innerHTML='';return;}$('#inspect-name').textContent=nodeName(selected);$('#inspect-desc').textContent=(cardFor(kindOf(selected),M.exampleLevel(kindOf(selected),stageId))||M.extraCard?.(kindOf(selected),M.exampleLevel(kindOf(selected),stageId)))?.meaning||d.hint;const w=weightsFor(selected);$('#inspect-visual').innerHTML=w?`<div class="matrix-label">${w.length} × ${w[0].length}${I18n.t(" 权重矩阵 · 每格为一个权重</div><div class=\"matrix\" style=\"grid-template-columns:repeat(")}${w[0].length},1fr)">${w.flat().map(x=>`<span>${fmt(x)}</span>`).join('')}</div>`:`<div class="matrix-label">${d.ins.map(dim=>moduleShape(kindOf(selected),dim)).join(I18n.t(" 与 "))} → ${moduleShape(kindOf(selected),d.out)}</div>`;
  const n=state.nodes.find(n=>n.id===selected),values=current?.values||M.sourceValues(state,samples()[sample].v);
  $('#inspect-values').innerHTML=n.links.map((id,i)=>`${I18n.t("<div class=\"value-line\">输入 ")}${i+1} · ${id?outputName(id):I18n.t("未连接")}<b>${vector(values[id])}</b></div>`).join('')+`${I18n.t("<div class=\"value-line\">输出<b>")}${vector(values[selected])}</b></div>`;
 }
@@ -224,7 +233,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=qkv-v-outlet-1');
+ const {createSceneArt}=await import('./scene-art.js?v=learned-shelf-1');
  const art=createSceneArt(T,scene,colors,{anisotropy:renderer.capabilities.getMaxAnisotropy()});art.surroundings(samples(),stage());
  const assembly=new T.Group(),wires=new T.Group();scene.add(assembly,wires);const neuronGeo=new T.SphereGeometry(.115,16,12);let elements=[],curves=[],packets=[],drag=null,preview=null,yaw=.05,pitch=.8,zoom=stage().zoom,lastDepth=-1;
  const cameraTarget=new T.Vector3();let focusId=null,shelfFocus=null,shelfModel=null,overview=null,cameraFrame=0,transitioning=false,lastTap=null;
@@ -260,10 +269,10 @@ try{
   if(busy&&!stage().sequence){const marker=addLabel('span','row-marker',flowIdentity(),{'data-owner':'R','data-row':sample<3?String(sample):'validation'},()=>sample<3?new T.Vector3(stage().sourceX-1,.99,art.rowZ(sample)):new T.Vector3(stage().sourceX,1.4,2));marker.style.setProperty('--row-color',colorHex(art.rowColor(sample)));}
   stage().sources.forEach(id=>addLabel('button','port '+(pending===id?'pending':''),(stage().sourcePorts?.[id]||(id==='R'&&stageId!=='ffn'?'X':id))+' · '+shape(stage().sourceDim||2),{'type':'button','data-output':id,'aria-label':`${outputName(id)}${I18n.t(" 输出口，")}${shape(stage().sourceDim||2)}`},()=>point(id)));
   if(stageId==='ffn')addLabel('span','source-label','Z = RMSNorm(R)',{},()=>new T.Vector3(stage().sourceX,.65,2.55));
-  state.nodes.forEach(n=>{const d=definition(n.id);addLabel('button','node-label '+(selected===n.id?'selected ':''),`${nodeName(n.id)}<small>${d.ins.map(shape).join(' / ')} → ${shape(d.out)}</small>`,{'type':'button','data-node':n.id,'aria-label':`${d.name}${I18n.t(" 模块，拖动移动")}`},()=>new T.Vector3(n.x,1.85,n.z-1.15));
+  state.nodes.forEach(n=>{const d=definition(n.id);addLabel('button','node-label '+(selected===n.id?'selected ':''),`${nodeName(n.id)}<small>${d.ins.map(dim=>moduleShape(M.nodeKind(n),dim)).join(' / ')} → ${moduleShape(M.nodeKind(n),d.out)}</small>`,{'type':'button','data-node':n.id,'aria-label':`${d.name}${I18n.t(" 模块，拖动移动")}`},()=>new T.Vector3(n.x,1.85,n.z-1.15));
    if(stage().engine)addLabel('button','device-badge device-'+n.device+(busy&&current?.depths[n.id]===level?' processing':''),n.device.toUpperCase(),{'type':'button','data-assign':n.id,'data-owner':n.id,'aria-label':definition(n.id).name+I18n.t(" 当前在 ")+n.device+I18n.t("，选择后点击芯片区域")},()=>new T.Vector3(n.x,1.9,n.z-.45));
-   d.ins.forEach((dim,i)=>addLabel('button','port input '+(n.links[i]?'connected ':''),n.id==='enattn'?'Q/K/V':shape(dim),{'type':'button','data-input':`${n.id}:${i}`,'aria-label':`${d.name}${I18n.t(" 输入 ")}${i+1}，${shape(dim)}${n.links[i]?I18n.t("，已连接"):''}`},()=>point(n.id,'in',i)));
-   addLabel('button','port '+(pending===n.id?'pending':''),n.id==='enqkv'?'Q/K/V':shape(d.out),{'type':'button','data-output':n.id,'aria-label':`${d.name}${I18n.t(" 输出口，")}${shape(d.out)}`},()=>point(n.id));
+   d.ins.forEach((dim,i)=>addLabel('button','port input '+(n.links[i]?'connected ':''),n.id==='enattn'?'Q/K/V':moduleShape(M.nodeKind(n),dim),{'type':'button','data-input':`${n.id}:${i}`,'aria-label':`${d.name}${I18n.t(" 输入 ")}${i+1}，${moduleShape(M.nodeKind(n),dim)}${n.links[i]?I18n.t("，已连接"):''}`},()=>point(n.id,'in',i)));
+   addLabel('button','port '+(pending===n.id?'pending':''),n.id==='enqkv'?'Q/K/V':moduleShape(M.nodeKind(n),d.out),{'type':'button','data-output':n.id,'aria-label':`${d.name}${I18n.t(" 输出口，")}${moduleShape(M.nodeKind(n),d.out)}`},()=>point(n.id));
    if(busy&&current?.values[n.id]&&!stage().sequence&&(current.depths[n.id]||0)<=level&&fault?.id!==n.id)addLabel('span','node-value',`${flowIdentity()} · ${vector(current.values[n.id])}`,{'data-owner':n.id},()=>new T.Vector3(n.x,.5,n.z+1.45));
   });
   addLabel('button','port input '+(state.sink?'connected ':''),String(shape(stage().sinkDim)),{'type':'button','data-input':'sink:0','aria-label':`${I18n.t("本层输出入口，")}${shape(stage().sinkDim)}${state.sink?I18n.t("，已连接"):''}`},()=>point('sink'));
@@ -395,23 +404,25 @@ try{
   const width=Math.max(4.1,3.5*host.clientWidth/host.clientHeight);transition(new T.Vector3(0,.7,0),width/23,.32,.92);
  }
  function openModuleCard(id,kind=kindOf(id),name=nodeName(id)){
-  const c=cardFor(kind,stageId)||M.extraCard(kind,stageId),d=M.definitions[kind],card=$('#module-card');
-  card.style.setProperty('--card-accent',c.color);$('.card-example-title').firstChild.textContent=stage().sequence?I18n.t("用三个输入位置看一次"):I18n.t("用“猫”的向量看一次");
+  const cardStageId=M.exampleLevel(kind,stageId),cardStage=M.levels[cardStageId];
+  const c=cardFor(kind,cardStageId)||M.extraCard(kind,cardStageId),d=M.definitions[kind],card=$('#module-card');
+  card.style.setProperty('--card-accent',c.color);$('.card-example-title').firstChild.textContent=cardStage.sequence?I18n.t("用三个输入位置看一次"):I18n.t("用“猫”的向量看一次");
   for(const [field,value]of Object.entries({name,seal:c.seal,english:c.english,family:c.family,number:stage().chapter,ability:c.ability,meaning:c.meaning,formula:c.formula,purpose:c.purpose}))$('#card-'+field).textContent=value;
-  $('#card-stats').innerHTML=`${I18n.t("<div><span>向量维度</span><b>")}${d.ins.map(shape).join(' / ')} → ${shape(d.out)}${I18n.t("</b></div><div><span>权重矩阵</span><b>")}${c.weight}${I18n.t("</b></div><div><span>计算方式</span><b>")}${c.trait}</b></div>`;
-  $('#card-example-input').textContent=stageId==='ffn'?'R = [1, 1]':stage().sequence?I18n.t("三个位置的特征 · 教学缩尺"):'X = [1, 1]';
-  const names={Q:I18n.t("查询"),K:I18n.t("键"),V:I18n.t("内容"),A:I18n.t("注意力"),L:I18n.t("词表分数"),T:I18n.t("选出的词"),B:I18n.t("计算结果"),X:I18n.t("输入向量"),P:I18n.t("投影结果"),R:I18n.t("原始输入"),Z:I18n.t("归一化输入"),G:I18n.t("门分支"),U:I18n.t("内容分支"),S:stage().original?I18n.t('相关分数 S'):['activation','plain-ffn'].includes(stageId)?I18n.t("SiLU 的输出"):I18n.t("激活门值"),H:I18n.t("门控结果"),F:I18n.t("本次变换"),Y:I18n.t("本层输出")};
-  Object.assign(names,M.original?.exampleLabels(stageId));
-  if(stageId==='add-norm')names.R=I18n.t('残差相加结果');
-  const ex=M.extraExample?.(kind,stageId)||exampleFor(M,kind,stageId),vectorRow=([name,values],output=false,focus=-1,label=names[name]||name)=>`<div class="card-vector ${output?'result':''}" data-symbol="${name}"><b>${name} · ${label}</b><span ${(stage().original||ex.rms)&&stage().sequence?'style="display:grid;grid-template-columns:repeat('+Math.ceil(values.length/3)+',minmax(0,1fr))"':''}>${values.map((v,i)=>`<i class="${v<0?'negative':''} ${i===focus?'example-focus':''}">${fmt(v)}</i>`).join('')}</span></div>`;
+  $('#card-stats').innerHTML=`${I18n.t("<div><span>向量维度</span><b>")}${d.ins.map(dim=>moduleShape(kind,dim)).join(' / ')} → ${moduleShape(kind,d.out)}${I18n.t("</b></div><div><span>权重矩阵</span><b>")}${c.weight}${I18n.t("</b></div><div><span>计算方式</span><b>")}${c.trait}</b></div>`;
+  $('#card-package').hidden=!M.packages?.[kind];$('#card-package').innerHTML=M.packages?.[kind]?`<h4>${I18n.t('内部组成')}</h4>${packageDiagram(kind)}`:'';
+  $('#card-example-input').textContent=cardStageId==='ffn'?'R = [1, 1]':cardStage.sequence?I18n.t("三个位置的特征 · 教学缩尺"):'X = [1, 1]';
+  const names={Q:I18n.t("查询"),K:I18n.t("键"),V:I18n.t("内容"),A:I18n.t("注意力"),L:I18n.t("词表分数"),T:I18n.t("选出的词"),B:I18n.t("计算结果"),X:I18n.t("输入向量"),P:I18n.t("投影结果"),R:I18n.t("原始输入"),Z:I18n.t("归一化输入"),G:I18n.t("门分支"),U:I18n.t("内容分支"),S:cardStage.original?I18n.t('相关分数 S'):['activation','plain-ffn'].includes(cardStageId)?I18n.t("SiLU 的输出"):I18n.t("激活门值"),H:I18n.t("门控结果"),F:I18n.t("本次变换"),Y:I18n.t("本层输出")};
+  Object.assign(names,M.original?.exampleLabels(cardStageId));
+  if(cardStageId==='add-norm')names.R=I18n.t('残差相加结果');
+  const ex=M.extraExample?.(kind,cardStageId)||exampleFor(M,kind,cardStageId),vectorRow=([name,values],output=false,focus=-1,label=names[name]||name)=>`<div class="card-vector ${output?'result':''}" data-symbol="${name}"><b>${name} · ${label}</b><span ${(cardStage.original||ex.rms)&&cardStage.sequence?'style="display:grid;grid-template-columns:repeat('+Math.ceil(values.length/3)+',minmax(0,1fr))"':''}>${values.map((v,i)=>`<i class="${v<0?'negative':''} ${i===focus?'example-focus':''}">${fmt(v)}</i>`).join('')}</span></div>`;
   const formulaNumber=v=>Number(v.toFixed(4)).toString();
-  if(ex.sampleIndex===0&&!stage().sequence){$('.card-example-title').firstChild.textContent=I18n.t("用“我”的向量看一次");$('#card-example-input').textContent=ex.exampleSource[0]+' = '+vector(ex.exampleSource[1]);}
+  if(ex.sampleIndex===0&&!cardStage.sequence){$('.card-example-title').firstChild.textContent=I18n.t("用“我”的向量看一次");$('#card-example-input').textContent=ex.exampleSource[0]+' = '+vector(ex.exampleSource[1]);}
   if(ex.rms){
    const {width,meanSquare,divisor}=ex.rms,v=ex.inputs[0][1].slice(0,width);
    $('#card-example-values').innerHTML=ex.inputs.map(v=>vectorRow(v)).join('')+`<div class="card-silu-worked"><small>${I18n.t('这里只展开第一个位置的归一化，其他位置分别计算。')}</small><code>mean(X²) = ${formulaNumber(meanSquare)}<br>r = √(${formulaNumber(meanSquare)} + ε) ≈ ${formulaNumber(divisor)}<br>${vector(v)} / ${formulaNumber(divisor)} ≈ ${vector(ex.output[1].slice(0,width))}</code></div>`+vectorRow(ex.output,true);
   }else if(ex.normalization){
    const {mean,variance,epsilon}=ex.normalization;
-   $('#card-example-values').innerHTML=ex.inputs.map(v=>vectorRow(v)).join('')+`<div class="card-silu-worked">${stage().sequence?'<small>'+I18n.t('这里只展开第一个位置的归一化，其他位置分别计算。')+'</small>':''}<code>μ = ${formulaNumber(mean)}<br>σ² = ${formulaNumber(variance)}<br>(x − μ) / √(σ² + ${epsilon})</code></div>`+vectorRow(ex.output,true);
+   $('#card-example-values').innerHTML=ex.inputs.map(v=>vectorRow(v)).join('')+`<div class="card-silu-worked">${cardStage.sequence?'<small>'+I18n.t('这里只展开第一个位置的归一化，其他位置分别计算。')+'</small>':''}<code>μ = ${formulaNumber(mean)}<br>σ² = ${formulaNumber(variance)}<br>(x − μ) / √(σ² + ${epsilon})</code></div>`+vectorRow(ex.output,true);
   }else if(ex.activation?.kind==='relu'){
    const {feature}=ex.activation,input=ex.inputs[0],output=ex.output,x=input[1][feature];
    $('#card-example-values').innerHTML=`<div class="card-silu-example">${vectorRow(input,false,feature)}<div class="card-silu-link"><b>ReLU</b><span>${input[1].map((_,i)=>`<i class="${i===feature?'example-focus':''}">↓</i>`).join('')}</span></div>${vectorRow(output,true,feature)}<div class="card-silu-worked"><code>max(0, ${formulaNumber(x)}) = ${fmt(output[1][feature])}</code></div></div>`;
@@ -434,8 +445,8 @@ try{
    const a=[4,2],b=[.25,1.5],product=a.map((v,i)=>v*b[i]),sum=a.map((v,i)=>v+b[i]);
    contrast.innerHTML=`<b>${I18n.t('用同两组数比较：')}</b><code>A = ${vector(a)}　B = ${vector(b)}</code><div class="merge-compare-row ${d.type==='multiply'?'current':''}" data-operation="multiply"><strong>×</strong><span><code>A ⊙ B = ${vector(product)}</code><small>${I18n.t('逐项调节强弱；乘以 1 保持原值。')}</small></span></div><div class="merge-compare-row ${d.type!=='multiply'?'current':''}" data-operation="add"><strong>+</strong><span><code>A + B = ${vector(sum)}</code><small>${I18n.t('在原值上增加或减少；加上 0 保持原值。')}</small></span></div><small>${I18n.t('这里只比较运算：门控中 B 是调节系数，残差中 B 是修改量。')}</small>`;
   }
-  $('.card-path>span').textContent=stage().title;
-  $('#card-path').innerHTML=(stageId==='ffn'?[I18n.t("双路投影"),'SiLU',I18n.t("门控"),I18n.t("降维"),I18n.t("残差")]:stage().nodes.map(k=>M.definitions[k].name)).map((label,i)=>`${i?'<i>›</i>':''}<span class="${(stageId==='ffn'?i===c.stage:stage().nodes[i]===kind)?'active':''}">${label}</span>`).join('');
+  $('.card-path>span').textContent=cardStage.title;
+  $('#card-path').innerHTML=(cardStageId==='ffn'?[I18n.t("双路投影"),'SiLU',I18n.t("门控"),I18n.t("降维"),I18n.t("残差")]:cardStage.nodes.map(k=>M.definitions[k].name)).map((label,i)=>`${i?'<i>›</i>':''}<span class="${(cardStageId==='ffn'?i===c.stage:cardStage.nodes[i]===kind)?'active':''}">${label}</span>`).join('');
   host.setAttribute('aria-label',I18n.t("拖动旋转模块，滚轮缩放"));$('#card-portrait').append(host,overlay);if(!card.open)card.showModal();
  }
  function leaveFocus(){

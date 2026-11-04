@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>神经工坊</title><link rel="stylesheet" href="style.css?v=qkv-v-outlet-1"></head>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>神经工坊</title><link rel="stylesheet" href="style.css?v=learned-shelf-1"></head>
 <body><div id="game">
 <header class="topbar"><a class="brand" id="home-open" href="./" aria-label="返回首页" title="返回首页"><span class="brand-mark">N</span><div><h1>神经工坊</h1><span>NEURAL ATELIER</span></div></a><div class="chapter"><span>正式关卡 / 01</span><strong>让一层醒来</strong></div><button id="levels-open">关卡</button><button id="settings-open" aria-haspopup="dialog"><span aria-hidden="true">⚙</span> 设置</button><button id="about-open">这是什么？</button>
   <a id="game-github" class="repo-link" href="https://github.com/chainhelen/neural-atelier" target="_blank" rel="noopener noreferrer" aria-label="GitHub 源码仓库（新标签页）" title="GitHub · chainhelen/neural-atelier">
@@ -13,7 +13,7 @@
 <div class="inspector"><div class="eyebrow">模块观察窗</div><h3 id="inspect-name">点一个模块，看看里面</h3><p id="inspect-desc">这里的每条线传递一个完整向量。你接的线路会决定真实计算结果。</p><button id="inspect-focus" class="inspect-focus" disabled>查看模块卡 ↗</button><div id="inspect-visual"></div><div id="inspect-values"></div><button id="remove-module" hidden>收回组件</button></div>
 <div id="engine-controls" hidden></div><div id="test-results"></div><div class="side-actions"><button id="hint">给个提示</button><button id="undo" disabled>撤销</button><button id="reset">重新搭建</button><button id="restore-layout" hidden>恢复上次方案</button></div></aside></main>
 <footer class="run-toolbar"><button class="run" id="run" disabled><span>▶</span> 试跑我的网络</button><button id="pause" disabled aria-pressed="false"><span>Ⅱ</span> 暂停</button><div class="feedback" id="feedback" role="status" aria-live="polite">先点一个圆形输出口，再点方形输入口。也可以直接拖线。</div><section id="run-report" hidden role="region" aria-label="本次运行" aria-live="polite"></section><button id="next-level" hidden>下一关 →</button></footer>
-<dialog id="about"><button class="close" id="about-close" aria-label="关闭说明">×</button><div class="eyebrow">从搭建开始</div><h2>从一条线，到一层网络</h2><p>先进入模型内部，亲手接好一小段神经网络。以后再在这套计算上面对苹果 GPU / ANE 的执行、内存与数据搬运问题。</p><p>原版基础共 27 关：从 ReLU FFN、残差和 LayerNorm 开始，逐步接出正弦位置编码、单头与多头注意力、编码器和解码器。13 关现代扩展再比较 SiLU、SwiGLU、RMSNorm、Pre-LN 和 RoPE。9 关端侧推理独立探索 Qwen 27B、Kapitsa 与 Apple ANE。</p><p>原版结构使用固定手工权重做缩尺推理：基础算子两维，完整层四维、两个头，编码器和解码器各一层。LayerNorm 的缩放为 1、偏移为 0，FFN 偏置为 0；不包含训练和翻译能力。生成循环关单独使用固定转移表解释控制流程。</p><p>模型内部的特征对应输入位置，不是生成的新词。只有词表投影与选择后才得到文字。“错误的注意力”指与本关目标计算不同，不意味着能直接解释真实模型的全部语言理解。</p><p>后半段的时间、容量和 ANE 工作占比属于教学成本模型，不是 Apple 硬件实测。ANE 支持范围是本游戏约束，真实运行还取决于设备、编译器、模型与算子实现。</p><p>小关先练单个运算，综合关再把它们组合起来。每关会用多组输入验证；接线与进度分别保存，可以随时切换。运行时只在终点比较结果。</p></dialog>
+<dialog id="about"><button class="close" id="about-close" aria-label="关闭说明">×</button><div class="eyebrow">从搭建开始</div><h2>从一条线，到一层网络</h2><p>先进入模型内部，亲手接好一小段神经网络。以后再在这套计算上面对苹果 GPU / ANE 的执行、内存与数据搬运问题。</p><p>原版基础共 29 关：从 ReLU FFN、残差和 LayerNorm 开始，逐步接出正弦位置编码、单头与多头注意力、编码器和解码器。13 关现代扩展再比较 SiLU、SwiGLU、RMSNorm、Pre-LN 和 RoPE。9 关端侧推理独立探索 Qwen 27B、Kapitsa 与 Apple ANE。</p><p>原版结构使用固定手工权重做缩尺推理：基础算子两维，完整层四维、两个头，编码器和解码器各一层。LayerNorm 的缩放为 1、偏移为 0，FFN 偏置为 0；不包含训练和翻译能力。生成循环关单独使用固定转移表解释控制流程。</p><p>模型内部的特征对应输入位置，不是生成的新词。只有词表投影与选择后才得到文字。“错误的注意力”指与本关目标计算不同，不意味着能直接解释真实模型的全部语言理解。</p><p>后半段的时间、容量和 ANE 工作占比属于教学成本模型，不是 Apple 硬件实测。ANE 支持范围是本游戏约束，真实运行还取决于设备、编译器、模型与算子实现。</p><p>小关先练单个运算，综合关再把它们组合起来。每关会用多组输入验证；接线与进度分别保存，可以随时切换。运行时只在终点比较结果。</p></dialog>
 
 <dialog id="level-menu" aria-labelledby="levels-title">
  <div class="level-menu-header"><div><div class="eyebrow">从简单的开始</div><h2 id="levels-title">选择关卡</h2></div><button id="levels-close" class="close" aria-label="关闭关卡选择">×</button></div>
@@ -36,6 +36,7 @@
     <div class="card-description">
       <div class="card-ability"><span>能力</span><h3 id="card-ability"></h3></div><p id="card-meaning"></p>
       <div id="card-formula" class="card-formula"></div>
+      <div id="card-package" hidden></div>
       <h4>它在这一层的作用</h4><p id="card-purpose"></p>
       <div class="card-example"><div class="card-example-title">用「猫」的向量看一次<span id="card-example-input">R = [1, 1]</span></div><div id="card-example-values"></div><small>按正确计算路径演算 · 显示数值已四舍五入</small></div>
       <div id="card-merge-contrast" class="card-merge-contrast" hidden></div>
@@ -82,4 +83,4 @@
   </div><span class="machine-caption">INPUT → TRANSFORM → OUTPUT</span></div>
   <div class="welcome-footer"><span class="welcome-edition">NEURAL ATELIER · 01</span><a id="welcome-github" class="repo-link" href="https://github.com/chainhelen/neural-atelier" target="_blank" rel="noopener noreferrer" aria-label="GitHub 源码仓库（新标签页）"><span>GitHub · chainhelen/neural-atelier</span><span class="repo-external" aria-hidden="true">↗</span></a></div>
 </dialog>
-<script src="locales/en.js?v=qkv-v-outlet-1"></script><script src="i18n.js?v=qkv-v-outlet-1"></script><script src="music.js?v=qkv-v-outlet-1"></script><script src="shell.js?v=qkv-v-outlet-1"></script><script src="model.js?v=qkv-v-outlet-1"></script><script src="campaign.js?v=qkv-v-outlet-1"></script><script src="engine-model.js?v=qkv-v-outlet-1"></script><script src="original-curriculum.js?v=qkv-v-outlet-1"></script><script type="module" src="game.js?v=qkv-v-outlet-1"></script></body></html>
+<script src="locales/en.js?v=learned-shelf-1"></script><script src="i18n.js?v=learned-shelf-1"></script><script src="music.js?v=learned-shelf-1"></script><script src="shell.js?v=learned-shelf-1"></script><script src="model.js?v=learned-shelf-1"></script><script src="campaign.js?v=learned-shelf-1"></script><script src="engine-model.js?v=learned-shelf-1"></script><script src="original-curriculum.js?v=learned-shelf-1"></script><script type="module" src="game.js?v=learned-shelf-1"></script></body></html>
