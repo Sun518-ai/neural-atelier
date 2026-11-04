@@ -194,7 +194,7 @@ const shelfInventory=()=>stage().buildable?M.inventory(stage()):M.fusions[stageI
 function renderShelf(){
  const shelf=$('#module-shelf'),available=shelfInventory(),collection=!stage().buildable;shelf.hidden=!stage().buildable&&!Object.keys(available).length;shelf.dataset.mode=collection?'collection':'inventory';$('#remove-module').hidden=!stage().buildable||!state.nodes.some(n=>n.id===selected);$('#remove-module').disabled=busy;
  if(shelf.hidden)return;
- const cap=M.moduleLimit(stage());$('#module-count').textContent=collection?M.fusionCopy.collected:state.nodes.length+' / '+cap;$('#module-count').setAttribute('aria-label',collection?M.fusionCopy.collected:I18n.t('台面数量 / 上限'));
+ const cap=M.moduleLimit(stage());$('#module-count').textContent=collection?M.fusionCopy.collectedShort:state.nodes.length+' / '+cap;$('#module-count').setAttribute('aria-label',collection?M.fusionCopy.collected:I18n.t('台面数量 / 上限'));
  shelf.querySelector('summary').title=shelf.hasAttribute('open')?I18n.t("收起组件架"):I18n.t("展开组件架");
  $('#module-palette').innerHTML=(collection?Object.keys(available):state.palette||Object.keys(available)).filter(shelfUnlocked).map(kind=>{
   const d=M.definitions[kind],remaining=collection?1:M.stock(state,kind),disabled=busy||collection||!M.canAdd(state,kind),w=M.weights[kind];

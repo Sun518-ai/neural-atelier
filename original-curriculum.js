@@ -314,6 +314,7 @@ M.fusionCopy={
  storedLater:L('已收录到左侧，后续搭建关可使用','Collected on the left — available in later building lessons'),
  useLater:L('后续搭建关可用','Use in later building lessons'),
  collected:L('已收录组件','Module collected'),
+ collectedShort:L('已收录','Collected'),
  skip:L('跳过动画','Skip animation')
 };
 I18n.prepare(M.fusionCopy);
