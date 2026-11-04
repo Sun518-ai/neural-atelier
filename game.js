@@ -1,5 +1,5 @@
-import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=column-opacity-1';
-import {createProgress} from './level-progress.js?v=column-opacity-1';
+import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=output-card-1';
+import {createProgress} from './level-progress.js?v=output-card-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -241,7 +241,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=column-opacity-1');
+ const {createSceneArt}=await import('./scene-art.js?v=output-card-1');
  const art=createSceneArt(T,scene,colors,{anisotropy:renderer.capabilities.getMaxAnisotropy()});art.surroundings(samples(),stage());
  const assembly=new T.Group(),wires=new T.Group();scene.add(assembly,wires);const neuronGeo=new T.SphereGeometry(.115,16,12);let elements=[],curves=[],packets=[],drag=null,preview=null,yaw=.05,pitch=.8,zoom=stage().zoom,lastDepth=-1;
  const cameraTarget=new T.Vector3();let focusId=null,shelfFocus=null,shelfModel=null,overview=null,cameraFrame=0,transitioning=false,lastTap=null;
@@ -437,8 +437,8 @@ try{
  function openModuleCard(id,kind=kindOf(id),name=nodeName(id)){
   clearConnectionError();
   const cardStageId=M.exampleLevel(kind,stageId),cardStage=M.levels[cardStageId];
-  const c=cardFor(kind,cardStageId)||M.extraCard(kind,cardStageId),d=M.definitions[kind],card=$('#module-card');
-  $('#card-attention-flow').hidden=d.type!=='mix';$('#card-attention-flow').replaceChildren();
+  const c=cardFor(kind,cardStageId)||M.extraCard(kind,cardStageId),d=M.definitions[kind],card=$('#module-card'),outputProjection=['output','original-output'].includes(kind);
+  $('#card-attention-flow').hidden=d.type!=='mix'&&!outputProjection;$('#card-attention-flow').replaceChildren();
   $('.card-example>small').textContent=d.type==='mix'?M.aggregateGuide.rounding:I18n.t('按正确计算路径演算 · 显示数值已四舍五入');
   card.style.setProperty('--card-accent',c.color);$('.card-example-title').firstChild.textContent=cardStage.sequence?I18n.t("用三个输入位置看一次"):I18n.t("用“猫”的向量看一次");
   for(const [field,value]of Object.entries({name,seal:c.seal,english:c.english,family:c.family,number:stage().chapter,ability:c.ability,meaning:c.meaning,formula:c.formula,purpose:c.purpose}))$('#card-'+field).textContent=value;
@@ -451,7 +451,14 @@ try{
   const ex=M.extraExample?.(kind,cardStageId)||exampleFor(M,kind,cardStageId),vectorRow=([name,values],output=false,focus=-1,label=names[name]||name)=>`<div class="card-vector ${output?'result':''}" data-symbol="${name}"><b>${name} · ${label}</b><span ${(cardStage.original||ex.rms)&&cardStage.sequence?'style="display:grid;grid-template-columns:repeat('+Math.ceil(values.length/3)+',minmax(0,1fr))"':''}>${values.map((v,i)=>`<i class="${v<0?'negative':''} ${i===focus?'example-focus':''}">${fmt(v)}</i>`).join('')}</span></div>`;
   const formulaNumber=v=>Number(v.toFixed(4)).toString();
   if(ex.sampleIndex===0&&!cardStage.sequence){$('.card-example-title').firstChild.textContent=I18n.t("用“我”的向量看一次");$('#card-example-input').textContent=ex.exampleSource[0]+' = '+vector(ex.exampleSource[1]);}
-  if(d.type==='score'){
+  if(outputProjection){
+   const copy=M.outputProjectionGuide,w=M.weights[kind],width=w.length,columns=w[0].length,source=c.inputSymbol,words=M.samplesFor(cardStageId)[ex.sampleIndex||0].word.split(' / ');
+   const input=ex.inputs[0][1],output=ex.output[1],values=input.slice(0,width),result=output.slice(0,columns),inputName=source==='C'?copy.concatInput:copy.input;
+   const factor=v=>v<0?'('+fmt(v)+')':fmt(v);
+   $('.card-example-title').firstChild.textContent=copy.title;$('#card-example-input').textContent=words[0];
+   $('#card-attention-flow').innerHTML=`<h4>${copy.flowTitle}</h4><div class="wo-flow"><div><code>${source==='C'?'head A ∥ head B → C':'A × V → O'}</code><p>${source==='C'?copy.concat:copy.aggregate}</p></div><div><code>${source} × Wo → Y</code><p>${copy.projection}</p></div></div>`;
+   $('#card-example-values').innerHTML=`<div class="wo-example" data-width="${width}"><p class="wo-vector"><b>${source} · ${words[0]}</b><code>${vector(values)}</code></p><div class="wo-columns">${w[0].map((_,j)=>`<div class="wo-column" data-column="${j}" data-value="${result[j]}"><div><b>${copy.feature} ${j+1}</b><small>${copy.column} ${j+1}</small><code>${vector(w.map(row=>row[j]))}</code></div><code class="wo-equation">${values.map((x,i)=>`<span>${factor(x)} × ${factor(w[i][j])}</span>`).join(' + ')} ≈ <strong>${fmt(result[j])}</strong></code></div>`).join('')}</div><p class="wo-vector result"><b>Y · ${words[0]}</b><code>${vector(result)}</code></p><p>${copy.recipe} ${copy.sameWeights}</p><details class="wo-full"><summary>${copy.full}</summary><p>${cardStage.chapter} · ${cardStage.title}</p><table><thead><tr><th>${copy.word}</th><th>${source} · ${inputName}</th><th>Y · ${copy.output}</th></tr></thead><tbody>${words.map((word,i)=>`<tr><th>${word}</th><td><code>${vector(input.slice(i*width,(i+1)*width))}</code></td><td><code>${vector(output.slice(i*columns,(i+1)*columns))}</code></td></tr>`).join('')}</tbody></table></details><details class="wo-heads"><summary>${copy.multiheadTitle}</summary><p>${copy.multihead}</p></details></div>`;
+  }else if(d.type==='score'){
    const data=scoreComparison(M,ex),copy=M.scoreGuide,words=M.samplesFor(cardStageId)[ex.sampleIndex||0].word.split(' / ');
    const keys=cardStage.dualSource?cardStage.secondaryTokenIds.map(id=>M.math.vocab[id]):words;
    const percent=value=>(value*100).toFixed(1)+'%',percentVector=values=>'['+values.map(percent).join(', ')+']';

@@ -402,12 +402,40 @@ M.aggregateGuide={
  dimensions:L('A 的三个数对应三个内容来源；每个比例乘完整的 V，输出保留 V 的特征数。','Each of the three proportions in A belongs to a content source. It scales the whole V vector, so the output keeps V’s feature count.')
 };
 I18n.prepare(M.aggregateGuide);
+for(const [id,width]of [['output',2],['original-output',4]]){
+ const meaning=width===2?
+  L('O 是前一步 A × V 汇合得到的内容向量。Wo 用不同的权重组合 O 中的两个数，得到两个新的输出特征 Y。这里仍是 2 维 → 2 维，改变的是特征的组合方式。','O is the content vector produced by the preceding A × V step. Wo combines its two values with different weights to produce two new output features Y. The width stays 2 → 2; what changes is how the features are combined.'):
+  L('O 是前一步 A × V 汇合得到的内容向量。Wo 用不同的权重组合 O 中的四个数，得到四个新的输出特征 Y。这里仍是 4 维 → 4 维，改变的是特征的组合方式。','O is the content vector produced by the preceding A × V step. Wo combines its four values with different weights to produce four new output features Y. The width stays 4 → 4; what changes is how the features are combined.');
+ M.definitions[id].hint=meaning;
+ cards[id]={...(cards[id]||previousCard(id)),seal:L('输','O'),english:'OUTPUT PROJECTION',family:I18n.t('投影'),ability:L('重新组合 Attention 取回的内容','Recombine the content retrieved by attention'),formula:'Y = O × Wo',meaning,
+  purpose:L('它就是放在 Attention 末尾的线性投影。Wo 的每一列是一份组合配方，真实模型通过训练学会怎样组合这些特征。Y 是注意力输出，之后还要加回这个子层原来的输入。本游戏的 Wo 使用固定教学数值。','This is a linear projection placed at the end of attention. Each column of Wo is a recipe for combining features, learned through training in a real model. Y is the attention output, which is then added back to this sublayer’s original input. The game uses fixed teaching values for Wo.'),
+  trait:L('同一位置的线性组合','Linear combination within one position'),inputSymbol:'O'};
+}
+M.outputProjectionGuide={
+ title:L('一列权重，组合出一个输出','One weight column produces one output'),
+ flowTitle:L('两步分别在组合什么？','What does each step combine?'),
+ aggregate:L('A × V：从不同词那里汇入内容。','A × V: gather content from different tokens.'),
+ projection:L('Wo：重新组合当前词向量中的特征。','Wo: recombine features within the current token’s vector.'),
+ concat:L('先把各个注意力头的输出拼接起来。','First concatenate the outputs of the attention heads.'),
+ input:L('汇合得到的内容','Aggregated content'),concatInput:L('各头拼接的内容','Concatenated head outputs'),output:L('注意力输出','Attention output'),
+ column:L('Wo 的列','Wo column'),feature:L('输出特征','Output feature'),word:L('对应词','Token'),
+ recipe:L('每个输出都可以使用全部输入特征；每一列的权重不同，组合出的结果就不同。','Each output can use all input features. Different columns use different weights, so they produce different combinations.'),
+ sameWeights:L('其他词各自做同样的计算，使用同一个 Wo。','Other tokens are processed independently with the same Wo.'),
+ full:L('查看本关三个词的输入与输出','Show this lesson’s inputs and outputs for all three tokens'),
+ multiheadTitle:L('多头时，Wo 又做什么？','What does Wo do with multiple heads?'),
+ multihead:L('多头注意力先把各个头的输出拼成一个向量，再乘 Wo。每个新的输出特征都可以同时使用多个头的分量。即使拼接后已经是模型需要的宽度，Wo 仍然负责重组各个头带回的信息。','Multi-head attention concatenates the head outputs into one vector, then multiplies by Wo. Each new output feature can use components from several heads. Even when concatenation already gives the model’s required width, Wo still recombines the information retrieved by the heads.')
+};
+I18n.prepare(M.outputProjectionGuide);
 I18n.prepare(cards);
 M.original={relu,ln,position,embed,wide,project,vocabulary,classicFFN,sequenceFFN,head,concat,multi,singleAttention,encoder,decoderSelf,decoder,sourceIds,
  exampleLabels(levelId){return {Oa:L('自注意力更新','Self-attention update'),Om:L('因果注意力更新','Masked attention update'),Oc:L('交叉注意力更新','Cross-attention update'),A:['relu','original-ffn'].includes(levelId)?L('ReLU 输出','ReLU output'):I18n.t('注意力'),E:L('编码器输出','Encoder output'),D:L('目标特征','Target features'),Xs:L('源词向量与位置','Source embeddings and positions'),Xt:L('目标词向量与位置','Target embeddings and positions'),Xp:L('含位置的特征','Position-enriched features'),H_A:L('头 A 的结果','Head A output'),H_B:L('头 B 的结果','Head B output'),C:L('拼接结果','Concatenated features'),X1:L('第一次归一化','First normalized state'),X2:L('交叉注意力后的特征','Features after cross-attention'),R1:L('Attention 残差结果','Attention residual result'),R2:L('FFN 残差结果','FFN residual result'),Rc:L('交叉注意力残差结果','Cross-attention residual result')};},
  card(id,levelId){
   if(cards[id]){
    const c={...cards[id]},decoderLevel=levelId==='decoder-layer';
+   if(['output','original-output'].includes(id)&&M.levels[levelId]?.nodes.includes('concat')){
+    c.inputSymbol='C';c.formula='Y = C × Wo';
+    c.meaning=L('C 是把多个注意力头的输出拼接成的向量。Wo 用每一列权重，把这些分量组合成一个新的输出特征。本关两个头各给一个数，拼成两维，再经过 2 × 2 的 Wo，仍输出两维。','C concatenates the outputs of the attention heads. Each column of Wo combines those components into one new output feature. Here two heads each supply one value, giving two features; a 2 × 2 Wo recombines them into two output features.');
+   }
    const formulas={'self-heads':'Oa = MHA(X)','masked-heads':'Om = MaskedMHA('+(decoderLevel?'D':'X')+')','encoder-add':'R1 = '+(decoderLevel?'D': 'X')+' + '+(levelId==='encoder-layer'?'Oa':'Om'),'ln-attn':'X1 = LayerNorm(R1)','cross-heads':'Oc = CrossAttention(X1, E)','cross-add':'Rc = X1 + Oc','ln-cross':'X2 = LayerNorm(Rc)','original-ffn-block':'F = FFN('+(decoderLevel?'X2':'X1')+')','ffn-add':'R2 = '+(decoderLevel?'X2':'X1')+' + F','ln-ffn':'Y = LayerNorm(R2)'};
    if(formulas[id])c.formula=formulas[id];
    return c;
