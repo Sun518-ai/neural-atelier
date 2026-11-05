@@ -430,7 +430,7 @@ test('encoder groups old parts without hiding useful distractors or prewiring th
   if(language==='en')for(const selector of ['.mission','#module-shelf'])assert.doesNotMatch(doc.querySelector(selector).textContent,/[\u3400-\u9fff]/);
  }
  assert.deepEqual([...app.c.I18n.missing],[]);
- app.eval("switchLevel('causal')");assert.equal(doc.querySelector('.encoder-primer'),null);assert.equal(doc.querySelector('[data-earlier-parts]'),null);
+ app.eval("switchLevel('causal')");assert.equal(doc.querySelector('.encoder-primer'),null);assert.ok(doc.querySelector('[data-earlier-parts]'));assert.equal(doc.querySelector('[data-earlier-parts]').hasAttribute('open'),false);
 });
 
 test('encoder retains saved named copies, wiring and badges while grouped stock refunds correctly',async()=>{
@@ -693,4 +693,24 @@ test('completion reset leaves in-memory and saved badges intact when storage fai
  app.document.querySelector('#progress-reset').onclick();app.document.querySelector('#progress-reset-apply').onclick();
  assert.equal(app.eval("progress.completed('wire')&&progress.completed('workshop')"),true);assert.deepEqual(app.storage,before);
  assert.match(app.document.querySelector('#progress-reset-status').textContent,/保存失败/);
+});
+test('causal and every later learning shelf group packages without losing old parts or saved circuits',()=>{
+ const app=boot(),M=app.c.NeuralPrologue,doc=app.document;
+ const ids=[...M.routes.main.ids.slice(M.routes.main.ids.indexOf('causal')),...M.routes.modern.ids];
+ for(const id of ids){
+  app.eval(`switchLevel('${id}');state=M.solutions(stageId);save();refresh()`);const before=app.eval('JSON.stringify(state)');
+  const expected=Object.keys(M.inventory(M.levels[id])).filter(kind=>M.fusions[id]?.kind!==kind||M.levels[id].nodes.includes(kind));
+  const actual=[...doc.querySelectorAll('[data-add-module]')].map(el=>el.dataset.addModule);
+  assert.deepEqual([...actual].sort(),[...expected].sort(),id+' retains exactly the unlocked inventory');assert.equal(new Set(actual).size,actual.length,id+' renders each kind once');
+  assert.ok(doc.querySelector('[data-earlier-parts]'),id);assert.equal(doc.querySelector('[data-earlier-parts]').hasAttribute('open'),false);
+  for(const el of doc.querySelectorAll('[data-shelf-group="packages"] [data-add-module]'))assert.ok(M.packages[el.dataset.addModule]);
+  for(const el of doc.querySelectorAll('[data-shelf-group="basics"] [data-add-module]'))assert.ok(!M.packages[el.dataset.addModule]);
+  for(const kind of M.levels[id].nodes)assert.ok(doc.querySelector(`.shelf-current [data-add-module="${kind}"]`),id+' keeps taught modules visible');
+  doc.querySelector('[data-earlier-parts]').setAttribute('open','');app.eval('refresh()');assert.equal(doc.querySelector('[data-earlier-parts]').hasAttribute('open'),true);
+  app.c.I18n.setPreference('en');assert.doesNotMatch(doc.querySelector('#module-palette').textContent,/[\u3400-\u9fff]/);assert.equal(app.eval('JSON.stringify(state)'),before);app.c.I18n.setPreference('zh');
+ }
+ app.eval("switchLevel('causal')");assert.ok(doc.querySelector('[data-shelf-group="packages"] [data-add-module="single-attention"]'));assert.ok(doc.querySelector('[data-shelf-group="basics"] [data-add-module="v"]'),'V remains a compatible distractor');
+ assert.ok(doc.querySelector('.shelf-earlier [data-add-module="original-encoder"]'),'four-feature encoder is still available among earlier parts');
+ app.eval("switchLevel('decoder-layer');state=M.solutions(stageId);save();progress.complete(stageId,state);refresh()");assert.ok(doc.querySelector('[data-shelf-group="packages"] [data-add-module="original-decoder"]'),'newly earned reward appears in its package group');
+ for(const id of M.routes.engine.ids){app.eval(`switchLevel('${id}')`);assert.equal(doc.querySelector('[data-earlier-parts]'),null);assert.equal(doc.querySelectorAll('[data-add-module]').length,6);}
 });

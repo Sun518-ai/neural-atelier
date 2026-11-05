@@ -1,5 +1,5 @@
-import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=encoder-reset-1';
-import {createProgress} from './level-progress.js?v=encoder-reset-1';
+import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=shelf-groups-1';
+import {createProgress} from './level-progress.js?v=shelf-groups-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -216,7 +216,7 @@ function renderShelf(){
  if(shelf.hidden)return;
  const cap=M.moduleLimit(stage());$('#module-count').textContent=collection?M.fusionCopy.collectedShort:state.nodes.length+' / '+cap;$('#module-count').setAttribute('aria-label',collection?M.fusionCopy.collected:I18n.t('台面数量 / 上限'));
  shelf.querySelector('summary').title=shelf.hasAttribute('open')?I18n.t("收起组件架"):I18n.t("展开组件架");
- const palette=$('#module-palette'),earlier=palette.querySelector('[data-earlier-parts]'),earlierOpen=earlier?.dataset.level===stageId&&earlier.hasAttribute('open'),scrollTop=palette.scrollTop;
+ const palette=$('#module-palette'),earlier=palette.querySelector('[data-earlier-parts]'),earlierOpen=earlier?.dataset.shelfLevel===stageId&&earlier.hasAttribute('open'),scrollTop=palette.scrollTop;
  const kinds=[...new Set((collection?Object.keys(available):state.palette||Object.keys(available)).filter(shelfUnlocked).map(kind=>M.shelfKind(stage(),kind)))];
  const renderStock=kind=>{
   const d=M.definitions[kind],name=M.moduleName(stage(),kind),remaining=collection?1:M.stock(state,kind),disabled=busy||collection||!M.canAdd(state,kind),w=M.weights[kind];
@@ -229,9 +229,11 @@ function renderShelf(){
  };
  const grouping=stage().shelf;
  if(grouping){
-  const current=kinds.filter(kind=>{const d=M.definitions[kind];return d.out===grouping.featureWidth&&d.ins.every(dim=>dim===grouping.featureWidth);});
+  const current=kinds.filter(kind=>{if(grouping.currentKinds)return grouping.currentKinds.includes(kind);const d=M.definitions[kind];return d.out===grouping.featureWidth&&d.ins.every(dim=>dim===grouping.featureWidth);});
   const ordered=[...grouping.order.filter(kind=>current.includes(kind)),...current.filter(kind=>!grouping.order.includes(kind))],older=kinds.filter(kind=>!current.includes(kind));
-  palette.innerHTML=`<section class="shelf-current" aria-label="${grouping.current}"><h4>${grouping.current}</h4>${ordered.map(renderStock).join('')}</section><details class="shelf-earlier" data-earlier-parts data-level="${stageId}" ${earlierOpen?'open':''}><summary>${grouping.earlier}<span>${older.length}</span></summary><p>${grouping.note}</p><div class="shelf-earlier-list">${older.map(renderStock).join('')}</div></details>`;
+  const group=(items,title,type)=>items.length?`<section class="shelf-current" data-shelf-group="${type}" aria-label="${title}"><h4>${title}</h4>${items.map(renderStock).join('')}</section>`:'';
+  const currentHTML=grouping.packages?group(ordered.filter(kind=>M.packages[kind]),grouping.packages,'packages')+group(ordered.filter(kind=>!M.packages[kind]),grouping.basics,'basics'):group(ordered,grouping.current,'current');
+  palette.innerHTML=`${currentHTML}<details class="shelf-earlier" data-earlier-parts data-shelf-level="${stageId}" ${earlierOpen?'open':''}><summary>${grouping.earlier}<span>${older.length}</span></summary><p>${grouping.note}</p><div class="shelf-earlier-list">${older.map(renderStock).join('')}</div></details>`;
  }else palette.innerHTML=kinds.map(renderStock).join('');
  palette.scrollTop=scrollTop;
  world?.syncShelf?.();
@@ -302,7 +304,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=encoder-reset-1');
+ const {createSceneArt}=await import('./scene-art.js?v=shelf-groups-1');
  const art=createSceneArt(T,scene,colors,{anisotropy:renderer.capabilities.getMaxAnisotropy()});art.surroundings(samples(),stage());
  let fusionEffect=null;
  const assembly=new T.Group(),wires=new T.Group();scene.add(assembly,wires);const neuronGeo=new T.SphereGeometry(.115,16,12);let elements=[],curves=[],packets=[],drag=null,preview=null,yaw=.05,pitch=.8,zoom=stage().zoom,lastDepth=-1;

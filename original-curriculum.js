@@ -433,6 +433,17 @@ for(const [kind,p]of Object.entries(M.packages)){
  const l=M.levels[origins[kind]];if(l){l.packages??=[];if(!l.packages.includes(kind))l.packages.push(kind);}
 }
 I18n.prepare(M.packages);
+// Use the same shelf organization beyond the encoder. Classify by interfaces
+// and package metadata, not by the reference wiring; keep compatible distractors.
+const groupedLater=[...M.routes.main.ids.slice(M.routes.main.ids.indexOf('causal')),...M.routes.modern.ids];
+for(const id of groupedLater){
+ const l=M.levels[id],contract=kind=>JSON.stringify([M.definitions[kind].ins,M.definitions[kind].out]);
+ const contracts=new Set(l.nodes.map(contract)),dimensions=new Set(l.nodes.flatMap(kind=>[...M.definitions[kind].ins,M.definitions[kind].out]));
+ const kinds=Object.keys(M.inventory(l)),currentKinds=kinds.filter(kind=>contracts.has(contract(kind))||(M.packages[kind]&&[...M.definitions[kind].ins,M.definitions[kind].out].every(dim=>dimensions.has(dim))));
+ l.shelf={currentKinds,order:currentKinds,current:L('可用组件','Available modules'),packages:L('组合组件','Combined modules'),basics:L('基础组件','Basic modules'),earlier:L('已学零件','Earlier parts'),note:L('保留之前学过的零件，仍可拖出或双击查看。端口尺寸不同的组件不能直接相连；上方也包含可选组件，并非都要使用。','Earlier parts can still be placed or inspected with a double-click. Different port sizes cannot connect directly. The groups above include optional modules; you do not need to use every one.')};
+ I18n.prepare(l.shelf);
+}
+
 M.levels.qkv.mission=L('把内容向量送到出口','Send the value vectors to the outlet');
 M.levels.qkv.description=L('本关只检查出口的 V。Q/K 用于后续的注意力打分，这里不要求放置或接线。','This lesson checks only V at the outlet. Q/K are used for attention scoring in later lessons; placing or connecting them is optional here.');
 M.levels.qkv.summary=M.levels.qkv.description;
