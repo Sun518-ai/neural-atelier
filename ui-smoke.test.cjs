@@ -423,7 +423,7 @@ test('encoder groups old parts without hiding useful distractors or prewiring th
  const saved=app.eval('JSON.stringify(state)');
  for(const language of ['en','zh']){
   app.c.I18n.setPreference(language);
-  assert.equal(doc.querySelectorAll('[data-encoder-job]').length,2);assert.equal(doc.querySelectorAll('.encoder-job svg').length,2);
+  assert.equal(doc.querySelectorAll('[data-encoder-job]').length,2);assert.equal(doc.querySelectorAll('.encoder-job svg').length,2);assert.equal(doc.querySelectorAll('.encoder-stage-path').length,2);assert.ok([...doc.querySelectorAll('.encoder-stage-path')].every(el=>el.textContent.endsWith('LayerNorm')));
   assert.equal(doc.querySelector('.encoder-formulas').hasAttribute('open'),false);
   assert.equal(doc.querySelector('[data-earlier-parts]').hasAttribute('open'),true);
   assert.equal(app.eval('JSON.stringify(state)'),saved);
@@ -667,4 +667,30 @@ test('shelf sizing persists independently of circuits, language and the current 
  app.eval("switchLevel('workshop')");assert.equal(shelf.dataset.size,'small');
  const reloaded=boot(app.storage,'#ffn');assert.equal(reloaded.document.querySelector('#module-shelf').dataset.size,'small');assert.equal(reloaded.eval('JSON.stringify(state)'),state);
  reloaded.document.querySelector('#shelf-larger').onclick();reloaded.document.querySelector('#shelf-larger').onclick();assert.equal(reloaded.document.querySelector('#module-shelf').dataset.size,'large');assert.equal(reloaded.document.querySelector('#shelf-larger').disabled,true);
+});
+test('completion reset confirms, preserves circuits and preferences, and survives reload across tracks',async()=>{
+ const app=boot(),doc=app.document,storage=app.storage;
+ for(const id of ['wire','workshop','encoder-layer','ffn','kv-cache'])app.eval(`switchLevel('${id}');state=M.solutions(stageId);state.nodes.forEach(n=>n.x+=.13);save();progress.complete(stageId,state)`);
+ app.eval("switchLevel('encoder-layer');state=M.solutions(stageId);save()");await app.eval('run()');
+ storage.set('neural-atelier-audio-v1',JSON.stringify({enabled:false,volume:.2}));
+ const board=app.eval('JSON.stringify(state)'),before=new Map(storage);
+ doc.querySelector('#progress-reset').onclick();assert.equal(doc.querySelector('#progress-reset-confirm').hidden,false);assert.equal(app.eval('progress.completed(stageId)'),true);
+ doc.querySelector('#progress-reset-cancel').onclick();assert.equal(doc.querySelector('#progress-reset-confirm').hidden,true);assert.deepEqual(storage,before);
+ app.eval('busy=true;refresh()');assert.equal(doc.querySelector('#progress-reset').disabled,true);doc.querySelector('#progress-reset-apply').onclick();assert.deepEqual(storage,before);app.eval('busy=false;refresh()');
+ doc.querySelector('#progress-reset').onclick();doc.querySelector('#progress-reset-apply').onclick();
+ assert.equal(app.eval('Object.keys(M.levels).some(id=>progress.completed(id))'),false);assert.equal(app.eval('levelPassed()'),false);assert.equal(doc.querySelector('#level-complete').open,false);assert.equal(doc.querySelector('#next-level').hidden,true);assert.equal(app.eval('JSON.stringify(state)'),board);
+ for(const [key,value]of before)if(key!=='neural-atelier-chapters-v1')assert.equal(storage.get(key),value,key);
+ assert.equal(doc.querySelector('#progress-reset-status').hidden,false);
+ const reopened=boot(storage,'#encoder-layer');assert.equal(reopened.eval('JSON.stringify(state)'),board);
+ for(const id of ['wire','workshop','encoder-layer','ffn','kv-cache']){reopened.eval(`switchLevel('${id}')`);assert.equal(reopened.eval('progress.completed(stageId)'),false);}
+ // Practice lessons must not treat a retained winning circuit as finished and auto-clear it.
+ assert.equal(storage.get('neural-atelier-level-workshop-v1'),before.get('neural-atelier-level-workshop-v1'));
+ app.c.I18n.setPreference('en');for(const selector of ['.progress-setting','#progress-reset-confirm','#progress-reset-status'])assert.doesNotMatch(doc.querySelector(selector).textContent,/[\u3400-\u9fff]/);
+});
+test('completion reset leaves in-memory and saved badges intact when storage fails',()=>{
+ const app=boot();app.eval("progress.complete('wire');progress.complete('workshop',M.solutions('workshop'))");
+ const before=new Map(app.storage);app.c.localStorage.setItem=()=>{throw new Error('Storage unavailable');};
+ app.document.querySelector('#progress-reset').onclick();app.document.querySelector('#progress-reset-apply').onclick();
+ assert.equal(app.eval("progress.completed('wire')&&progress.completed('workshop')"),true);assert.deepEqual(app.storage,before);
+ assert.match(app.document.querySelector('#progress-reset-status').textContent,/保存失败/);
 });

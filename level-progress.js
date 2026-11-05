@@ -69,6 +69,11 @@ export function createProgress(M,storage){
  const previous=id=>M.levels[id]?.practice?validated(read(completedKey(id)),id):M.levels[id]?.requirePlacement?validated(read(placementKey(id)),id):null;
  return {current:()=>meta.current,completed:id=>meta.completed.includes(id),load,
   save,
+  resetCompletions(){
+   const next={...meta,completed:[],practiceRuns:Object.fromEntries(Object.keys(meta.practiceRuns).map(id=>[id,{finished:false}]))};
+   if(!write(metaKey,next))return false;
+   meta.completed=next.completed;meta.practiceRuns=next.practiceRuns;return true;
+  },
   canRestore(id,state){const s=previous(id);return !!s&&(!state||circuitKey(s,true)!==circuitKey(state,true));},
   restore(id){let s=previous(id);if(!s)return null;if(M.levels[id].practice)meta.practiceRuns[id]={finished:false};if(M.levels[id].requirePlacement)s={...s,placementRevision:1};write(metaKey,meta);write(key(id),s);return s;},
   select(id){meta.current=id;write(metaKey,meta);},

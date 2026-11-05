@@ -22,6 +22,8 @@ Start with one wire and a small matrix. Later, combine projections, activation, 
 
 The circuit you build determines the result. Run it to see data move through the network; feedback appears at the end, leaving you room to work out the connections yourself.
 
+In **Settings → Clear all completions**, confirm to mark every level incomplete in this browser. Saved circuits, placements, recovery copies, and preferences are retained. Stop a running simulation before clearing records.
+
 ## From the first wire to an inference engine
 
 The **29-level main track** teaches the original Transformer first. **13 modern extensions** then compare SiLU, SwiGLU, RMSNorm, Pre-LN, and RoPE. A separate **9-level bonus track** explores on-device inference inspired by Qwen 27B, Kapitsa, and Apple ANE. Choose a track from the level menu; finishing one does not automatically enter another.

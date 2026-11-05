@@ -1,5 +1,5 @@
-import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=level-stages-1';
-import {createProgress} from './level-progress.js?v=level-stages-1';
+import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=encoder-reset-1';
+import {createProgress} from './level-progress.js?v=encoder-reset-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -40,7 +40,7 @@ function encoderPrimer(){
  const jobs=['exchange','process'].map((key,index)=>{
   const job=g[key],paths=x.flatMap((from,i)=>x.filter((_,j)=>key==='exchange'||i===j).map(to=>`<path d="M${from} 20 L${to} 44" class="${to===92?'emphasized':''}"/>`)).join('');
   const features=x.map((center,i)=>[0,1,2,3].map(j=>`<rect x="${center-15+j*8}" y="47" width="6" height="8" rx="1" opacity="${.3+((i+j)%4)*.2}"/>`).join('')).join('');
-  return `<section class="encoder-job" data-encoder-job="${key}"><h4><span>${index+1}</span>${job.title}</h4><small>${job.tag}</small><svg viewBox="0 0 184 58" aria-hidden="true">${paths}${x.map((center,i)=>`<text x="${center}" y="12" text-anchor="middle">${g.tokens[i]}</text>`).join('')}${features}</svg><p>${job.text}</p></section>`;
+  return `<section class="encoder-job" data-encoder-job="${key}"><h4><span>${index+1}</span>${job.title}</h4><small>${job.tag}</small><svg viewBox="0 0 184 58" aria-hidden="true">${paths}${x.map((center,i)=>`<text x="${center}" y="12" text-anchor="middle">${g.tokens[i]}</text>`).join('')}${features}</svg><p>${job.text}</p><div class="encoder-stage-path">${g.stageNotes[index].path}</div><p class="encoder-stage-source">${g.stageNotes[index].source}</p><p class="encoder-stage-finish">${g.stageNotes[index].finish}</p></section>`;
  }).join('');
  return `<div class="encoder-primer">${jobs}<div class="encoder-pattern"><b>${g.pattern}</b><span>${g.operations.join(' → ')}</span></div><details class="encoder-formulas"><summary>${g.formulaTitle}</summary><p>${g.first}</p><code>X1 = LN(X + MHA(X))</code><p>${g.second}</p><code>Y = LN(X1 + FFN(X1))</code><p>${g.formulaNote}</p></details></div>`;
 }
@@ -247,7 +247,7 @@ function inspect(){renderShelf();const d=state.nodes.some(n=>n.id===selected)?de
  const n=state.nodes.find(n=>n.id===selected),values=current?.values||M.sourceValues(state,samples()[sample].v);
  $('#inspect-values').innerHTML=n.links.map((id,i)=>`${I18n.t("<div class=\"value-line\">输入 ")}${i+1} · ${id?outputName(id):I18n.t("未连接")}<b>${vector(values[id])}</b></div>`).join('')+`${I18n.t("<div class=\"value-line\">输出<b>")}${vector(values[selected])}</b></div>`;
 }
-function refresh(){refreshPauseControl();document.body.classList.toggle('network-running',busy);renderShelf();const t=samples()[sample];const won=levelPassed();$('.route strong').textContent=stage().concept+(won?I18n.t(" · 已通过"):'');$('#next-level').hidden=!(won||progress.completed(stageId))||!stage().next;$('#levels-open').disabled=busy;$('#engine-controls').querySelectorAll('input,select,button').forEach(e=>e.disabled=busy);$('#device-docks').querySelectorAll('button').forEach(e=>e.disabled=busy);$('#sample-name').textContent=t.word;$('#sample-value').textContent=stage().sequence?(stage().sourceDim===3?'Token ID '+vector(t.v):I18n.t(stage().sourceDim===12?"3 个位置 × 4 个特征":"3 个位置 × 2 个特征")):vector(t.v);$('#pass-count').textContent=results.filter(r=>r.pass).length+' / '+stage().sampleCount;$('#test-results').innerHTML=results.map((r,i)=>`<div class="test-row ${r.pass?'pass':'fail'}"><span>${r.pass?'✓':'×'} ${samples()[i].word}</span><span>${stage().tokenOutput&&r.actual?M.readTokens(r.actual):stage().sequence?(r.actual?I18n.t("矩阵 ")+shape(r.actual.length):I18n.t("等待输入")):vector(r.actual)}</span></div>`).join('');$('#run').disabled=!world;$('#run').innerHTML=busy?I18n.t("<span>■</span> 停下检查"):I18n.t("<span>▶</span> 试跑我的网络");$('#undo').disabled=busy||!history.length;$('#reset').disabled=busy;$('#restore-layout').hidden=!progress.canRestore(stageId,state);$('#restore-layout').disabled=busy;$('#hint').disabled=busy||!stage().hints?.length;inspect();}
+function refresh(){refreshPauseControl();$('#progress-reset').disabled=busy;$('#progress-reset-apply').disabled=busy;document.body.classList.toggle('network-running',busy);renderShelf();const t=samples()[sample];const won=levelPassed();$('.route strong').textContent=stage().concept+(won?I18n.t(" · 已通过"):'');$('#next-level').hidden=!(won||progress.completed(stageId))||!stage().next;$('#levels-open').disabled=busy;$('#engine-controls').querySelectorAll('input,select,button').forEach(e=>e.disabled=busy);$('#device-docks').querySelectorAll('button').forEach(e=>e.disabled=busy);$('#sample-name').textContent=t.word;$('#sample-value').textContent=stage().sequence?(stage().sourceDim===3?'Token ID '+vector(t.v):I18n.t(stage().sourceDim===12?"3 个位置 × 4 个特征":"3 个位置 × 2 个特征")):vector(t.v);$('#pass-count').textContent=results.filter(r=>r.pass).length+' / '+stage().sampleCount;$('#test-results').innerHTML=results.map((r,i)=>`<div class="test-row ${r.pass?'pass':'fail'}"><span>${r.pass?'✓':'×'} ${samples()[i].word}</span><span>${stage().tokenOutput&&r.actual?M.readTokens(r.actual):stage().sequence?(r.actual?I18n.t("矩阵 ")+shape(r.actual.length):I18n.t("等待输入")):vector(r.actual)}</span></div>`).join('');$('#run').disabled=!world;$('#run').innerHTML=busy?I18n.t("<span>■</span> 停下检查"):I18n.t("<span>▶</span> 试跑我的网络");$('#undo').disabled=busy||!history.length;$('#reset').disabled=busy;$('#restore-layout').hidden=!progress.canRestore(stageId,state);$('#restore-layout').disabled=busy;$('#hint').disabled=busy||!stage().hints?.length;inspect();}
 async function run(){
  closeCompletion();world?.clearConnectionError?.();
  if(busy){busy=paused=false;runId++;say(I18n.t("已停止。"));world.clearPackets();world.labels();refresh();return;}
@@ -275,6 +275,21 @@ async function run(){
 }
 $('#inspect-focus').onclick=()=>world?.focus(selected);
 $('#run').onclick=run;$('#undo').onclick=()=>{state=history.pop();pending=null;changed();say(I18n.t("已撤销。"));};$('#reset').onclick=()=>{checkpoint();state=M.initial(stageId);selected=pending=placing=null;world?.clearPlacement?.();changed();say(I18n.t("已恢复本关起点。"));};
+let progressResetMessage='';
+function progressResetStatus(message){progressResetMessage=message;$('#progress-reset-status').textContent=I18n.t(message);$('#progress-reset-status').hidden=false;}
+I18n.onChange(()=>{if(progressResetMessage)$('#progress-reset-status').textContent=I18n.t(progressResetMessage);});
+function clearProgressResetUI(){
+ $('#progress-reset-confirm').hidden=true;$('#progress-reset').setAttribute('aria-expanded','false');$('#progress-reset-status').hidden=true;
+}
+globalThis.AtelierProgressResetUI={clear:clearProgressResetUI};
+$('#progress-reset').onclick=()=>{if(busy)return;$('#progress-reset-confirm').hidden=false;$('#progress-reset').setAttribute('aria-expanded','true');$('#progress-reset-status').hidden=true;$('#progress-reset-cancel').focus();};
+$('#progress-reset-cancel').onclick=()=>{clearProgressResetUI();$('#progress-reset').focus();};
+$('#progress-reset-apply').onclick=()=>{
+ if(busy)return;
+ if(!progress.resetCompletions()){progressResetStatus('保存失败，通关记录未清除。请检查浏览器存储后重试。');return;}
+ changed();renderLevelMenu();clearProgressResetUI();say('');
+ progressResetStatus('所有关卡已标为未通过，棋盘和设置已保留。');$('#progress-reset').focus();
+};
 $('#restore-layout').onclick=()=>{if(busy)return;const restored=progress.restore(stageId);if(!restored)return;checkpoint();state=restored;selected=pending=placing=null;world?.clearPlacement?.();changed();say(I18n.t("已恢复上次方案。"));};
 $('#hint').onclick=()=>{const list=stage().hints;if(list?.length)say(list[Math.min(hints++,list.length-1)]);};
 $('#about-open').onclick=()=>$('#about').showModal();$('#about-close').onclick=()=>$('#about').close();$('#about').addEventListener('click',e=>{if(e.target===$('#about')){const r=e.target.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)e.target.close();}});
@@ -287,7 +302,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=level-stages-1');
+ const {createSceneArt}=await import('./scene-art.js?v=encoder-reset-1');
  const art=createSceneArt(T,scene,colors,{anisotropy:renderer.capabilities.getMaxAnisotropy()});art.surroundings(samples(),stage());
  let fusionEffect=null;
  const assembly=new T.Group(),wires=new T.Group();scene.add(assembly,wires);const neuronGeo=new T.SphereGeometry(.115,16,12);let elements=[],curves=[],packets=[],drag=null,preview=null,yaw=.05,pitch=.8,zoom=stage().zoom,lastDepth=-1;

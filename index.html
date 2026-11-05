@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>神经工坊</title><link rel="stylesheet" href="style.css?v=level-stages-1"></head>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>神经工坊</title><link rel="stylesheet" href="style.css?v=encoder-reset-1"></head>
 <body><div id="game">
 <header class="topbar"><a class="brand" id="home-open" href="./" aria-label="返回首页" title="返回首页"><span class="brand-mark">N</span><div><h1>神经工坊</h1><span>NEURAL ATELIER</span></div></a><div class="chapter"><span>正式关卡 / 01</span><strong>让一层醒来</strong></div><button id="levels-open">关卡</button><button id="settings-open" aria-haspopup="dialog"><span aria-hidden="true">⚙</span> 设置</button><button id="about-open">这是什么？</button>
   <a id="game-github" class="repo-link" href="https://github.com/chainhelen/neural-atelier" target="_blank" rel="noopener noreferrer" aria-label="GitHub 源码仓库（新标签页）" title="GitHub · chainhelen/neural-atelier">
@@ -71,6 +71,9 @@
   <section class="setting-row"><div class="setting-label"><label for="music-enabled">背景音乐</label><span>轻柔的电子乐，陪你慢慢搭建。</span></div><button id="music-enabled" class="setting-switch" type="button" role="switch" aria-checked="true" aria-label="背景音乐"><span></span></button></section>
   <section class="setting-row volume-row"><label for="music-volume">音量</label><input id="music-volume" type="range" min="0" max="100" step="5" value="35"><output id="music-volume-value" for="music-volume">35%</output></section>
   <p id="audio-status" role="status" hidden></p>
+  <section class="setting-row progress-setting"><div class="setting-label"><span>通关记录</span><span>仅影响当前浏览器，保留所有棋盘和设置。</span></div><button id="progress-reset" type="button" aria-expanded="false" aria-controls="progress-reset-confirm">清除全部通关记录</button></section>
+  <div id="progress-reset-confirm" hidden><p>把所有关卡标为未通过？已搭好的组件和连线会保留，通关标记与完成计数会清零。此操作无法撤销。</p><div><button id="progress-reset-cancel" type="button">取消</button><button id="progress-reset-apply" type="button">确认清除</button></div></div>
+  <p id="progress-reset-status" role="status" hidden></p>
   <footer class="settings-footer"><button id="intro-replay">重看开场</button><button id="settings-done">完成</button></footer>
 </dialog>
 <dialog id="welcome" aria-labelledby="welcome-title">
@@ -84,4 +87,4 @@
   </div><span class="machine-caption">INPUT → TRANSFORM → OUTPUT</span></div>
   <div class="welcome-footer"><span class="welcome-edition">NEURAL ATELIER · 01</span><a id="welcome-github" class="repo-link" href="https://github.com/chainhelen/neural-atelier" target="_blank" rel="noopener noreferrer" aria-label="GitHub 源码仓库（新标签页）"><span>GitHub · chainhelen/neural-atelier</span><span class="repo-external" aria-hidden="true">↗</span></a></div>
 </dialog>
-<script src="locales/en.js?v=level-stages-1"></script><script src="i18n.js?v=level-stages-1"></script><script src="music.js?v=level-stages-1"></script><script src="shell.js?v=level-stages-1"></script><script src="model.js?v=level-stages-1"></script><script src="campaign.js?v=level-stages-1"></script><script src="engine-model.js?v=level-stages-1"></script><script src="original-curriculum.js?v=level-stages-1"></script><script type="module" src="game.js?v=level-stages-1"></script></body></html>
+<script src="locales/en.js?v=encoder-reset-1"></script><script src="i18n.js?v=encoder-reset-1"></script><script src="music.js?v=encoder-reset-1"></script><script src="shell.js?v=encoder-reset-1"></script><script src="model.js?v=encoder-reset-1"></script><script src="campaign.js?v=encoder-reset-1"></script><script src="engine-model.js?v=encoder-reset-1"></script><script src="original-curriculum.js?v=encoder-reset-1"></script><script type="module" src="game.js?v=encoder-reset-1"></script></body></html>

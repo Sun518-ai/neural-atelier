@@ -201,7 +201,8 @@ lesson('encoder-layer',L('接成一层原版编码器','Build one original encod
  {'self-heads':['R'],residual1:['R','self-heads'],'ln-attn':['residual1'],'original-ffn-block':['ln-attn'],residual2:['ln-attn','original-ffn-block'],'ln-ffn':['residual2'],sink:'ln-ffn'},encoder,{buildable:true,maxModules:8,positioned:true});
 const encoderLesson=added['encoder-layer'];
 encoderLesson.rationale.kind='encoder-layer';
-encoderLesson.rationale.title=L('一层里的两类工作','Two jobs inside one layer');
+encoderLesson.rationale.title=L('两段，每段都要收尾','Two stages, each with its own finish');
+encoderLesson.description=L('先完成“注意力 → 相加 → LayerNorm”，再完成“FFN → 相加 → LayerNorm”。需要两块残差相加、两块 LayerNorm；相加的另一份数据，都来自本段开始的地方。','Finish “attention → add → LayerNorm”, then “FFN → add → LayerNorm”. Use two residual additions and two LayerNorm modules. Each addition also receives the input from the start of its own stage.');
 encoderLesson.rationale.scope=L('沿用 2017 原版的 Post-LN 顺序。输入、两段之间、输出都是 3 个词 × 4 个特征；整句互相可见。','Uses the original 2017 Post-LN order. The input, intermediate state and output all have three tokens × four features; every token can read the whole sentence.');
 // These pairs differ only in their old positional names, not their operation.
 // Do not rewrite stored nodes or wires when presenting a reusable operator.
@@ -222,6 +223,10 @@ M.encoderGuide={
  tokens:['我','爱','猫'].map(word=>I18n.t(word)),
  exchange:{title:L('词与词之间交流','Exchange between tokens'),tag:labels.attn,text:L('每个词按注意力比例读取整句话的内容。例如，“猫”的特征会参与更新“爱”的特征。','Each token reads from the whole sentence in attention-weighted proportions. For example, features of Cats contribute to updating Love.')},
  process:{title:L('每个词内部加工','Process within each token'),tag:L('原版 FFN','Original FFN'),text:L('再分别加工交流后的每个词：4 → 8 → ReLU → 4。同一套权重用在所有词上，这一步不再从别的词取数。','Process each token after the exchange: 4 → 8 → ReLU → 4. All tokens use the same weights; this step does not read other tokens.')},
+ stageNotes:[
+  {path:L('双头自注意力 → 残差相加 → LayerNorm','Two-head attention → Residual addition → LayerNorm'),source:L('相加的另一端：原始输入 X。','Other input to addition: original input X.'),finish:L('这一段归一化后，才交给 FFN。','Normalize this stage before passing it to the FFN.')},
+  {path:L('原版 FFN → 残差相加 → LayerNorm','Original FFN → Residual addition → LayerNorm'),source:L('相加的另一端：第一段 LayerNorm 的输出。','Other input to addition: the first LayerNorm’s output.'),finish:L('最后一次相加后，还要归一化，再接结果出口。','After the final addition, normalize again before connecting to the output.')}
+ ],
  pattern:L('两段都复用同一种结构','Both stages reuse one pattern'),
  operations:[L('计算修改量','Compute an update'),L('残差相加','Residual addition'),'LayerNorm'],
  formulaTitle:L('用公式对照两段','Compare the two stages in formulas'),

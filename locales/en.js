@@ -1,5 +1,14 @@
 // English copy. Chinese source phrases are stable lookup keys.
 globalThis.AtelierEnglish = {
+  "通关记录": "Completion records",
+  "仅影响当前浏览器，保留所有棋盘和设置。": "Only affects this browser. All circuits and settings stay saved.",
+  "清除全部通关记录": "Clear all completions",
+  "把所有关卡标为未通过？已搭好的组件和连线会保留，通关标记与完成计数会清零。此操作无法撤销。": "Mark every level as incomplete? Placed modules and wires will stay saved; completion badges and counts will be cleared. This cannot be undone.",
+  "取消": "Cancel",
+  "确认清除": "Confirm clear",
+  "保存失败，通关记录未清除。请检查浏览器存储后重试。": "Could not save. Completion records are unchanged. Check browser storage and try again.",
+  "所有关卡已标为未通过，棋盘和设置已保留。": "All levels are now incomplete. Circuits and settings were kept.",
+
   "归一化": "Normalization",
   "同一组特征，除以同一个均方根": "One feature group, one shared RMS divisor",
   "先把一个 token 的各个特征平方、求平均，再开平方，得到它自己的尺度 r。随后各特征都除以这个 r；另一个 token 单独算自己的 r。": "Square one token’s features, take their mean and then its square root to obtain that token’s scale r. Divide every feature by the same r; another token computes its own r.",

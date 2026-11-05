@@ -11,8 +11,8 @@
    if(!$('#audio-status').hidden)unavailable();
    $('#music-enabled').setAttribute('aria-checked',String(options.enabled));$('#music-volume').value=String(Math.round(options.volume*100));$('#music-volume-value').textContent=Math.round(options.volume*100)+'%';
   }
-  function open(){sync();if(!settings.open)settings.showModal();}
-  function close(){settings.close();(welcome.open?$('#welcome-settings'):$('#settings-open')).focus({preventScroll:true});}
+  function open(){scope.AtelierProgressResetUI?.clear();sync();if(!settings.open)settings.showModal();}
+  function close(){scope.AtelierProgressResetUI?.clear();settings.close();(welcome.open?$('#welcome-settings'):$('#settings-open')).focus({preventScroll:true});}
   function enter(){
    if(leaving)return;leaving=true;music?.unlock();welcome.classList.add('is-leaving');
    const finish=()=>{welcome.close();welcome.classList.remove('is-leaving');leaving=false;$('#run').focus({preventScroll:true});};
