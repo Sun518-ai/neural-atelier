@@ -1,5 +1,5 @@
-import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=overview-zoom-1';
-import {createProgress} from './level-progress.js?v=overview-zoom-1';
+import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=view-slider-1';
+import {createProgress} from './level-progress.js?v=view-slider-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -361,7 +361,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=overview-zoom-1');
+ const {createSceneArt}=await import('./scene-art.js?v=view-slider-1');
  function scenePalette(){
   if(typeof getComputedStyle!=='function')return {};
   const css=getComputedStyle(document.body),read=name=>css.getPropertyValue(name).trim();
@@ -493,8 +493,17 @@ try{
   el.style.opacity=fade?String(1-.92*fade):'';
  }
  function overviewZoomLimit(){return Math.max(1.35,stage().zoom);}
+ function syncZoomControl(){
+  const input=$('#camera-zoom');input.disabled=!!focusId||transitioning;
+  if(focusId)return;
+  const minScale=1/(overviewZoomLimit()*2),maxScale=1/.45;
+  input.value=String(Math.max(0,Math.min(100,(1/zoom-minScale)/(maxScale-minScale)*100)));
+  const percent=Math.round(stage().zoom/zoom*100)+'%';
+  $('#camera-zoom-rate').textContent=percent;input.setAttribute('aria-valuetext',percent);
+ }
  function render(){
   const w=host.clientWidth,h=host.clientHeight;if(!w||!h)return;
+  syncZoomControl();
   const calculating=art.focusCalculations();
   for(const edge of curves){const fade=Math.max(calculating.get(edge.from)||0,calculating.get(edge.to)||0);for(const mesh of edge.visuals){const m=mesh.material,transparent=fade>0;if(m.transparent!==transparent){m.transparent=transparent;m.needsUpdate=true;}m.opacity=1-.86*fade;m.depthWrite=!transparent;}}
   renderer.setSize(w,h,false);const width=23*zoom,height=width*h/w;
@@ -962,6 +971,7 @@ try{
  document.addEventListener('pointerup',e=>{if(!drag)return;const d=drag;drag=null;if(busy&&d.kind!=='camera')return;if(d.kind==='palette'){if(d.moved){suppressPaletteClick=true;setTimeout(()=>suppressPaletteClick=false,0);const rect=host.getBoundingClientRect();if(e.clientX>=rect.left&&e.clientX<=rect.right&&e.clientY>=rect.top&&e.clientY<=rect.bottom){const p=worldPoint(e.clientX,e.clientY);if(p)placeModule(p.x,p.z);}placing=null;clearPlacement();labels();}return;}if(d.kind==='device'){const target=document.elementFromPoint(e.clientX,e.clientY)?.closest('[data-device]');if(target)assignDevice(d.id,target.dataset.device);return;}if(d.kind==='wire'&&d.moved){d.el.dataset.suppress='true';setTimeout(()=>delete d.el.dataset.suppress,0);const target=document.elementFromPoint(e.clientX,e.clientY)?.closest('[data-input]');clearPreview();if(target){const [to,i]=target.dataset.input.split(':');link(d.id,to,Number(i));}else{pending=d.id;labels();say(I18n.t("继续点一个方形输入口，完成这条线。"));}}if(d.kind==='node'&&d.moved){suppressNodeClick=true;setTimeout(()=>suppressNodeClick=false,0);history.push(d.old);save();refresh();labels();}if(d.kind==='node'&&!d.moved){nodeTap(d.id,e);labels();}});
  document.addEventListener('pointercancel',()=>{drag=null;pending=placing=null;clearConnectionError();clearPreview();clearPlacement();labels();});
  function zoomCamera(e){e.preventDefault();if(transitioning)return;zoom=Math.max(focusId ? .13 : .45,Math.min(focusId ? .7 : overviewZoomLimit()*2,zoom+e.deltaY*(focusId ? .00028 : .0008)));render();}
+ $('#camera-zoom').addEventListener('input',e=>{if(focusId||transitioning)return;const amount=Math.max(0,Math.min(100,Number(e.target.value)))/100,minScale=1/(overviewZoomLimit()*2);zoom=1/(minScale+(1/.45-minScale)*amount);render();});
  host.addEventListener('wheel',zoomCamera,{passive:false});overlay.addEventListener('wheel',zoomCamera,{passive:false});
  document.addEventListener('keydown',e=>{if($('#settings').open||$('#welcome').open||$('#level-menu').open||$('#level-complete').open||$('#about').open||/^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName))return;if(e.key==='Escape'&&fusionEffect){e.preventDefault();finishFusion(true);return;}if((e.key==='Delete'||e.key==='Backspace')&&selectedWire&&!busy){e.preventDefault();deleteWire();return;}if((e.key==='Delete'||e.key==='Backspace')&&actionNode&&!busy&&!focusId){e.preventDefault();removeModule(actionNode);return;}if(e.key==='Escape'){clearConnectionError();if(focusId){e.preventDefault();leaveFocus();}else if(!$('#run-report').hidden){e.preventDefault();closeReport(true);}else{pending=placing=selectedWire=actionNode=null;fault=null;clearPreview();clearPlacement();labels();}}});
  document.addEventListener('pointercancel',()=>{if(drag?.kind==='palette'){placing=null;clearPlacement();}drag=null;render();});
