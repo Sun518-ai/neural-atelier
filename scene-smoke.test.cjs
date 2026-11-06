@@ -171,7 +171,8 @@ test('A × V pauses, rescales and relocalizes without losing arithmetic, then cl
   }else if(phase===2&&formula?.dataset.projectionRow==='2'){stop=app.api.run();phase=3;}
  }});
  app.document.querySelector('#welcome').close();app.api.switchLevel('weighted-sum');app.api.setState(app.c.NeuralPrologue.solutions('weighted-sum'));app.api.getWorld().rebuild();const saved=JSON.stringify(app.api.getState());await app.api.run();await stop;
- assert.equal(phase,3);assert.equal(JSON.stringify(app.api.getState()),saved);assert.equal(app.document.querySelectorAll('.packet,.projection-calculation,.projection-result').length,0);assert.equal(unit().userData.aggregation,undefined);assert.equal(unit().children[0].material.opacity,1);assert.equal(app.document.querySelector('.node-label[data-node="aggregate"]').hidden,false);
+ assert.equal(phase,3);assert.equal(JSON.stringify(app.api.getState()),saved);assert.equal(app.document.querySelectorAll('.packet,.projection-calculation,.projection-result').length,0);assert.equal(unit().userData.aggregation,undefined);assert.equal(unit().children[0].material.opacity,1);assert.equal(app.document.querySelector('.node-label[data-node="aggregate"]').hidden,true,'stopping keeps titles hidden at the distant zoom');
+ app.document.querySelector('#camera-reset').onclick();assert.equal(app.document.querySelector('.node-label[data-node="aggregate"]').hidden,false,'resetting the camera restores the title');
  app.api.switchLevel('wire');assert.equal(app.document.querySelector('.aggregation-calculation'),null);assert.deepEqual([...app.c.I18n.missing],[]);
 });
 
