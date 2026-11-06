@@ -869,3 +869,19 @@ test('hints open beside level navigation, dismiss without editing and never writ
  app.c.I18n.setPreference('en');doc.querySelector('#hint').onclick();assert.doesNotMatch(doc.querySelector('#hint-panel').textContent,/[\u3400-\u9fff]/);
  app.eval("state=M.solutions('causal')");await app.eval('run()');assert.equal(doc.querySelector('#hint-panel').hidden,true);assert.equal(app.eval('levelPassed()'),true);
 });
+
+test('masked head explanation distinguishes whole heads from Q and K using real independent reading weights',()=>{
+ const app=boot(new Map(),'#masked-multihead'),doc=app.document,M=app.c.NeuralPrologue,board=app.eval('JSON.stringify(state)');
+ const values=M.evaluate(M.solutions('masked-multihead'),M.samplesFor('masked-multihead')[0].v).values;
+ for(const language of ['zh','en']){
+  app.c.I18n.setPreference(language);const primer=doc.querySelector('.heads-primer');assert.ok(primer);assert.equal(primer.querySelectorAll('.heads-branch').length,2);
+  for(const [i,row]of [...primer.querySelectorAll('tbody tr')].entries()){
+   assert.deepEqual([...row.querySelectorAll('td')].map(e=>e.textContent),Array.from(values[i?'softmax-2':'softmax'].slice(3,6),v=>Math.round(v*100)+'%'));
+   assert.equal(row.lastElementChild.textContent,'0%');
+  }
+  assert.notDeepEqual(Array.from(values.softmax.slice(3,6)),Array.from(values['softmax-2'].slice(3,6)));
+  assert.equal(primer.querySelectorAll('details[open]').length,0);assert.equal(app.eval('JSON.stringify(state)'),board);
+  if(language==='en')assert.doesNotMatch(doc.querySelector('.mission').textContent,/[\u3400-\u9fff]/);
+ }
+ app.eval("switchLevel('causal')");assert.equal(doc.querySelector('.heads-primer'),null);assert.deepEqual([...app.c.I18n.missing],[]);
+});

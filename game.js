@@ -1,5 +1,5 @@
-import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=shelf-symbols-1';
-import {createProgress} from './level-progress.js?v=shelf-symbols-1';
+import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=heads-explained-1';
+import {createProgress} from './level-progress.js?v=heads-explained-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -126,6 +126,10 @@ $('#structure-map').addEventListener('click',e=>{if(!e.target.closest('[data-ope
 $('#structure-close').onclick=()=>$('#structure-dialog').close();
 $('#structure-dialog').addEventListener('click',e=>{if(e.target!==$('#structure-dialog'))return;const r=e.target.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)e.target.close();});
 function stageColor(c){return M.routes[c.track]?.groups?.find(group=>group.ids.includes(c.id))?.id||c.track;}
+function maskedHeadsPrimer(){
+ const g=M.maskedHeadsGuide,sample=M.samplesFor('masked-multihead')[0],ev=M.evaluate(M.solutions('masked-multihead'),sample.v),words=sample.word.split(' / ');
+ return `<div class="heads-primer"><div class="heads-input">${g.input}</div><div class="heads-pair">${g.heads.map((name,i)=>`<div class="heads-branch" data-head="${i}"><b>${name}</b><code>Q<sub>${i?'B':'A'}</sub> · K<sub>${i?'B':'A'}</sub> · V<sub>${i?'B':'A'}</sub></code><small>${g.result}</small></div>`).join('')}</div><div class="heads-join">${g.join}<span>↓ ${g.output}</span></div><details><summary>${g.exampleTitle}</summary><table><thead><tr><th></th>${words.map(w=>`<th>${w}</th>`).join('')}</tr></thead><tbody>${g.heads.map((name,i)=>`<tr><th>${name}</th>${ev.values[i?'softmax-2':'softmax'].slice(3,6).map(value=>`<td>${Math.round(value*100)}%</td>`).join('')}</tr>`).join('')}</tbody></table><p>${g.exampleNote}</p></details><details><summary>${g.widthTitle}</summary><p>${g.width}</p></details><details><summary>${g.oldTitle}</summary><p>${g.old}</p></details></div>`;
+}
 function stageChrome(){
  closeHint();
  const c=stage();document.body.dataset.stageColor=stageColor(c);renderStructureMap();document.body.classList.toggle('engine-level',!!c.engine);$('#device-docks').hidden=!c.engine;resetReport();$('#engine-controls').hidden=!c.engine;engineControls();$('.scene-legend').hidden=c.nodes.length===0;$('#scene-help').textContent=c.nodes.length?I18n.t("拖模块摆放 · 点连线删除 · 双击查看模块卡"):I18n.t("圆口出，方口进 · 拖动空白转动视角");$('#pass-count').textContent='0 / '+c.sampleCount;document.title=I18n.t("神经工坊 · ")+c.title;$('.chapter span').textContent=c.chapter;$('.chapter strong').textContent=c.title;
@@ -139,6 +143,8 @@ function stageChrome(){
   $('#mission-reason-example').innerHTML=`<div class="swiglu-primer"><h4>${I18n.t("SwiGLU 是哪一段？")}</h4><p>${I18n.t("前面的进阶关已经把双路门控与降维组成 SwiGLU FFN；本关再接入归一化输入和残差。")}</p><div class="swiglu-source">${I18n.t("同一份输入 Z")}</div><div class="swiglu-branches"><div><b>${I18n.t("线性投影")}</b><span>${I18n.t("内容特征")}</span></div><div class="swiglu-gate"><b>${I18n.t("门投影 → SiLU")}</b><span>${I18n.t("调节系数")}</span></div></div><div class="swiglu-merge"><span aria-hidden="true">↓</span><b>${I18n.t("逐元素相乘")}</b><span aria-hidden="true">↓</span><b>${I18n.t("降维投影")}</b></div><p>${I18n.t("同样的内容值 2，乘系数 0.3 得到 0.6，乘 1.5 得到 3。系数随输入变化，决定这个特征贡献多少。")}</p></div>`;
  }else if(reason?.kind==='encoder-layer'){
   $('#mission-reason-example').innerHTML=encoderPrimer();
+ }else if(reason?.kind==='masked-heads'){
+  $('#mission-reason-example').innerHTML=maskedHeadsPrimer();
  }else if(reason?.kind==='causal'){
   $('#mission-reason-example').innerHTML=causalPrimer();
  }else if(reason?.kind==='embedding-width'){
@@ -334,7 +340,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=shelf-symbols-1');
+ const {createSceneArt}=await import('./scene-art.js?v=heads-explained-1');
  function scenePalette(){
   if(typeof getComputedStyle!=='function')return {};
   const css=getComputedStyle(document.body),read=name=>css.getPropertyValue(name).trim();

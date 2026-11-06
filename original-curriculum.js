@@ -248,13 +248,30 @@ M.encoderGuide={
 I18n.prepare(M.encoderGuide);
 lesson('masked-multihead',L('把遮罩放进两个头','Put the mask inside both heads'),
  ['masked-a-q','masked-a-k','masked-a-v','score','mask','softmax','aggregate','masked-b-q','masked-b-k','masked-b-v','score','mask','softmax','aggregate','wide-concat','original-output'],
- L('搭出双头因果注意力，再收成组件','Build and package two-head causal attention'),
- L('前一关只算出了参考比例。本关让两个头各自计算比例、读取各自的 V，再把两份内容拼接并投影。四维输入已带位置信息；自行放置组件和接线，出口应得到完整的注意力输出。','The preceding lesson produced only reading weights. Here, each head computes its own weights and reads its own V, then concatenate both results and project. The four-feature input already includes positions. Place and wire the modules to produce the complete attention output.'),
- L('两个头使用不同的 Q/K/V 权重，可以从同一句话读取不同的信息。但两份打分都可能偷看未来，所以每个头都需要在自己的 Softmax 前遮住未来分数。只遮住一个头，另一个头仍会泄露后面的内容。','Different Q/K/V weights let the two heads read different information from the same sentence. Both score maps can look ahead, so each head must mask future scores before its own Softmax. Masking only one head leaves the other able to leak future content.'),
- L('V 是被读取的内容，不经过遮罩或 Softmax。每个头输出两个特征，按 A 在前、B 在后的顺序拼成四个，再乘 Wo；这一整段才是“双头因果注意力”。残差和 LayerNorm 留到下一关。','V supplies the content and bypasses the mask and Softmax. Each head outputs two features; concatenate A before B to form four, then multiply by Wo. This complete computation is Two-head masked attention. Residual addition and LayerNorm come in the next lesson.'),
+ L('同一句话，让两套注意力各读一遍','Read the same sentence with two attention heads'),
+ L('“双头”就是两套并行的注意力计算，叫头 A、头 B。两边都读取左侧同一份输入 X，但各有自己的 Q、K、V 权重。Q 和 K 不是两个头；A、B 也不是两组词。本关要让两套头都不能读取未来，再汇合结果。','Two heads are two parallel attention computations, called A and B. Both read the same input X on the left, but each has its own Q, K and V weights. Q and K are not two heads, and A and B are not two groups of tokens. Prevent both heads from reading ahead, then combine their results.'),
+ L('在每个头里面，Q/K 算出“各个词要读多少”的比例，V 提供要读的内容；按这些比例汇合 V，才得到这个头的结果。两个头的权重不同，因此能形成不同的读取方式。','Inside each head, Q/K determine how much to read from each token, while V supplies the content. Combining V with those weights produces that head’s result. Different learned weights let the heads form different reading patterns.'),
+ L('本关再给两套计算都加上“不能看未来”的限制：每个头在自己的 Softmax 前遮住未来分数。否则即使 A 遮住了“猫”，B 仍可能提前读到它。两头完成后，把结果拼接并经过 Wo，才收成新的双头因果注意力。','Add a no-looking-ahead restriction to both computations: mask future scores before each head’s own Softmax. Otherwise, even if A masks Cat, B can still read it early. Concatenate both completed results and apply Wo to form the new two-head causal attention module.'),
  {'masked-a-q':['R'],'masked-a-k':['R'],'masked-a-v':['R'],score:['masked-a-q','masked-a-k'],mask:['score'],softmax:['mask'],aggregate:['softmax','masked-a-v'],
  'masked-b-q':['R'],'masked-b-k':['R'],'masked-b-v':['R'],'score-2':['masked-b-q','masked-b-k'],'mask-2':['score-2'],'softmax-2':['mask-2'],'aggregate-2':['softmax-2','masked-b-v'],'wide-concat':['aggregate','aggregate-2'],'original-output':['wide-concat'],sink:'original-output'},
  x=>multi(x,x,true),{sourceDim:12,sinkDim:12,shape:'3 × 4 → 3 × 4',wide:true,positioned:true,buildable:true,maxModules:18,boardWidth:32,boardDepth:18,sourceX:-13,sinkX:13,zoom:1.5,outputTitle:L('因果注意力输出','Causal attention output')});
+added['masked-multihead'].rationale.kind='masked-heads';
+added['masked-multihead'].rationale.title=L('一个头，里面有什么？','What is inside one head?');
+added['masked-multihead'].rationale.scope='';
+M.maskedHeadsGuide={
+ input:L('同一份 X · 每个词 4 个数','Same X · 4 numbers per token'),
+ heads:[L('头 A','Head A'),L('头 B','Head B')],
+ result:L('每个词得到 2 个数','2 output numbers per token'),
+ join:L('拼接两份结果：2 + 2 = 4 个数','Concatenate results: 2 + 2 = 4 numbers'),
+ output:L('Wo 重组这 4 个数','Wo recombines these 4 numbers'),
+ widthTitle:L('两个头，是把输入切成两半吗？','Do two heads split the input in half?'),
+ width:L('不是。每个头的 Q/K/V 投影都读取完整的 4 个数，分别乘自己的 4 × 2 权重，得到 2 个数。各头汇合后的两个数按 A 在前、B 在后拼接，再乘 4 × 4 的 Wo。残差和 LayerNorm 在下一关。','No. Each head’s Q/K/V projections read all four input numbers and apply their own 4 × 2 weights to produce two numbers. Concatenate each head’s two aggregate values, A before B, then apply the 4 × 4 Wo. Residual addition and LayerNorm come in the next lesson.'),
+ oldTitle:L('架子里已有的“双头自注意力”呢？','What about the existing two-head self-attention module?'),
+ old:L('那块内部已经包含两套头、拼接和 Wo，但没有因果遮罩。它不是拆头的前置步骤：先过它再接 Q/K/V，会多算一轮注意力。本关是在展开的两套头里面加入遮罩，再把完整结果收成新组件。','That module already contains both heads, concatenation and Wo, but no causal mask. It is not a preparation step for splitting heads: placing it before Q/K/V adds another attention computation. Here, add masks inside the two expanded heads, then package the complete computation as a new module.'),
+ exampleTitle:L('看一个例子：同一个“爱”，两头分别参考谁？','An example: how do the heads read for Love?'),
+ exampleNote:L('这是固定输入“我 / 爱 / 猫”在“爱”位置算出的参考比例。两套权重得到的比例不同，但“猫”在未来，两边都给它 0。头 A 的比例用于汇合 V_A，头 B 的比例用于汇合 V_B。','These are the reading weights at Love for the fixed input I / Love / Cat. The two weight sets give different proportions, but Cat is in the future, so both assign it zero. Head A’s proportions aggregate V_A; head B’s proportions aggregate V_B.')
+};
+I18n.prepare(M.maskedHeadsGuide);
 lesson('decoder-self',L('只看已给出的目标词','Read only the available target prefix'),['masked-heads','residual1','ln-attn'],
  L('给因果自注意力接回残差','Add the residual around masked self-attention'),
  L('沿用双头计算，但目标位置只能看自己和前面。把更新加回目标输入，再做 LayerNorm。','Reuse two-head attention, but let each target position see only itself and earlier positions. Add the update to the target input, then apply LayerNorm.'),
