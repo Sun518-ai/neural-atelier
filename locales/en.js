@@ -1,5 +1,7 @@
 // English copy. Chinese source phrases are stable lookup keys.
 globalThis.AtelierEnglish = {
+  "关闭提示": "Close hint",
+  "下一条提示": "Next hint",
   "通关记录": "Completion records",
   "仅影响当前浏览器，保留所有棋盘和设置。": "Only affects this browser. All circuits and settings stay saved.",
   "清除全部通关记录": "Clear all completions",

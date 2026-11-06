@@ -852,3 +852,20 @@ test('masked bridge keeps old decoder progress and saves repeated module instanc
  assert.ok(reload.document.querySelector('#level-complete').open);assert.ok(reload.document.querySelector('[data-add-module="masked-heads"]'));
  assert.equal(reload.eval('stage().next'),'decoder-self');assert.equal(reload.eval('JSON.stringify(state)'),bridge);
 });
+
+test('hints open beside level navigation, dismiss without editing and never write into the run toolbar',async()=>{
+ const app=boot(new Map(),'#original-ffn'),doc=app.document;
+ assert.equal(doc.querySelector('#hint').closest('.topbar'),doc.querySelector('.topbar'));
+ assert.equal(doc.querySelector('.side-actions #hint'),null);assert.equal(doc.querySelector('#feedback').textContent,'');
+ const board=app.eval('JSON.stringify(state)');doc.querySelector('#hint').onclick();
+ assert.equal(doc.querySelector('#hint-panel').hidden,false);assert.equal(doc.querySelector('#hint').getAttribute('aria-expanded'),'true');assert.ok(doc.querySelector('#hint-text').textContent.length);
+ assert.equal(doc.querySelector('#feedback').textContent,'');assert.equal(app.eval('JSON.stringify(state)'),board);
+ doc.querySelector('#scene').dispatchEvent(new app.window.Event('pointerdown',{bubbles:true}));assert.equal(doc.querySelector('#hint-panel').hidden,true);
+ doc.querySelector('#hint').onclick();const escape=new app.window.Event('keydown',{bubbles:true,cancelable:true});escape.key='Escape';doc.dispatchEvent(escape);assert.equal(doc.querySelector('#hint-panel').hidden,true);
+ doc.querySelector('#hint').onclick();doc.querySelector('#hint-close').onclick();assert.equal(doc.querySelector('#hint').getAttribute('aria-expanded'),'false');
+ app.eval("switchLevel('ffn')");doc.querySelector('#hint').onclick();const first=doc.querySelector('#hint-text').textContent;
+ if(!doc.querySelector('#hint-next').hidden){doc.querySelector('#hint-next').onclick();assert.notEqual(doc.querySelector('#hint-text').textContent,first);}
+ app.eval("switchLevel('causal')");assert.equal(doc.querySelector('#hint-panel').hidden,true);
+ app.c.I18n.setPreference('en');doc.querySelector('#hint').onclick();assert.doesNotMatch(doc.querySelector('#hint-panel').textContent,/[\u3400-\u9fff]/);
+ app.eval("state=M.solutions('causal')");await app.eval('run()');assert.equal(doc.querySelector('#hint-panel').hidden,true);assert.equal(app.eval('levelPassed()'),true);
+});
