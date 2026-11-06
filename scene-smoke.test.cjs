@@ -1535,3 +1535,12 @@ test('board surfaces and grid accept the stage palette without tinting the input
  const floor=scene.children[0];assert.equal(floor.children[2].material.color.getHexString(),'f4e3eb');assert.equal(floor.children[3].material.color.getHexString(),'dfbecd');
  assert.deepEqual(input(),original,'the input and output geometry keeps its own semantic colors');
 });
+
+test('attention outlets distinguish attention weights from aggregated and projected features',async()=>{
+ const app=await boot(),M=app.c.NeuralPrologue;
+ for(const [id,weights]of [['causal',true],['softmax',true],['weighted-sum',false],['aggregation',false],['attention',false]]){
+  app.api.switchLevel(id);
+  const label=[...app.document.querySelectorAll('.source-label')].find(el=>el.querySelector('b')?.textContent===M.levels[id].outputTitle);
+  assert.ok(label,id);assert.equal(label.textContent.includes(M.causalGuide.weightsNote),weights,id);
+ }
+});

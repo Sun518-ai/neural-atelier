@@ -106,7 +106,7 @@ function diagram(entry){
  let nodes,paths,height=122;
  if(entry.family==='original'){
   nodes=[n('source',3,4,'源句输入','Source'),n('encoder',81,4,'编码器','Encoder'),n('memory',159,4,'源表征 E','Memory E'),n('target',3,78,'目标前缀','Target'),n('decoder',81,78,'解码器','Decoder'),n('head',159,78,'词表/选词','Readout')];
-  paths=['M61 18H79m-4 -3l4 3 -4 3','M139 18H157m-4 -3l4 3 -4 3','M188 32V51H110V76m-3 -4l3 4 3 -4','M61 92H79m-4 -3l4 3 -4 3','M139 92H157m-4 -3l4 3 -4 3'];
+  paths=['M61 18H79m-4 -3l4 3 -4 3','M139 18H157m-4 -3l4 3 -4 3','M188 32V51H110V76m-3 -4l3 4 3 -4','M61 92H79m-4 -3l4 3 -4 3','M139 92H157m-4 -3l4 3 -4 3','M188 106V116H32V108m-3 4l3 -4 3 4'];
  }else if(entry.family==='modern'){
   nodes=[n('input',3,4,'词向量','Embedding'),n('layers',81,4,'解码器层','Layers'),n('head',159,4,'Norm/词表','Norm/head'),n('selection',159,78,'选词','Select'),n('prefix',3,78,'更新前缀','New prefix')];
   paths=['M61 18H79m-4 -3l4 3 -4 3','M139 18H157m-4 -3l4 3 -4 3','M188 32V76m-3 -4l3 4 3 -4','M159 92H63m4 -3l-4 3 4 3','M32 78V34m-3 4l3 -4 3 4'];
