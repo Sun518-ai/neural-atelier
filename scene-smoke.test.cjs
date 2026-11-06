@@ -690,8 +690,8 @@ test('extended overview shrinks the board and fades titles, then restores labels
   app.api.switchLevel(id);app.api.setState(app.c.NeuralPrologue.solutions(id));app.api.getWorld().rebuild();
   const saved=JSON.stringify(app.api.getState()),initial=app.view().width,base=Math.max(1.35,initial/23);
   assert.equal(doc.querySelector('#camera-zoom-rate').textContent,'100%');assert.equal(doc.querySelector('#camera-zoom').disabled,false);
-  const titles=()=>[...doc.querySelectorAll('.node-label,.source-label')];
-  assert.ok(titles().every(el=>!el.hidden&&Number(el.style.opacity)===1),'initial titles stay legible even on the large board');
+  const titles=()=>[...doc.querySelectorAll('.node-label,.source-label,.port')];
+  assert.ok(titles().every(el=>!el.hidden&&Number(el.style.opacity||1)===1),'initial titles stay legible even on the large board');
   wheel((base-initial/23)/.0008);const oldWidth=app.view().width;
   wheel(base*.3/.0008);
   assert.ok(app.view().width>oldWidth,'the whole board continues shrinking past the former limit');
@@ -699,12 +699,12 @@ test('extended overview shrinks the board and fades titles, then restores labels
   const halfway=app.view().width,slider=doc.querySelector('#camera-zoom');
   assert.ok(Number(slider.value)>0);slider.value='0';slider.dispatchEvent(new app.window.Event('input'));assert.ok(app.view().width>halfway);
   assert.ok(titles().every(el=>el.hidden&&Number(el.style.opacity)===0),'invisible titles no longer intercept pointer or keyboard input');
-  assert.ok([...doc.querySelectorAll('.port')].every(el=>!el.hidden),'ports remain available');
+  assert.ok([...doc.querySelectorAll('.port')].every(el=>el.disabled),'invisible ports cannot receive input');
   const furthest=app.view().width;wheel(10000);assert.equal(app.view().width,furthest,'overview has a finite limit');
   app.c.I18n.setPreference('en');assert.ok(titles().every(el=>el.hidden),'a label rebuild preserves the distant view');
   const node=app.api.getState().nodes[0].id;app.api.getWorld().focus(node);await new Promise(setImmediate);
   doc.querySelector('#card-close').onclick();assert.equal(app.view().width,furthest);assert.ok(titles().every(el=>el.hidden));
-  slider.value='100';slider.dispatchEvent(new app.window.Event('input'));assert.ok(app.view().width<initial);assert.ok(titles().every(el=>!el.hidden&&Number(el.style.opacity)===1),'zooming in restores all titles');
+  slider.value='100';slider.dispatchEvent(new app.window.Event('input'));assert.ok(app.view().width<initial);assert.ok(titles().every(el=>!el.hidden&&Number(el.style.opacity||1)===1),'zooming in restores all titles and port labels');
   doc.querySelector('#camera-reset').onclick();assert.equal(doc.querySelector('#camera-zoom-rate').textContent,'100%');assert.ok(Number(slider.value)>0&&Number(slider.value)<100);assert.ok(Math.abs(app.view().width-initial)<1e-8);assert.ok(titles().every(el=>!el.hidden));
   assert.equal(JSON.stringify(app.api.getState()),saved);
  }

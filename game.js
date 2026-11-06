@@ -1,5 +1,5 @@
-import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=view-slider-1';
-import {createProgress} from './level-progress.js?v=view-slider-1';
+import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=port-zoom-fade-1';
+import {createProgress} from './level-progress.js?v=port-zoom-fade-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -361,7 +361,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=view-slider-1');
+ const {createSceneArt}=await import('./scene-art.js?v=port-zoom-fade-1');
  function scenePalette(){
   if(typeof getComputedStyle!=='function')return {};
   const css=getComputedStyle(document.body),read=name=>css.getPropertyValue(name).trim();
@@ -521,7 +521,7 @@ try{
   layouts.forEach(({el,xy:[x,y],width,height})=>{
    el.hidden=!!focusId&&(el.dataset.owner!==focusId||el.classList.contains('node-label')||el.classList.contains('local-fault')||el.classList.contains('fault-pin'))||el.classList.contains('node-label')&&calculating.has(el.dataset.owner);
    if(el.classList.contains('node-label')||el.classList.contains('source-label')){el.style.opacity=String(titleOpacity);el.hidden=el.hidden||titleOpacity===0;}
-   if(el.classList.contains('port')){el.disabled=!!focusId;fadePort(el,x,y,flow,width,height,calculating);}
+   if(el.classList.contains('port')){el.disabled=!!focusId||titleOpacity===0;fadePort(el,x,y,flow,width,height,calculating);if(titleOpacity<1)el.style.opacity=String(Number(el.style.opacity||1)*titleOpacity);el.hidden=el.hidden||titleOpacity===0;}
    if(el.classList.contains('local-fault')||el.classList.contains('wire-actions')){
     el.style.left=Math.max(12,Math.min(w-width-12,x+18))+'px';el.style.top=Math.max(12,Math.min(h-height-46,y+15))+'px';
    }else{el.style.left=x+'px';el.style.top=y+'px';}
