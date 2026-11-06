@@ -1,5 +1,5 @@
-import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=closer-labels-1';
-import {createProgress} from './level-progress.js?v=closer-labels-1';
+import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=overview-zoom-1';
+import {createProgress} from './level-progress.js?v=overview-zoom-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -361,7 +361,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=closer-labels-1');
+ const {createSceneArt}=await import('./scene-art.js?v=overview-zoom-1');
  function scenePalette(){
   if(typeof getComputedStyle!=='function')return {};
   const css=getComputedStyle(document.body),read=name=>css.getPropertyValue(name).trim();
@@ -492,6 +492,7 @@ try{
   }
   el.style.opacity=fade?String(1-.92*fade):'';
  }
+ function overviewZoomLimit(){return Math.max(1.35,stage().zoom);}
  function render(){
   const w=host.clientWidth,h=host.clientHeight;if(!w||!h)return;
   const calculating=art.focusCalculations();
@@ -504,10 +505,13 @@ try{
   renderer.render(scene,camera);
   syncConnectionGuide(w,h);syncPlacementGuide(w,h);syncWireTargets(w,h);syncConnectionError(w,h);
   const flow=flowFootprints(w/width);
+  const titleFade=focusId?0:Math.max(0,Math.min(1,(zoom/overviewZoomLimit()-1)/.6));
+  const titleOpacity=1-titleFade*titleFade*(3-2*titleFade);
   // Measure overlays together before moving them, avoiding layout per port.
   const layouts=elements.map(({el,pos})=>({el,xy:project(pos()),width:el.offsetWidth,height:el.offsetHeight}));
   layouts.forEach(({el,xy:[x,y],width,height})=>{
    el.hidden=!!focusId&&(el.dataset.owner!==focusId||el.classList.contains('node-label')||el.classList.contains('local-fault')||el.classList.contains('fault-pin'))||el.classList.contains('node-label')&&calculating.has(el.dataset.owner);
+   if(el.classList.contains('node-label')||el.classList.contains('source-label')){el.style.opacity=String(titleOpacity);el.hidden=el.hidden||titleOpacity===0;}
    if(el.classList.contains('port')){el.disabled=!!focusId;fadePort(el,x,y,flow,width,height,calculating);}
    if(el.classList.contains('local-fault')||el.classList.contains('wire-actions')){
     el.style.left=Math.max(12,Math.min(w-width-12,x+18))+'px';el.style.top=Math.max(12,Math.min(h-height-46,y+15))+'px';
@@ -957,7 +961,7 @@ try{
  document.addEventListener('pointermove',e=>{if(placing)previewPlacement(e.clientX,e.clientY);if(!drag||(busy&&drag.kind!=='camera'))return;if(Math.hypot(e.clientX-drag.x,e.clientY-drag.y)>5)drag.moved=true;if(!drag.moved)return;if(drag.kind==='wire'){pending=drag.id;previewAt(e.clientX,e.clientY);}if(drag.kind==='node'){const p=worldPoint(e.clientX,e.clientY),n=state.nodes.find(n=>n.id===drag.id);if(p){const b=M.bounds(stage());n.x=Math.max(b.left,Math.min(b.right,p.x+drag.offset[0]));n.z=Math.max(b.back,Math.min(b.front,p.z+drag.offset[1]));rebuild();}}if(drag.kind==='camera'){yaw=Math.max(-.65,Math.min(.65,drag.yaw-(e.clientX-drag.x)*.003));pitch=Math.max(.4,Math.min(1.35,drag.pitch+(e.clientY-drag.y)*.004));render();}});
  document.addEventListener('pointerup',e=>{if(!drag)return;const d=drag;drag=null;if(busy&&d.kind!=='camera')return;if(d.kind==='palette'){if(d.moved){suppressPaletteClick=true;setTimeout(()=>suppressPaletteClick=false,0);const rect=host.getBoundingClientRect();if(e.clientX>=rect.left&&e.clientX<=rect.right&&e.clientY>=rect.top&&e.clientY<=rect.bottom){const p=worldPoint(e.clientX,e.clientY);if(p)placeModule(p.x,p.z);}placing=null;clearPlacement();labels();}return;}if(d.kind==='device'){const target=document.elementFromPoint(e.clientX,e.clientY)?.closest('[data-device]');if(target)assignDevice(d.id,target.dataset.device);return;}if(d.kind==='wire'&&d.moved){d.el.dataset.suppress='true';setTimeout(()=>delete d.el.dataset.suppress,0);const target=document.elementFromPoint(e.clientX,e.clientY)?.closest('[data-input]');clearPreview();if(target){const [to,i]=target.dataset.input.split(':');link(d.id,to,Number(i));}else{pending=d.id;labels();say(I18n.t("继续点一个方形输入口，完成这条线。"));}}if(d.kind==='node'&&d.moved){suppressNodeClick=true;setTimeout(()=>suppressNodeClick=false,0);history.push(d.old);save();refresh();labels();}if(d.kind==='node'&&!d.moved){nodeTap(d.id,e);labels();}});
  document.addEventListener('pointercancel',()=>{drag=null;pending=placing=null;clearConnectionError();clearPreview();clearPlacement();labels();});
- function zoomCamera(e){e.preventDefault();if(transitioning)return;zoom=Math.max(focusId ? .13 : .45,Math.min(focusId ? .7 : 1.35,zoom+e.deltaY*(focusId ? .00028 : .0008)));render();}
+ function zoomCamera(e){e.preventDefault();if(transitioning)return;zoom=Math.max(focusId ? .13 : .45,Math.min(focusId ? .7 : overviewZoomLimit()*2,zoom+e.deltaY*(focusId ? .00028 : .0008)));render();}
  host.addEventListener('wheel',zoomCamera,{passive:false});overlay.addEventListener('wheel',zoomCamera,{passive:false});
  document.addEventListener('keydown',e=>{if($('#settings').open||$('#welcome').open||$('#level-menu').open||$('#level-complete').open||$('#about').open||/^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName))return;if(e.key==='Escape'&&fusionEffect){e.preventDefault();finishFusion(true);return;}if((e.key==='Delete'||e.key==='Backspace')&&selectedWire&&!busy){e.preventDefault();deleteWire();return;}if((e.key==='Delete'||e.key==='Backspace')&&actionNode&&!busy&&!focusId){e.preventDefault();removeModule(actionNode);return;}if(e.key==='Escape'){clearConnectionError();if(focusId){e.preventDefault();leaveFocus();}else if(!$('#run-report').hidden){e.preventDefault();closeReport(true);}else{pending=placing=selectedWire=actionNode=null;fault=null;clearPreview();clearPlacement();labels();}}});
  document.addEventListener('pointercancel',()=>{if(drag?.kind==='palette'){placing=null;clearPlacement();}drag=null;render();});
