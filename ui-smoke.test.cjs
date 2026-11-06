@@ -814,3 +814,15 @@ test('structure map updates on hashes and language, remembers collapse and stays
  open();doc.querySelector('#structure-dialog').getBoundingClientRect=()=>({left:100,top:100,right:600,bottom:600});
  const click=new app.window.Event('click',{bubbles:true});Object.assign(click,{clientX:20,clientY:20});doc.querySelector('#structure-dialog').dispatchEvent(click);assert.equal(doc.querySelector('#structure-dialog').open,false);
 });
+
+test('structure map short labels never overwrite shared animation translations',()=>{
+ const app=boot(new Map(),'#cross-attention',['en-US']),M=app.c.NeuralPrologue;
+ assert.equal(app.c.I18n.t('目标前缀'),'Target prefix');assert.equal(app.c.I18n.t('源序列'),'Source sequence');
+ const catalog=JSON.stringify(app.c.AtelierEnglish);
+ for(const language of ['zh','en']){
+  app.c.I18n.setPreference(language);
+  for(const id of Object.keys(M.structureMap.lessons)){M.structureMap.render(id);M.structureMap.render(id,true);}
+ }
+ assert.equal(JSON.stringify(app.c.AtelierEnglish),catalog);
+ assert.equal(app.c.I18n.t('目标前缀'),'Target prefix');
+});

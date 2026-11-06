@@ -1,6 +1,18 @@
 /* A curriculum-wide locator. This describes architecture, never the player's wiring. */
 (function(M){
-const L=(zh,en)=>{globalThis.AtelierEnglish[zh]=en;return I18n.t(zh);};
+const translations=new Map();
+const L=(zh,en)=>{translations.set(zh,en);return zh;};
+const tr=text=>I18n.language()==='en'?(translations.get(text)||text):text;
+function prepare(value,seen=new WeakSet()){
+ if(!value||typeof value!=='object'||seen.has(value))return;seen.add(value);
+ for(const key of Object.keys(value)){
+  const item=value[key];
+  if(typeof item==='string'&&translations.has(item))Object.defineProperty(value,key,{enumerable:true,configurable:true,get:()=>tr(item)});
+  else if(item&&typeof item==='object')prepare(item,seen);
+ }
+}
+// Only the static HTML labels need entries in the shared catalog.
+for(const [zh,en]of [['结构地图','Structure map'],['关闭结构地图','Close structure map']])globalThis.AtelierEnglish[zh]??=en;
 const copy={
  title:L('结构地图','Structure map'),open:L('展开结构地图','Open structure map'),close:L('关闭结构地图','Close structure map'),
  scope:L('本关所在位置','Lesson location'),exit:L('本关出口','Lesson outlet'),next:L('在完整结构中，接下来','Next in the complete structure'),
@@ -98,9 +110,9 @@ for(const [ids,focus,where]of [
 flows.pairwise=flows.modernFFN.filter(n=>n.id!=='silu').map(n=>n.id==='multiply'?node('multiply','对应相乘 U ⊙ G','Pairwise U ⊙ G'):n);
 lessons.pairwise={...lessons.pairwise,flow:'pairwise',note:L('这里只练 U ⊙ G，门值尚未经过 SiLU。地图展示它在门控 FFN 中的位置；下一关再补激活。','This isolates U ⊙ G without SiLU on the gate. The map locates it in a gated FFN; the next lesson adds the activation.')};
 for(const id of ['quantization','session','kv-cache'])lessons[id].regions=['memory','gpu'];
-for(const data of [copy,flows,lessons])I18n.prepare(data);
+for(const data of [copy,flows,lessons])prepare(data);
 function get(id){const entry=lessons[id];if(!entry)throw new Error('Missing structure map for '+id);return {...entry,steps:flows[entry.flow],shape:M.levels[id].tokenOutput?M.levels[id].sinkDim+' '+copy.ids:(M.levels[id].sequence?'3 × '+M.levels[id].sinkDim/3:'1 × '+M.levels[id].sinkDim)};}
-const esc=s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
+const esc=s=>String(tr(s)).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
 function diagram(entry){
  const n=(id,x,y,zh,en)=>({id,x,y,label:L(zh,en)});
  let nodes,paths,height=122;
