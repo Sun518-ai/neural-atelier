@@ -1,5 +1,5 @@
-import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=board-actions-1';
-import {createProgress} from './level-progress.js?v=board-actions-1';
+import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=quick-shelf-help-1';
+import {createProgress} from './level-progress.js?v=quick-shelf-help-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -244,6 +244,7 @@ function chooseInput(to,port){if(busy)return;if(pending)return link(pending,to,p
 const shelfUnlocked=kind=>M.fusions[stageId]?.kind!==kind||stage().nodes.includes(kind)||progress.completed(stageId);
 const shelfInventory=()=>stage().buildable?M.inventory(stage()):M.fusions[stageId]&&progress.completed(stageId)?{[M.fusions[stageId].kind]:1}:{};
 function renderShelf(){
+ hideShelfTooltip();
  const shelf=$('#module-shelf'),available=shelfInventory(),collection=!stage().buildable;shelf.hidden=!stage().buildable&&!Object.keys(available).length;shelf.dataset.mode=collection?'collection':'inventory';
  if(shelf.hidden)return;
  const cap=M.moduleLimit(stage());$('#module-count').textContent=collection?M.fusionCopy.collectedShort:state.nodes.length+' / '+cap;$('#module-count').setAttribute('aria-label',collection?M.fusionCopy.collected:I18n.t('台面数量 / 上限'));
@@ -256,8 +257,9 @@ function renderShelf(){
   const visual=w?`<span class="stock-matrix" aria-hidden="true" style="grid-template-columns:repeat(${w[0].length},1fr)">`+w.flat().slice(0,8).map(v=>`<i class="${v<0?'negative':''}"></i>`).join('')+'</span>':`<span class="stock-symbol" aria-hidden="true" style="--symbol-chars:${[...(symbols[d.type]||'◇')].length}">${symbols[d.type]||'◇'}</span>`;
   const color=M.extraColors?.[kind]?'#'+M.extraColors[kind].toString(16).padStart(6,'0'):({project:'#5eaa9c',down:'#90a79a',add:'#c3a26f',gate:'#a894bf'})[kind]||'#8aa59a';
   const code=({'silu-ffn':'SiLU','swiglu-ffn':'SwiGLU','swiglu-residual':'+ FFN','original-transformer':'Enc/Dec','modern-block':'Block','single-attention':'1H','two-head-attention':'2H','single-cross-attention':'Cross',relu:'ReLU',layernorm2:'LN','ln-attn':'LN','ln-ffn':'LN','ln-cross':'LN',concat:'A ∥ B',position:'PE',project:'W',gate:'Wg',down:'Wd',output:'Wo',q:'Q',k:'K',v:'V',ropeq:'Q ↻',ropek:'K ↻',residual1:'+ A',residual2:'+ F'})[kind]||({activation:'SiLU',add:'+',residual:'+',multiply:'×',norm:'RMS',score:'QKᵀ',mask:'◩',softmax:'σ',mix:'AV',attention:'Attn',ffn:'FFN'})[d.type]||kind;
+  const tooltip=`${collection?M.fusionCopy.useLater:I18n.t("可用数量")+' '+remaining+' / '+available[kind]} · ${I18n.t("双击查看说明")}`;
   const description=`${name} · ${d.ins.map(dim=>moduleShape(kind,dim)).join(' + ')} → ${moduleShape(kind,d.out)} · ${collection?M.fusionCopy.useLater:I18n.t("可用数量")+' '+remaining+' / '+available[kind]} · ${I18n.t("双击查看说明")}`;
-  return `<div class="module-stock ${lastFusionKind===kind?'recently-crafted':''}" role="button" tabindex="${busy?'-1':'0'}" aria-disabled="${busy}" data-add-disabled="${disabled}" aria-label="${description}" title="${description}" data-add-module="${kind}" style="--stock-color:${color}">${visual}<span class="stock-description"><b class="stock-name">${name}</b><small>${d.ins.map(dim=>moduleShape(kind,dim)).join(' + ')} → ${moduleShape(kind,d.out)}</small></span><b class="stock-code" aria-hidden="true">${code}</b><span class="stock-count" aria-hidden="true">${remaining}</span></div>`;
+  return `<div class="module-stock ${lastFusionKind===kind?'recently-crafted':''}" role="button" tabindex="${busy?'-1':'0'}" aria-disabled="${busy}" data-add-disabled="${disabled}" aria-label="${description}" data-tooltip="${tooltip}" data-add-module="${kind}" style="--stock-color:${color}">${visual}<span class="stock-description"><b class="stock-name">${name}</b><small>${d.ins.map(dim=>moduleShape(kind,dim)).join(' + ')} → ${moduleShape(kind,d.out)}</small></span><b class="stock-code" aria-hidden="true">${code}</b><span class="stock-count" aria-hidden="true">${remaining}</span></div>`;
  };
  const grouping=stage().shelf;
  if(grouping){
@@ -273,6 +275,25 @@ function renderShelf(){
 }
 function chooseModule(kind){if(busy||!stage().buildable||!shelfUnlocked(kind)||!M.canAdd(state,kind)||world?.focused())return;pending=selectedWire=actionNode=null;placing=kind;world?.clearConnectionError?.();world?.clearPreview?.();world?.labels();say(I18n.t("拖到台面松开；也可以点空位放下。"));}
 function placeModule(x,z){if(!placing||busy)return false;const next=clone(state);if(!M.addNode(next,placing,x,z)){say(I18n.t("这里放不下，换一处空位。"),'error');return false;}checkpoint();selected=next.nodes.at(-1).id;state=next;placing=null;world?.clearPlacement?.();changed();say(I18n.t("组件已放置。"));return true;}
+function hideShelfTooltip(){
+ const tip=$('#shelf-tooltip');tip.hidden=true;
+ document.querySelector('[aria-describedby="shelf-tooltip"]')?.removeAttribute('aria-describedby');
+}
+function showShelfTooltip(button){
+ if(busy||world?.focused()||!button?.dataset.tooltip)return;
+ const tip=$('#shelf-tooltip');if(!tip.hidden&&button.getAttribute('aria-describedby')==='shelf-tooltip')return;
+ hideShelfTooltip();tip.textContent=button.dataset.tooltip;button.setAttribute('aria-describedby','shelf-tooltip');tip.hidden=false;
+ const r=button.getBoundingClientRect(),t=tip.getBoundingClientRect(),vw=window.innerWidth||document.documentElement.clientWidth||1280,vh=window.innerHeight||document.documentElement.clientHeight||800;
+ tip.style.left=Math.max(10,Math.min(r.right+9,vw-t.width-10))+'px';tip.style.top=Math.max(10,Math.min(r.top+(r.height-t.height)/2,vh-t.height-10))+'px';
+}
+$('#module-palette').addEventListener('pointerover',e=>{if(e.pointerType==='touch'||e.buttons)return;showShelfTooltip(e.target.closest('[data-add-module]'));});
+$('#module-palette').addEventListener('pointerout',e=>{const button=e.target.closest('[data-add-module]');if(button&&!button.contains(e.relatedTarget))hideShelfTooltip();});
+$('#module-palette').addEventListener('focusin',e=>showShelfTooltip(e.target.closest('[data-add-module]')));
+$('#module-palette').addEventListener('focusout',hideShelfTooltip);
+document.addEventListener('pointerdown',hideShelfTooltip,true);
+document.addEventListener('scroll',hideShelfTooltip,true);
+document.addEventListener('keydown',e=>{if(e.key==='Escape')hideShelfTooltip();});
+window.addEventListener?.('resize',hideShelfTooltip);
 $('#module-palette').onclick=e=>{if(suppressPaletteClick||world?.focused())return;const b=e.target.closest('[data-add-module]');if(b&&b.dataset.addDisabled!=='true')chooseModule(b.dataset.addModule);};
 $('#module-palette').ondblclick=e=>{const b=e.target.closest('[data-add-module]');if(!b||busy||suppressPaletteClick)return;e.preventDefault();world?.focusShelf?.(b.dataset.addModule);};
 $('#module-palette').addEventListener('keydown',e=>{if(e.key!=='Enter'&&e.key!==' ')return;const b=e.target.closest('[data-add-module]');if(!b||busy)return;e.preventDefault();if(e.key==='Enter')world?.focusShelf?.(b.dataset.addModule);else if(b.dataset.addDisabled!=='true')chooseModule(b.dataset.addModule);});
@@ -340,7 +361,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=board-actions-1');
+ const {createSceneArt}=await import('./scene-art.js?v=quick-shelf-help-1');
  function scenePalette(){
   if(typeof getComputedStyle!=='function')return {};
   const css=getComputedStyle(document.body),read=name=>css.getPropertyValue(name).trim();
