@@ -274,11 +274,23 @@ html[lang=en] .stock-name{font-size:10px;line-height:12px}
 .level-stage-nav{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:15px}
 .level-stage-nav button{min-height:30px;padding:5px 9px;font-size:11px;color:#6b7e6f;background:transparent;border-color:#d2dbcb}
 .level-stage-nav button[aria-current=step]{color:#2e7869;background:#e4eee0;border-color:#88b09a}
-.level-group{--group-accent:#517e6c;margin-top:22px;scroll-margin-top:8px}
-.level-group[data-level-group=encoder]{--group-accent:#337f73}
-.level-group[data-level-group=decoder]{--group-accent:#856893}
-.level-group[data-level-group=generation]{--group-accent:#9b7b43}
-.level-group-heading{position:sticky;top:0;z-index:1;padding:13px 0 12px;background:#faf8ef;border-top:2px solid var(--group-accent)}
+/* The same stage palette colors the section and its jump button. */
+[data-level-group],[data-stage-color]{--group-accent:#426d57;--group-bg:#eaf1e5;--group-border:#c4d5ba}
+:is([data-level-group=workbench],[data-stage-color=workbench]){--group-accent:#8a5138;--group-bg:#f7e9df;--group-border:#e5c9b6}
+:is([data-level-group=foundations],[data-stage-color=foundations]){--group-accent:#4d693b;--group-bg:#eaf1df;--group-border:#c9d7b8}
+:is([data-level-group=attention],[data-stage-color=attention]){--group-accent:#3a6388;--group-bg:#e5eef8;--group-border:#bed1e4}
+:is([data-level-group=encoder],[data-stage-color=encoder]){--group-accent:#306e65;--group-bg:#dff0eb;--group-border:#b9d8ce}
+:is([data-level-group=decoder],[data-stage-color=decoder]){--group-accent:#775489;--group-bg:#efe6f5;--group-border:#d6c3e1}
+:is([data-level-group=generation],[data-stage-color=generation]){--group-accent:#806124;--group-bg:#f7edcf;--group-border:#dfcfa0}
+:is([data-level-group=single],[data-stage-color=single]){--group-accent:#396b7c;--group-bg:#e2eff3;--group-border:#bdd6df}
+:is([data-level-group=tensor-parallel],[data-stage-color=tensor-parallel]){--group-accent:#785887;--group-bg:#efe7f4;--group-border:#d7c5e0}
+.level-stage-nav button[data-stage-color]{color:var(--group-accent);background:var(--group-bg);border-color:var(--group-border)}
+.level-stage-nav button[data-stage-color][aria-current=step]{border-color:var(--group-accent);box-shadow:inset 0 -2px var(--group-accent);font-weight:600}
+.level-group{margin-top:20px;padding:0 14px 14px;scroll-margin-top:8px;background:var(--group-bg);border:1px solid var(--group-border);border-top:3px solid var(--group-accent);border-radius:12px}
+.level-group-heading{position:sticky;top:0;z-index:1;padding:13px 0 12px;background:var(--group-bg);border-radius:9px 9px 0 0}
+.level-group-cards .level-choice{background:color-mix(in srgb,var(--group-bg) 18%,#fffdf9);border-color:var(--group-border)}
+.level-group-cards .level-choice.current{background:var(--group-bg);border-color:var(--group-accent);box-shadow:inset 0 0 0 1px var(--group-accent)}
+.level-group-cards .level-choice:hover{border-color:var(--group-accent)}
 .level-group-heading>div{display:flex;align-items:baseline;justify-content:space-between;gap:15px}
 .level-group-heading h3{min-width:0;font:600 20px/1.4 Georgia,"Songti SC",serif;color:var(--group-accent)}
 .level-group-heading small{flex-shrink:0;font-size:10px;color:#819080;white-space:nowrap}

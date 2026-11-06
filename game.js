@@ -1,5 +1,5 @@
-import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=shelf-space-1';
-import {createProgress} from './level-progress.js?v=shelf-space-1';
+import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=stage-colors-1';
+import {createProgress} from './level-progress.js?v=stage-colors-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -149,7 +149,7 @@ function renderLevelMenu(){
  if(!route.groups){list.innerHTML=route.ids.map(card).join('');return;}
  const groupId=group=>'level-group-'+menuTrack+'-'+group.id;
  const connections=flow=>`<div class="level-dependencies" aria-label="${M.levelMenuCopy.connections}"><div class="level-dependency-sources">${flow.sources.map(source=>`<div><small>${source.label}</small><b>${source.text}</b></div>`).join('')}</div><svg viewBox="0 0 32 80" aria-hidden="true"><path d="M2 18 H14 V40 H28 M2 62 H14 V40 M23 35 L28 40 L23 45"/></svg><div class="level-dependency-target"><small>${flow.target.label}</small><b>${flow.target.text}</b></div></div>`;
- list.innerHTML=`<nav class="level-stage-nav" aria-label="${M.levelMenuCopy.stages}">${route.groups.map(group=>`<button type="button" data-level-group-target="${groupId(group)}" ${group.ids.includes(stageId)?'aria-current="step"':''}>${group.label}</button>`).join('')}</nav>`+route.groups.map(group=>`<section class="level-group" id="${groupId(group)}" data-level-group="${group.id}" aria-labelledby="${groupId(group)}-title"><header class="level-group-heading"><div><h3 id="${groupId(group)}-title">${group.title}</h3><small>${group.ids.filter(id=>progress.completed(id)).length} / ${group.ids.length} ${M.levelMenuCopy.progress}</small></div><p>${group.description}</p></header>${group.connections?connections(group.connections):''}<div class="level-group-cards">${group.ids.map(card).join('')}</div></section>`).join('');
+ list.innerHTML=`<nav class="level-stage-nav" aria-label="${M.levelMenuCopy.stages}">${route.groups.map(group=>`<button type="button" data-level-group-target="${groupId(group)}" data-stage-color="${group.id}" ${group.ids.includes(stageId)?'aria-current="step"':''}>${group.label}</button>`).join('')}</nav>`+route.groups.map(group=>`<section class="level-group" id="${groupId(group)}" data-level-group="${group.id}" aria-labelledby="${groupId(group)}-title"><header class="level-group-heading"><div><h3 id="${groupId(group)}-title">${group.title}</h3><small>${group.ids.filter(id=>progress.completed(id)).length} / ${group.ids.length} ${M.levelMenuCopy.progress}</small></div><p>${group.description}</p></header>${group.connections?connections(group.connections):''}<div class="level-group-cards">${group.ids.map(card).join('')}</div></section>`).join('');
 }
 function levelMenu(){
  menuTrack=stage().track;renderLevelMenu();$('#level-menu').showModal();const current=$('#level-list .current');current?.closest('.level-group')?.scrollIntoView({block:'start'});current?.scrollIntoView({block:'nearest'});
@@ -308,7 +308,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=shelf-space-1');
+ const {createSceneArt}=await import('./scene-art.js?v=stage-colors-1');
  const art=createSceneArt(T,scene,colors,{anisotropy:renderer.capabilities.getMaxAnisotropy()});art.surroundings(samples(),stage());
  let fusionEffect=null;
  const assembly=new T.Group(),wires=new T.Group();scene.add(assembly,wires);const neuronGeo=new T.SphereGeometry(.115,16,12);let elements=[],curves=[],packets=[],drag=null,preview=null,yaw=.05,pitch=.8,zoom=stage().zoom,lastDepth=-1;
