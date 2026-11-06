@@ -1569,3 +1569,23 @@ test('causal masking routes real scores through shutters, keeps allowed values a
  assert.equal(t(.22,'mask').row,0);assert.equal(t(.22+1.8,'mask').row,1);assert.equal(t(.22+3.6,'mask').row,2);
  assert.equal(t(0,'mask').step,1.8);
 });
+
+test('masked bridge animates both expanded heads and packages the whole board before completion',async()=>{
+ let app;const masks=new Set(),projections=new Set(),phases=new Set();
+ app=await boot({reduced:false,frameMs:180,onFrame:({document})=>{
+  if(!app)return;const scene=app.scenes.at(-1);scene.traverse(o=>{
+   if(o.userData.tokenFlow?.operation==='mask')masks.add(o.userData.node);
+   if(o.userData.sequenceProjection)projections.add(o.userData.node);
+  });
+  const effect=scene.children.find(o=>o.userData.fusion);if(effect){
+   assert.ok(!document.querySelector('#level-complete').open);assert.equal(effect.userData.fusion.count,16);phases.add(effect.userData.fusion.stage);
+   document.querySelector('[data-add-module="masked-heads"]').getBoundingClientRect=()=>({left:24,top:160,width:104,height:60});
+  }
+ }});
+ app.api.switchLevel('masked-multihead');app.api.setState(app.c.NeuralPrologue.solutions('masked-multihead'));app.api.getWorld().rebuild();await app.api.run();
+ assert.equal(app.api.getFault(),null);assert.deepEqual([...masks].sort(),['mask','mask-2']);
+ for(const h of ['a','b'])for(const r of ['q','k','v'])assert.ok(projections.has('masked-'+h+'-'+r),'projection '+h+' '+r);
+ assert.ok(phases.size>=3,'board gathering, module formation and shelf landing');assert.ok(app.document.querySelector('#level-complete').open);
+ assert.equal(app.document.querySelectorAll('#test-results .pass').length,3);assert.equal(app.api.getState().nodes.length,16);
+ assert.equal(app.document.querySelectorAll('.token-calculation,.projection-calculation,.packet').length,0);
+});

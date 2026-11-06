@@ -8,9 +8,9 @@
 
 **[在线试玩 →](https://hacking.pub/games/neural-atelier/)** · [本地启动](#本地启动) · [怎么玩](#怎么玩)
 
-目前有 57 个关卡，从连接第一个向量开始，逐步加入矩阵投影、FFN、Q/K/V、RoPE、Attention、自回归，以及 CPU / GPU / ANE 调度、量化、KV 缓存等端侧推理概念。
+目前有 58 个关卡，从连接第一个向量开始，逐步加入矩阵投影、FFN、Q/K/V、RoPE、Attention、自回归，以及 CPU / GPU / ANE 调度、量化、KV 缓存等端侧推理概念。
 
-其中 **29 关主线**先学原版 Transformer，**13 关现代扩展**再比较 SiLU、SwiGLU、RMSNorm、Pre-LN 和 RoPE，**6 关云端推理**从单机单卡入门，再练习两卡分片与通信，**9 关端侧推理**独立探索 Qwen 27B、Kapitsa 与 Apple ANE。四条路线在关卡菜单中分别选择，完成一条不会自动进入另一条。
+其中 **30 关主线**先学原版 Transformer，**13 关现代扩展**再比较 SiLU、SwiGLU、RMSNorm、Pre-LN 和 RoPE，**6 关云端推理**从单机单卡入门，再练习两卡分片与通信，**9 关端侧推理**独立探索 Qwen 27B、Kapitsa 与 Apple ANE。四条路线在关卡菜单中分别选择，完成一条不会自动进入另一条。
 
 ## 工坊里有什么
 

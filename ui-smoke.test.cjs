@@ -96,7 +96,7 @@ test('partially constructed tables and older complete saves retain their positio
  const legacy=boot(new Map([['neural-atelier-prologue-v1',JSON.stringify(old)]]));assert.equal(legacy.eval('stageId'),'ffn');assert.equal(legacy.eval('state.nodes.length'),6);assert.equal(legacy.eval('state.nodes[0].x'),1.234);assert.equal(legacy.eval('state.sink'),'add');
 });
 test('learning stages preserve level navigation and keep the other tracks separate',()=>{
- const app=boot(new Map(),'', ['en-US']),doc=app.document,M=app.c.NeuralPrologue;app.eval('levelMenu()');assert.equal(doc.querySelectorAll('#level-list [data-level]').length,29);assert.equal(doc.querySelector('#level-list [data-level="placement"]'),null);
+ const app=boot(new Map(),'', ['en-US']),doc=app.document,M=app.c.NeuralPrologue;app.eval('levelMenu()');assert.equal(doc.querySelectorAll('#level-list [data-level]').length,30);assert.equal(doc.querySelector('#level-list [data-level="placement"]'),null);
  assert.deepEqual([...doc.querySelectorAll('#level-list [data-level]')].map(e=>e.dataset.level),Array.from(M.routes.main.ids),'grouping keeps every existing level exactly once and in order');
  assert.equal(doc.querySelectorAll('[data-level-group]').length,6);
  for(const [id,group]of [['multihead','attention'],['wider-features','encoder'],['encoder-layer','encoder'],['causal','decoder'],['cross-attention','decoder']])assert.equal(doc.querySelector(`#level-list [data-level="${id}"]`).closest('[data-level-group]').dataset.levelGroup,group);
@@ -112,7 +112,7 @@ test('learning stages preserve level navigation and keep the other tracks separa
  assert.equal(doc.querySelector('.level-stage-nav [aria-current="step"]').dataset.levelGroupTarget,'level-group-main-encoder');
  assert.match(doc.querySelector('#level-group-main-encoder .level-group-heading small').textContent,/1 \/ 2/);
  const state=app.eval('JSON.stringify(state)');
- for(const language of ['zh','en']){app.c.I18n.setPreference(language);assert.equal(doc.querySelectorAll('#level-list [data-level]').length,29);assert.equal(app.eval('JSON.stringify(state)'),state);if(language==='en')assert.doesNotMatch(doc.querySelector('#level-menu').textContent,/[\u3400-\u9fff]/);}
+ for(const language of ['zh','en']){app.c.I18n.setPreference(language);assert.equal(doc.querySelectorAll('#level-list [data-level]').length,30);assert.equal(app.eval('JSON.stringify(state)'),state);if(language==='en')assert.doesNotMatch(doc.querySelector('#level-menu').textContent,/[\u3400-\u9fff]/);}
  app.document.querySelector('[data-track="engine"]').dispatchEvent(new app.window.Event('click',{bubbles:true}));assert.equal(app.document.querySelectorAll('#level-list [data-level]').length,9);assert.ok(app.document.querySelector('#level-list [data-level="placement"]'));assert.doesNotMatch(app.document.querySelector('#level-menu').textContent,/[\u3400-\u9fff]/);
  assert.equal(doc.querySelector('[data-level-group]'),null);assert.equal(doc.querySelector('#level-list').classList.contains('grouped-levels'),false);
  doc.querySelector('[data-track="modern"]').dispatchEvent(new app.window.Event('click',{bubbles:true}));assert.equal(doc.querySelectorAll('#level-list [data-level]').length,13);assert.equal(doc.querySelector('[data-level-group]'),null);
@@ -769,7 +769,7 @@ test('causal guidance explains visibility and score provenance; the screenshot b
 
 test('every playable lesson has a bilingual structure location, valid focus and a distinct outlet contract',()=>{
  const app=boot(),M=app.c.NeuralPrologue,map=M.structureMap;
- const ids=Object.values(M.routes).flatMap(r=>Array.from(r.ids));assert.equal(ids.length,57);assert.deepEqual(new Set(Object.keys(map.lessons)),new Set(ids));
+ const ids=Object.values(M.routes).flatMap(r=>Array.from(r.ids));assert.equal(ids.length,58);assert.deepEqual(new Set(Object.keys(map.lessons)),new Set(ids));
  for(const lang of ['zh','en']){
   app.c.I18n.setPreference(lang);
   for(const id of ids){
@@ -838,4 +838,17 @@ test('causal offers zero new packaged-score copies while preserving existing sav
  const storage=new Map([['neural-atelier-level-causal-v1',JSON.stringify(saved)]]),restored=boot(storage,'#causal');
  assert.equal(restored.eval('state.nodes.length'),saved.nodes.length);assert.equal(restored.eval("state.nodes.find(n=>n.id==='original-weights').links[0]"),'R');
  restored.eval("removeModule('original-weights')");assert.equal(restored.eval("M.stock(state,'original-weights')"),0);assert.equal(restored.eval("M.canAdd(state,'original-weights')"),false);
+});
+
+test('masked bridge keeps old decoder progress and saves repeated module instances without unlocking its reward early',async()=>{
+ const app=boot(),M=app.c.NeuralPrologue;
+ app.eval("switchLevel('decoder-self');state=M.solutions('decoder-self');refresh();save()");const old=app.eval('JSON.stringify(state)');
+ app.eval("switchLevel('masked-multihead')");assert.equal(app.location.hash,'#masked-multihead');
+ assert.equal(app.document.querySelector('[data-add-module="masked-heads"]'),null);
+ app.eval("state=M.solutions('masked-multihead');refresh();save()");const bridge=app.eval('JSON.stringify(state)');
+ const reload=boot(app.storage,'#masked-multihead');assert.equal(reload.eval('JSON.stringify(state)'),bridge);
+ reload.eval("switchLevel('decoder-self')");assert.equal(reload.eval('JSON.stringify(state)'),old);
+ reload.eval("switchLevel('masked-multihead')");await reload.eval('run()');
+ assert.ok(reload.document.querySelector('#level-complete').open);assert.ok(reload.document.querySelector('[data-add-module="masked-heads"]'));
+ assert.equal(reload.eval('stage().next'),'decoder-self');assert.equal(reload.eval('JSON.stringify(state)'),bridge);
 });

@@ -17,7 +17,7 @@ test('QKV accepts only V at the outlet and ignores optional Q/K branches',()=>{
 const differs=(id,edit)=>{const s=M.solutions(id);edit(s);assert.ok(M.samplesFor(id).slice(0,M.levels[id].sampleCount).some(t=>{const e=M.evaluate(s,t.v);return e.error||!close(e.output,M.reference(t.v,id));}),id+' must reject this incorrect computation');};
 
 test('original concepts are completed before optional modern and engine tracks',()=>{
- assert.equal(M.routes.main.ids.length,29);assert.equal(M.routes.modern.ids.length,13);assert.equal(M.routes.engine.ids.length,9);
+ assert.equal(M.routes.main.ids.length,30);assert.equal(M.routes.modern.ids.length,13);assert.equal(M.routes.engine.ids.length,9);
  assert.deepEqual(plain(M.routes.main.ids.slice(0,7)),['wire','projection','relu','down-projection','original-ffn','residual','workshop']);
  for(const id of M.routes.main.ids){
   const l=M.levels[id];assert.equal(l.original,true);
@@ -253,4 +253,24 @@ test('the encoder–decoder capstone keeps source and target streams separate al
  assert.ok(close(ev.values['source-embed'],O.position(O.embed([2,0,1],4))));assert.ok(close(ev.values['target-embed'],O.position(O.embed([0,1,2],4))));
  assert.equal(ev.output.length,18);assert.ok(close(ev.output,O.vocabulary(ev.values['original-decoder'])));
  differs('encoder-decoder',s=>s.nodes.find(n=>n.id==='original-decoder').links.reverse());
+});
+
+test('masked multihead bridge earns the exact downstream block and requires both masks and V paths',()=>{
+ const id='masked-multihead',route=Array.from(M.routes.main.ids),index=route.indexOf(id),level=M.levels[id];
+ assert.equal(route[index-1],'causal');assert.equal(route[index+1],'decoder-self');assert.equal(M.levels['decoder-self'].chapter,'原版基础 / 14');
+ assert.equal(M.initial(id).nodes.length,0);assert.equal(M.fusions[id].kind,'masked-heads');
+ assert.equal(M.levels.causal.inventory['masked-heads'],undefined);
+ const solution=M.solutions(id);assert.equal(solution.nodes.length,16);assert.equal(new Set(solution.nodes.map(n=>n.id)).size,16);
+ const placed=M.initial(id);
+ for(const n of solution.nodes){assert.ok(M.addNode(placed,n.kind,n.x,n.z),'place '+n.id);assert.ok(M.validNodeId(n.id,n.kind));}
+ for(const n of solution.nodes)n.links.forEach((source,port)=>assert.equal(M.connect(placed,source,n.id,port),null));
+ assert.equal(M.connect(placed,solution.sink,'sink',0),null);
+ for(const {v}of M.samplesFor(id)){
+  const ev=M.evaluate(placed,v);assert.equal(ev.error,null);assert.ok(close(ev.output,M.operations['masked-heads']([v])));
+  const changed=[...v];changed[8]+=3;changed[9]-=2;
+  assert.ok(close(M.evaluate(placed,changed).output.slice(0,8),ev.output.slice(0,8)),'future input cannot affect either earlier output');
+ }
+ for(const [soft,score]of [['softmax','score'],['softmax-2','score-2']])differs(id,s=>s.nodes.find(n=>n.id===soft).links=[score]);
+ differs(id,s=>s.nodes.find(n=>n.id==='aggregate-2').links[1]='masked-a-v');
+ differs(id,s=>s.nodes.find(n=>n.id==='wide-concat').links.reverse());
 });

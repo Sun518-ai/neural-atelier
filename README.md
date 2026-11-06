@@ -8,7 +8,7 @@
 
 **[Play in your browser →](https://hacking.pub/games/neural-atelier/)** · [Run locally](#run-locally) · [How to play](#how-to-play)
 
-57 levels · Desktop / WebGL 2 · English + Chinese · No account required
+58 levels · Desktop / WebGL 2 · English + Chinese · No account required
 
 ## Inside the workshop
 
@@ -30,7 +30,7 @@ The **Cloud inference** track sits between modern models and on-device inference
 
 ## From the first wire to an inference engine
 
-The **29-level main track** teaches the original Transformer first. **13 modern extensions** then compare SiLU, SwiGLU, RMSNorm, Pre-LN, and RoPE. The **6-level cloud track** starts with one GPU and then introduces tensor parallelism before a separate **9-level bonus track** explores on-device inference inspired by Qwen 27B, Kapitsa, and Apple ANE. Choose a track from the level menu; finishing one does not automatically enter another.
+The **30-level main track** teaches the original Transformer first. **13 modern extensions** then compare SiLU, SwiGLU, RMSNorm, Pre-LN, and RoPE. The **6-level cloud track** starts with one GPU and then introduces tensor parallelism before a separate **9-level bonus track** explores on-device inference inspired by Qwen 27B, Kapitsa, and Apple ANE. Choose a track from the level menu; finishing one does not automatically enter another.
 
 | Stage | What you build and explore |
 | --- | --- |

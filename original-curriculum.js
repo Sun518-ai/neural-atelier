@@ -126,12 +126,23 @@ Object.assign(M.operations,{
  'original-transformer':([target,source])=>vocabulary(decoder(position(embed(target,4)),encoder(position(embed(source,4))))),
  'modern-block':([x])=>M.math.block(x)
 });
+// Expand the four-feature masked block using the exact two-feature slice of each head.
+const maskedProjectionIds=[];
+for(const [headIndex,headName]of ['A','B'].entries())for(const role of ['q','k','v']){
+ const id='masked-'+headName.toLowerCase()+'-'+role,w=wide[role].map(row=>row.slice(headIndex*2,headIndex*2+2));
+ const name=L(role.toUpperCase()+' · 头 '+headName,role.toUpperCase()+' · head '+headName);
+ M.definitions[id]=def(name,[12],6,'linear',L('四维输入乘本头的 4 × 2 权重，每个词得到两个特征。A、B 头使用不同的权重列；它们都读取同一份输入。','Multiply four input features by this head’s 4 × 2 weights to obtain two features per token. Heads A and B use different weight columns and read the same input.'));
+ M.weights[id]=w;M.operations[id]=([x])=>project(x,w);maskedProjectionIds.push(id);
+}
+M.definitions['wide-concat']=def(L('按特征拼接 · 四维','Concatenate features · four features'),[6,6],12,'concat',L('每个词把头 A 的两个数放在前面、头 B 的两个数放在后面，合成四个特征。不是相加，也不增加词数。','For each token, place head A’s two numbers before head B’s two numbers to form four features. Do not add them or increase the token count.'));
+M.operations['wide-concat']=([a,b])=>concat(a,b);
 const operatorIds=['relu','layernorm2','relu-ffn','position','original-weights','head-a','head-b','concat','self-heads','masked-heads','cross-heads','ln-attn','ln-ffn','ln-cross','original-ffn-block','cross-add','original-encoder','original-decoder','source-embed','target-embed','wide-embedding','wide-position','encoder-add','ffn-add','original-score','original-aggregate','original-head','original-q','original-k','original-v','original-output'];
-operatorIds.push('single-attention','two-head-attention','single-cross-attention','silu-ffn','swiglu-ffn','swiglu-residual','original-transformer','modern-block');
+operatorIds.push(...maskedProjectionIds,'wide-concat','single-attention','two-head-attention','single-cross-attention','silu-ffn','swiglu-ffn','swiglu-residual','original-transformer','modern-block');
 for(const id of operatorIds){
  const d=M.definitions[id];M.extraColors[id]=({linear:0x789abf,score:0x879bb3,mix:0x64a68f,vocabulary:0xb79b6b,embedding:0x7d9ea5,activation:0xc6a574,layernorm:0xb8a36a,ffn:0x759c88,position:0xb49b6a,attention:0x789abf,concat:0x9b86b4,residual:0xc3a26f,encoder:0x6a9c93,decoder:0x9387ad})[d.type];
 }
 M.extraColors['head-b']=0xa394bd;
+for(const id of maskedProjectionIds)M.extraColors[id]=({q:0x789abf,k:0xa394bd,v:0x5da995})[id.slice(-1)];
 M.extraColors['original-k']=0xa394bd;M.extraColors['original-v']=0x5da995;
 for(const id of ['mask','attention','attentionweights','enattn'])M.definitions[id].causal=true;
 const zeroBias=L('使用原版的运算顺序；为了看清数值，特征宽度缩为 2、FFN 展开到 4，偏置设为 0。固定教学权重不代表训练好的语言模型。','Uses the original operation order with width 2, FFN width 4 and zero biases so the numbers are readable. Fixed teaching weights do not represent a trained language model.');
@@ -235,6 +246,15 @@ M.encoderGuide={
  formulaNote:L('LN 就是 LayerNorm。残差与归一化各用两块相同组件，不需要区分“Attention 专用”和“FFN 专用”。','LN means LayerNorm. Use two copies each of the same residual and normalization operators; there are no separate Attention-only and FFN-only versions.')
 };
 I18n.prepare(M.encoderGuide);
+lesson('masked-multihead',L('把遮罩放进两个头','Put the mask inside both heads'),
+ ['masked-a-q','masked-a-k','masked-a-v','score','mask','softmax','aggregate','masked-b-q','masked-b-k','masked-b-v','score','mask','softmax','aggregate','wide-concat','original-output'],
+ L('搭出双头因果注意力，再收成组件','Build and package two-head causal attention'),
+ L('前一关只算出了参考比例。本关让两个头各自计算比例、读取各自的 V，再把两份内容拼接并投影。四维输入已带位置信息；自行放置组件和接线，出口应得到完整的注意力输出。','The preceding lesson produced only reading weights. Here, each head computes its own weights and reads its own V, then concatenate both results and project. The four-feature input already includes positions. Place and wire the modules to produce the complete attention output.'),
+ L('两个头使用不同的 Q/K/V 权重，可以从同一句话读取不同的信息。但两份打分都可能偷看未来，所以每个头都需要在自己的 Softmax 前遮住未来分数。只遮住一个头，另一个头仍会泄露后面的内容。','Different Q/K/V weights let the two heads read different information from the same sentence. Both score maps can look ahead, so each head must mask future scores before its own Softmax. Masking only one head leaves the other able to leak future content.'),
+ L('V 是被读取的内容，不经过遮罩或 Softmax。每个头输出两个特征，按 A 在前、B 在后的顺序拼成四个，再乘 Wo；这一整段才是“双头因果注意力”。残差和 LayerNorm 留到下一关。','V supplies the content and bypasses the mask and Softmax. Each head outputs two features; concatenate A before B to form four, then multiply by Wo. This complete computation is Two-head masked attention. Residual addition and LayerNorm come in the next lesson.'),
+ {'masked-a-q':['R'],'masked-a-k':['R'],'masked-a-v':['R'],score:['masked-a-q','masked-a-k'],mask:['score'],softmax:['mask'],aggregate:['softmax','masked-a-v'],
+ 'masked-b-q':['R'],'masked-b-k':['R'],'masked-b-v':['R'],'score-2':['masked-b-q','masked-b-k'],'mask-2':['score-2'],'softmax-2':['mask-2'],'aggregate-2':['softmax-2','masked-b-v'],'wide-concat':['aggregate','aggregate-2'],'original-output':['wide-concat'],sink:'original-output'},
+ x=>multi(x,x,true),{sourceDim:12,sinkDim:12,shape:'3 × 4 → 3 × 4',wide:true,positioned:true,buildable:true,maxModules:18,boardWidth:32,boardDepth:18,sourceX:-13,sinkX:13,zoom:1.5,outputTitle:L('因果注意力输出','Causal attention output')});
 lesson('decoder-self',L('只看已给出的目标词','Read only the available target prefix'),['masked-heads','residual1','ln-attn'],
  L('给因果自注意力接回残差','Add the residual around masked self-attention'),
  L('沿用双头计算，但目标位置只能看自己和前面。把更新加回目标输入，再做 LayerNorm。','Reuse two-head attention, but let each target position see only itself and earlier positions. Add the update to the target input, then apply LayerNorm.'),
@@ -306,7 +326,7 @@ for(const [ids,prefix,board]of [[originalPrologue,L('序章 / ','Prologue / '),'
  if(l.original){delete l.initialLinks;delete l.initialSink;}
 });
 // Bridge lessons have their own labels so existing chapter numbers and hashes stay stable.
-const bridges={'add-norm':'pack-ffn','weighted-sum':'pack-scores'};
+const bridges={'add-norm':'pack-ffn','weighted-sum':'pack-scores','decoder-self':'masked-multihead'};
 for(const [i,id]of Object.values(bridges).entries())Object.assign(M.levels[id],{chapter:L('组件组合 / 0'+(i+1),'Packaging / 0'+(i+1)),boardText:'PACKAGING / 0'+(i+1),original:true});
 M.routes.main={name:L('主线 · 原版基础','Main · Original Transformer'),description:L('先用 ReLU FFN、LayerNorm 和正弦位置编码打基础，再从单头、多头搭到编码器与解码器。所有起点都需要自己连线。','Start with ReLU FFNs, LayerNorm and sinusoidal positions, then build from single heads to multi-head attention and the encoder–decoder. Every starting circuit needs your wiring.'),ids:[...originalPrologue,...originalNetwork.flatMap(id=>bridges[id]?[bridges[id],id]:[id])]};
 M.routes.modern={name:L('扩展 · 现代模型','Extensions · Modern models'),description:L('学过原版后再比较：SiLU 与 SwiGLU 改了 FFN，RMSNorm 与 Pre-LN 改了归一化，RoPE 改了位置的用法。旧关卡与存档仍可继续。','After the original, compare how SiLU and SwiGLU change FFNs, RMSNorm and Pre-LN change normalization, and RoPE changes position handling. Existing levels and saves remain available.'),ids:modern};
@@ -320,15 +340,16 @@ M.routes.main.groups=[
  {id:'foundations',label:L('词向量与归一化','Inputs and normalization'),title:L('基础准备 · 词向量、位置与归一化','Foundations · Embeddings, positions and normalization'),description:L('把词变成带位置的特征，再学习归一化，以及原版“先相加，再归一化”的结构。后面的完整层会反复用到它们。','Turn tokens into position-aware features, then learn normalization and the original add-then-normalize pattern. Complete layers will reuse these building blocks.'),ids:['embedding','positions','layernorm','pack-ffn','add-norm']},
  {id:'attention',label:L('搭出注意力','Build attention'),title:L('注意力 · 从单头扩展到多头','Attention · From one head to several'),description:L('先学 Q/K 怎样匹配、V 怎样提供内容，再拼成单头。第 10 关扩展头的数量，后面的编码器会复用这套结构。','Learn how Q/K match and V supplies content, then assemble one head. Level 10 adds more heads; the encoder will reuse that structure.'),ids:['qkv','scores','softmax','pack-scores','weighted-sum','self-attention','multihead']},
  {id:'encoder',label:L('组装编码器','Assemble the encoder'),title:L('编码器 · 准备输入，再组装整层','Encoder · Prepare the input, then assemble the layer'),description:L('第 11 关换用每词四个特征的输入；第 12 关沿用已学的双头结构，配上相应尺寸的权重，和 FFN、残差、LayerNorm 组成一层。','Level 11 prepares four features per token. Level 12 reuses the two-head structure with matching weight sizes, then combines it with the FFN, residuals and LayerNorm into one layer.'),ids:['wider-features','encoder-layer'],connections:{sources:[{label:L('已学的计算','Familiar computations'),text:L('10 多头 + FFN + 残差 + LayerNorm','10 Multi-head + FFN + residuals + LayerNorm')},{label:L('准备的输入','Prepared input'),text:L('11 四维词向量与位置','11 Four-feature embeddings and positions')}],target:{label:L('组合起来','Assemble'),text:L('12 一层编码器','12 One encoder layer')}}},
- {id:'decoder',label:L('开始搭解码器','Build the decoder'),title:L('开始搭解码器 · 限制读取，再接入源句','Start the decoder · Limit reading, then bring in the source'),description:L('接下来搭负责预测后续词的另一半。第 13 关开始学习遮住未来；第 15 关重新接入第 12 关的编码器结果，读取源句信息。','Now build the other half, which predicts subsequent tokens. Level 13 introduces masking future positions; level 15 brings back the encoder result from level 12 to read the source sentence.'),ids:['causal','decoder-self','cross-attention','decoder-layer'],connections:{sources:[{label:L('目标侧','Target side'),text:L('13 因果遮罩 → 14 目标自注意力','13 Causal mask → 14 Target self-attention')},{label:L('源句侧','Source side'),text:L('12 编码器的输出','12 Encoder output')}],target:{label:L('在这里汇合','Meet here'),text:L('15 交叉注意力','15 Cross-attention')}}},
+ {id:'decoder',label:L('开始搭解码器','Build the decoder'),title:L('开始搭解码器 · 限制读取，再接入源句','Start the decoder · Limit reading, then bring in the source'),description:L('接下来搭负责预测后续词的另一半。第 13 关开始学习遮住未来；第 15 关重新接入第 12 关的编码器结果，读取源句信息。','Now build the other half, which predicts subsequent tokens. Level 13 introduces masking future positions; level 15 brings back the encoder result from level 12 to read the source sentence.'),ids:['causal','masked-multihead','decoder-self','cross-attention','decoder-layer'],connections:{sources:[{label:L('目标侧','Target side'),text:L('13 遮罩 → 组合双头 → 14 残差与归一化','13 Mask → Package both heads → 14 Residual and normalization')},{label:L('源句侧','Source side'),text:L('12 编码器的输出','12 Encoder output')}],target:{label:L('在这里汇合','Meet here'),text:L('15 交叉注意力','15 Cross-attention')}}},
  {id:'generation',label:L('连接与生成','Connect and generate'),title:L('连接两端 · 从特征到选词','Connect both halves · From features to token selection'),description:L('把编码器与解码器接成完整模型，再看特征怎样变成词表分数、怎样选出词。最后单独练习把新词追加回输入的生成循环。','Connect the encoder and decoder into a complete model, then turn features into vocabulary scores and select tokens. Finally, practice the generation loop that appends each new token to the input.'),ids:['encoder-decoder','vocabulary-scores','vocabulary','autoregressive']}
 ];
 const menuLesson=(id,kind,label,summary)=>{M.levels[id].menu={kind,label,summary};};
 menuLesson('multihead','extend',L('扩展组件','Extend a component'),L('承接第 09 关的单头：让两组权重分别读取信息，拼接后再经过 Wo。第 12 关会复用双头结构。','Extend the single head from level 09: read with two sets of weights, concatenate, then apply Wo. Level 12 will reuse the two-head structure.'));
 menuLesson('wider-features','prepare',L('输入准备','Prepare input'),L('从词 ID 重新查表、加位置，准备每个词有四个特征的输入版本。第 12 关会直接提供这份输入。','Start from token IDs, look up embeddings and add positions to prepare four features per token. Level 12 provides this prepared input directly.'));
 menuLesson('encoder-layer','assemble',L('组装整层','Assemble a layer'),L('使用第 11 关准备的输入，组合双头注意力、FFN、残差与 LayerNorm，完成“先交流，再加工”的一层编码器。','Use the input prepared in level 11. Combine two-head attention, the FFN, residuals and LayerNorm into an encoder layer that exchanges information, then processes each token.'));
-menuLesson('causal','branch',L('进入解码器','Enter the decoder'),L('目标侧预测后续词时不能读取未来。先练习在 Softmax 前遮住未来分数，再在第 14 关用于目标自注意力。','The target side must not read future tokens while predicting what comes next. Practice masking future scores before Softmax, then use it for target self-attention in level 14.'));
-menuLesson('decoder-self','reuse',L('复用遮罩','Reuse the mask'),L('把第 13 关的遮罩用进双头自注意力，再加回目标输入并做 LayerNorm，搭好解码器的第一段。','Use the mask from level 13 inside two-head self-attention, then add the target input and apply LayerNorm to build the decoder’s first sublayer.'));
+menuLesson('causal','branch',L('进入解码器','Enter the decoder'),L('目标侧预测后续词时不能读取未来。先练习在 Softmax 前遮住未来分数，下一组合关再把它放进两个头。','The target side must not read future tokens while predicting what comes next. Practice masking future scores before Softmax, then place the mask in both heads in the next packaging lesson.'));
+menuLesson('masked-multihead','assemble',L('组合双头','Package both heads'),L('把已学的遮罩分别放入两个头，汇合 V、拼接并投影；通关后收成双头因果注意力。','Apply the familiar mask in each head, aggregate V, concatenate and project; package the result as two-head causal attention after completion.'));
+menuLesson('decoder-self','reuse',L('复用遮罩','Reuse the mask'),L('复用刚在组合关收好的双头因果注意力，加回目标输入并做 LayerNorm，搭好解码器的第一段。','Reuse the two-head causal attention packaged in the bridge lesson, then add the target input and apply LayerNorm to build the decoder’s first sublayer.'));
 menuLesson('cross-attention','source',L('接回编码器','Read from the encoder'),L('目标侧提供查询 Q，第 12 关的编码器结果提供 K/V。让目标从完整源句读取内容，再做输出投影。','The target supplies queries Q; the encoder result from level 12 supplies K/V. Read content from the complete source sentence, then apply the output projection.'));
 menuLesson('decoder-layer','assemble',L('组装另一半','Assemble the other half'),L('组合因果自注意力、交叉注意力和 FFN，给三段各自接上残差与 LayerNorm，搭成一层解码器。','Combine masked self-attention, cross-attention and the FFN, each with its own residual and LayerNorm, into one decoder layer.'));
 menuLesson('encoder-decoder','connect',L('连接两端','Connect both halves'),L('前面两半都搭好了。让源句经过编码器、目标前缀经过解码器，把两端接起来，再输出词表分数。','Both halves are ready. Send the source through the encoder and the target prefix through the decoder, connect the two, then produce vocabulary scores.'));
@@ -376,6 +397,7 @@ M.fusions={
  multihead:{kind:'two-head-attention',inputs:['R']},
  'wider-features':{kind:'source-embed',inputs:['R']},
  'encoder-layer':{kind:'original-encoder',inputs:['R']},
+ 'masked-multihead':{kind:'masked-heads',inputs:['R']},
  'cross-attention':{kind:'single-cross-attention',inputs:['R','Z']},
  'decoder-layer':{kind:'original-decoder',inputs:['R','Z']},
  'encoder-decoder':{kind:'original-transformer',inputs:['R','Z']},
@@ -497,6 +519,11 @@ for(const id of ['single-attention','single-cross-attention','two-head-attention
  cards[id].formula=id==='two-head-attention'?'Y = Concat(head A, head B) × Wo':'Y = softmax(QKᵀ / √'+(id==='single-attention'?'2':'4')+') × V × Wo';
  cards[id].purpose=M.packages[id].note;
 }
+for(const id of maskedProjectionIds){
+ const role=id.slice(-1);cards[id].formula=role.toUpperCase()+'_'+id.split('-')[1].toUpperCase()+' = X × W (4 × 2)';
+ cards[id].purpose=role==='q'?L('Q 表示当前词用来匹配的信息，与同一个头的 K 点乘得到打分。','Q represents the information a token uses for matching. Dot it with K from the same head to obtain scores.'):role==='k'?L('K 提供供查询匹配的信息；同一个头的 Q 与所有词的 K 比较，得到一张打分表。','K supplies information for query matching. Compare the same head’s Q against every token’s K to obtain a score map.'):L('V 提供要读取的内容。由同一个头的注意力权重加权汇合，不经过遮罩和 Softmax。','V supplies the content to read. Aggregate it using the same head’s attention weights; V bypasses the mask and Softmax.');
+}
+cards['wide-concat'].formula='C[p] = [headA[p], headB[p]]';
 cards.position.formula='X[p] = √2 · Embedding[p] + [sin(p), cos(p)]';
 for(const id of ['wide-position','source-embed','target-embed'])cards[id].formula='X[p] = 2 · Embedding[p] + [sin(p), cos(p), sin(p/100), cos(p/100)]';
 cards['wide-embedding'].formula='X[p] = EmbeddingTable[token_id[p]]';
@@ -614,6 +641,7 @@ M.original={relu,ln,position,embed,wide,project,vocabulary,classicFFN,sequenceFF
     c.inputSymbol='C';c.formula='Y = C × Wo';
     c.meaning=L('C 是把多个注意力头的输出拼接成的向量。Wo 用每一列权重，把这些分量组合成一个新的输出特征。本关两个头各给一个数，拼成两维，再经过 2 × 2 的 Wo，仍输出两维。','C concatenates the outputs of the attention heads. Each column of Wo combines those components into one new output feature. Here two heads each supply one value, giving two features; a 2 × 2 Wo recombines them into two output features.');
    }
+   if(id==='original-output'&&levelId==='masked-multihead'){c.inputSymbol='C';c.formula='Y = Concat(head A, head B) × Wo';c.meaning=L('两个头各提供两个特征，拼接后每个词有四个数。4 × 4 的 Wo 重新组合这些来自不同头的特征；输出仍是每个词四个数。','Each head provides two features, so concatenation gives four numbers per token. The 4 × 4 Wo recombines features from both heads; the output retains four numbers per token.');}
    const formulas={'self-heads':'Oa = MHA(X)','masked-heads':'Om = MaskedMHA('+(decoderLevel?'D':'X')+')','encoder-add':'R1 = '+(decoderLevel?'D': 'X')+' + '+(levelId==='encoder-layer'?'Oa':'Om'),'ln-attn':'X1 = LayerNorm(R1)','cross-heads':'Oc = CrossAttention(X1, E)','cross-add':'Rc = X1 + Oc','ln-cross':'X2 = LayerNorm(Rc)','original-ffn-block':'F = FFN('+(decoderLevel?'X2':'X1')+')','ffn-add':'R2 = '+(decoderLevel?'X2':'X1')+' + F','ln-ffn':'Y = LayerNorm(R2)'};
    if(formulas[id])c.formula=formulas[id];
    if(levelId==='encoder-layer'){
@@ -660,6 +688,9 @@ M.extraExample=(id,levelId)=>{
  const s=M.solutions(levelId),sampleIndex=levelId==='relu'?2:0,input=M.samplesFor(levelId)[sampleIndex].v,ev=M.evaluate(s,input),n=s.nodes.find(n=>n.id===id);
  if(!n)return null;
  const names={R:M.levels[levelId].dualSource?'D':'X',Z:levelId==='encoder-decoder'?'Source ID':'E',project:'P',relu:'A',down:'F',add:'R',layernorm2:'Y',q:'Q',k:'K',v:'V',score:'S',softmax:'A',aggregate:'O',output:'Y','original-q':'Q','original-k':'K','original-v':'V','original-score':'S','original-aggregate':'O','original-output':'Y','original-head':'L','wide-embedding':'X','wide-position':'Xp',position:'Xp','head-a':'H_A','head-b':'H_B',concat:'C','original-weights':'A','relu-ffn':'F','original-ffn-block':'F','self-heads':'O','masked-heads':'O','cross-heads':'O','cross-add':'Rc','source-embed':'Xs','target-embed':'Xt','original-encoder':'E','original-decoder':'D','encoder-add':'R1','ffn-add':'R2','ln-attn':'X1','ln-cross':'X2','ln-ffn':'Y'};
+ for(const kind of maskedProjectionIds)names[kind]=kind.slice(-1).toUpperCase()+'_'+kind.split('-')[1].toUpperCase();
+ Object.assign(names,{'wide-concat':'C','score-2':'S_B','mask-2':'S_B masked','softmax-2':'A_B','aggregate-2':'H_B'});
+ if(levelId==='masked-multihead')Object.assign(names,{aggregate:'H_A','original-output':'Om'});
  names['self-heads']='Oa';names['masked-heads']='Om';names['cross-heads']='Oc';
  names.add=levelId==='add-norm'?'R':'Y';
  const ex={sampleIndex,exampleSource:[names.R,input],inputs:n.links.map(k=>[names[k]||k,ev.values[k]]),output:[names[id]||id,ev.values[id]]};
