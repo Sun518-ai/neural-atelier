@@ -607,7 +607,7 @@ globalThis.AtelierEnglish = {
   " · 已通过": " · Passed",
   "3 个位置 × 2 个特征": "3 positions × 2 features",
   "矩阵 ": "Matrix ",
-  "<span>■</span> 停下检查": "<span>■</span> Stop and inspect",
+  "<span>■</span> 停止": "<span>■</span> Stop",
   "<span>▶</span> 试跑我的网络": "<span>▶</span> Run my network",
   "已停止。": "Stopped.",
   "试跑：「": "Running: 「",

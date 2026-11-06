@@ -240,14 +240,14 @@ html[lang=en] .chapter strong{font-size:19px;letter-spacing:0}html[lang=en] .mis
 .module-stock[data-add-disabled=true]{opacity:.5;cursor:help}.module-stock[aria-disabled=true]{cursor:default}
 #module-shelf[data-mode=collection] .module-stock{opacity:1;cursor:help}#module-shelf[data-mode=collection] .stock-count{display:none}
 .stock-description{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
-.stock-name{font-size:11px;font-weight:600;line-height:13px}
+.stock-name{font-size:11px;font-weight:600;line-height:13px;overflow-wrap:anywhere}
 .stock-description small{font:9px ui-monospace,monospace;color:#859387}
 .stock-code{display:none;font:600 12px ui-monospace,monospace;color:#526e60}
-.stock-count{margin-left:auto;font:600 12px ui-monospace,monospace;color:#526e60}
+.stock-count{flex-shrink:0;margin-left:auto;font:600 12px ui-monospace,monospace;color:#526e60}
 .stock-matrix{width:24px;flex:0 0 24px;display:grid;gap:2px;transform:skewY(-9deg)}
 .stock-matrix i{height:5px;background:var(--stock-color);border-radius:1px;box-shadow:0 1px #38544320}
 .stock-matrix .negative{background:#c69e76}
-.stock-symbol{font:600 16px/24px ui-monospace,monospace;width:24px;flex:0 0 24px;text-align:center;color:var(--stock-color)}
+.stock-symbol{font:600 16px/24px ui-monospace,monospace;font-size:min(16px,calc(36px / var(--symbol-chars,1)));overflow:hidden;width:24px;flex:0 0 24px;text-align:center;color:var(--stock-color)}
 #module-shelf[data-size=small]{width:112px;padding:6px}
 #module-shelf[data-size=small] .stock-description{display:none}
 #module-shelf[data-size=small] .stock-code{display:block}
@@ -257,7 +257,7 @@ html[lang=en] .chapter strong{font-size:19px;letter-spacing:0}html[lang=en] .mis
 #module-shelf[data-size=small] .shelf-current .stock-code,#module-shelf[data-size=small] .shelf-current .stock-description small{display:none}
 #module-shelf[data-size=small] .shelf-current .stock-name{font-size:10px;line-height:13px;overflow-wrap:anywhere}
 #module-shelf[data-size=small] .shelf-current .module-stock{min-height:40px}
-#module-shelf[data-size=small] .shelf-current .stock-symbol{font-size:13px}
+#module-shelf[data-size=small] .stock-symbol{font-size:min(13px,calc(30px / var(--symbol-chars,1)))}
 #module-shelf[data-size=large]{width:212px}
 #module-shelf[data-size=large] .module-stock{min-height:49px;padding:7px;gap:8px}
 #module-shelf[data-size=large] .stock-name{font-size:12px;line-height:14px}
