@@ -8,7 +8,7 @@ function boot(storage=new Map(),hash='',languages=['zh-CN']){
  const hashchange=()=>listeners.get('hashchange')?.();
  const navigation={pushState(_,title,url){location.href=new URL(url,location.href).href;entries.splice(++cursor);entries.push(location.href);},replaceState(_,title,url){location.href=new URL(url,location.href).href;entries[cursor]=location.href;},back(){if(cursor){location.href=entries[--cursor];hashchange();}},forward(){if(cursor+1<entries.length){location.href=entries[++cursor];hashchange();}},get length(){return entries.length;}};
  const c={window:{},document,console,navigator:{languages},location,history:navigation,addEventListener:(type,fn)=>listeners.set(type,fn),localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)}};c.window=c;vm.createContext(c);
- for(const file of ['locales/en.js','i18n.js','music.js','shell.js','model.js','campaign.js','engine-model.js','original-curriculum.js','cloud-curriculum.js'])vm.runInContext(fs.readFileSync(__dirname+'/'+file,'utf8'),c,{filename:file});
+ for(const file of ['locales/en.js','i18n.js','music.js','shell.js','model.js','campaign.js','engine-model.js','original-curriculum.js','cloud-curriculum.js','structure-map.js'])vm.runInContext(fs.readFileSync(__dirname+'/'+file,'utf8'),c,{filename:file});
  for(const file of ['module-cards.js','level-progress.js'])vm.runInContext(fs.readFileSync(__dirname+'/'+file,'utf8').replaceAll('export ',''),c,{filename:file});
  let code=fs.readFileSync(__dirname+'/game.js','utf8').replace(/^import .*\n/gm,'');code=code.slice(0,code.indexOf("try{\n const T="));
  vm.runInContext(code+`\nworld={relocalize(){},labels(){},rebuild(){},beforeStage(){},setStage(){},clearPackets(){},focused(){return null},async animate(){}};refresh();`,c);
@@ -765,4 +765,52 @@ test('causal guidance explains visibility and score provenance; the screenshot b
  app.c.I18n.setPreference('en');assert.doesNotMatch(doc.querySelector('.mission').textContent,/[\u3400-\u9fff]/);
  const card=app.eval("cardFor('mask','causal')");assert.match(card.purpose,/\[2, 1, 3\]/);assert.doesNotMatch(card.meaning+card.purpose,/[\u3400-\u9fff]/);
  app.eval("switchLevel('scores')");assert.equal(doc.querySelector('.causal-primer'),null);
+});
+
+test('every playable lesson has a bilingual structure location, valid focus and a distinct outlet contract',()=>{
+ const app=boot(),M=app.c.NeuralPrologue,map=M.structureMap;
+ const ids=Object.values(M.routes).flatMap(r=>Array.from(r.ids));assert.equal(ids.length,57);assert.deepEqual(new Set(Object.keys(map.lessons)),new Set(ids));
+ for(const lang of ['zh','en']){
+  app.c.I18n.setPreference(lang);
+  for(const id of ids){
+   const entry=map.get(id),keys=entry.steps.map(n=>n.id);
+   assert.ok(keys.includes(entry.exit),id+' outlet belongs to its reference structure');for(const focus of entry.focus)assert.ok(keys.includes(focus),id+' focus');
+   app.eval(`switchLevel('${id}')`);const saved=app.eval('JSON.stringify(state)'),progress=app.storage.get('neural-atelier-chapters-v1');
+   app.document.querySelector('[data-open-structure]').dispatchEvent(new app.window.Event('click',{bubbles:true}));
+   assert.ok(app.document.querySelector('#structure-dialog').open);
+   assert.equal(app.document.querySelectorAll('.map-step-exit').length,1,id+' has one lesson outlet');
+   assert.ok(app.document.querySelector('#structure-dialog-content').textContent.includes(entry.output));
+   if(lang==='en')assert.doesNotMatch(app.document.querySelector('#structure-dialog-content').textContent+app.document.querySelector('#structure-map').textContent,/[\u3400-\u9fff]/,id);
+   app.document.querySelector('#structure-close').onclick();assert.equal(app.document.querySelector('#structure-dialog').open,false);
+   assert.equal(app.eval('JSON.stringify(state)'),saved);assert.equal(app.storage.get('neural-atelier-chapters-v1'),progress);
+  }
+ }
+ app.c.I18n.setPreference('en');
+ assert.equal(map.get('causal').flow,'causal');assert.equal(map.get('causal').exit,'softmax');assert.match(map.get('causal').output,/weights A/);
+ assert.equal(map.get('qkv').exit,'qkv');assert.match(map.get('qkv').output,/only V/);
+ assert.equal(map.get('cross-attention').exit,'wo');assert.match(map.get('cross-attention').output,/before residual/);
+ assert.equal(map.get('decoder-self').exit,'norm1');assert.equal(map.get('encoder-layer').exit,'norm2');assert.equal(map.get('decoder-layer').exit,'norm3');
+ assert.match(map.get('ffn').where,/half/);assert.match(map.get('ffn').next,/attention half is absent/);
+ assert.match(map.get('encoder-decoder').output,/logits/);assert.match(map.get('autoregressive').note,/fixed transition table/);
+ assert.match(map.get('placement').output,/features/);assert.match(map.get('placement').note,/not a real model/);
+ assert.deepEqual(Array.from(map.flows.decoder,n=>n.id),['attention','add1','norm1','cross','add2','norm2','ffn','add3','norm3']);
+ assert.deepEqual(Array.from(map.flows.modernLayer,n=>n.id),['norm1','attention','add1','norm2','ffn','add2']);
+});
+
+test('structure map updates on hashes and language, remembers collapse and stays inspectable during a run',async()=>{
+ const app=boot(new Map(),'#causal'),doc=app.document;
+ const open=()=>doc.querySelector('[data-open-structure]').dispatchEvent(new app.window.Event('click',{bubbles:true}));
+ open();app.c.I18n.setPreference('en');assert.match(doc.querySelector('#structure-dialog-content').textContent,/masked self-attention/);
+ app.eval("switchLevel('original-ffn')");assert.match(doc.querySelector('#structure-dialog-content').textContent,/FFN transformation/);
+ doc.querySelector('#structure-close').onclick();doc.querySelector('.structure-compact').removeAttribute('open');
+ app.eval("switchLevel('causal')");assert.equal(doc.querySelector('.structure-compact').hasAttribute('open'),false);
+ doc.querySelector('.structure-compact').setAttribute('open','');open();
+ app.location.hash='#encoder-layer';app.hashchange();assert.match(doc.querySelector('#structure-dialog-content').textContent,/Encoder layer output/);
+ doc.querySelector('#structure-close').onclick();app.eval("switchLevel('wire');state=M.solutions('wire')");
+ let resolve;app.c.pauseMapTest=()=>new Promise(r=>{resolve=r;});app.eval('world.animate=pauseMapTest');const running=app.eval('run()');
+ const saved=app.eval('JSON.stringify(state)');open();assert.equal(app.eval('busy'),true);assert.equal(app.eval('JSON.stringify(state)'),saved);
+ doc.querySelector('#structure-close').onclick();app.eval('world.animate=async()=>{}');resolve();await running;assert.equal(app.eval('levelPassed()'),true);
+ // Native dialog Escape is left to the browser. Backdrop and close button use the same non-mutating close.
+ open();doc.querySelector('#structure-dialog').getBoundingClientRect=()=>({left:100,top:100,right:600,bottom:600});
+ const click=new app.window.Event('click',{bubbles:true});Object.assign(click,{clientX:20,clientY:20});doc.querySelector('#structure-dialog').dispatchEvent(click);assert.equal(doc.querySelector('#structure-dialog').open,false);
 });

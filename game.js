@@ -1,5 +1,5 @@
-import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=causal-explained-1';
-import {createProgress} from './level-progress.js?v=causal-explained-1';
+import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=structure-map-1';
+import {createProgress} from './level-progress.js?v=structure-map-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -114,9 +114,20 @@ function causalPrimer(){
  const values=v=>vector(v.slice(3,6));
  return `<div class="causal-primer"><table><caption>${g.caption}</caption><thead><tr><th>${g.reference}</th>${words.map(word=>`<th scope="col">${word}</th>`).join('')}</tr></thead><tbody>${words.map((word,i)=>`<tr><th scope="row">${word}</th>${words.map((_,j)=>`<td class="${j<=i?'allowed':'blocked'}" aria-label="${j<=i?g.allowed:g.blocked}">${j<=i?'✓':'0'}</td>`).join('')}</tr>`).join('')}</tbody></table><small>${g.legend}</small><p>${g.read}</p><details><summary>${g.detail}</summary>${[[g.before,scores],[g.masked,masked],[g.after,weights]].map(([label,value])=>`<div class="causal-step"><span>${label}</span><code>${values(value)}</code></div>`).join('')}<p>${g.why}</p></details></div>`;
 }
+function renderStructureMap(){
+ const compact=$('#structure-map .structure-compact'),expanded=compact?compact.hasAttribute('open'):true;
+ $('#structure-map').innerHTML=M.structureMap.render(stageId);
+ $('#structure-map .structure-compact').toggleAttribute('open',expanded);
+ $('#structure-title').textContent=M.structureMap.copy.title;
+ $('#structure-close').setAttribute('aria-label',M.structureMap.copy.close);
+ if($('#structure-dialog').open)$('#structure-dialog-content').innerHTML=M.structureMap.render(stageId,true);
+}
+$('#structure-map').addEventListener('click',e=>{if(!e.target.closest('[data-open-structure]'))return;$('#structure-dialog-content').innerHTML=M.structureMap.render(stageId,true);$('#structure-dialog').showModal();});
+$('#structure-close').onclick=()=>$('#structure-dialog').close();
+$('#structure-dialog').addEventListener('click',e=>{if(e.target!==$('#structure-dialog'))return;const r=e.target.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)e.target.close();});
 function stageColor(c){return M.routes[c.track]?.groups?.find(group=>group.ids.includes(c.id))?.id||c.track;}
 function stageChrome(){
- const c=stage();document.body.dataset.stageColor=stageColor(c);document.body.classList.toggle('engine-level',!!c.engine);$('#device-docks').hidden=!c.engine;resetReport();$('#engine-controls').hidden=!c.engine;engineControls();$('.inspector').hidden=c.nodes.length===0;$('.scene-legend').hidden=c.nodes.length===0;$('#scene-help').textContent=c.nodes.length?I18n.t("拖模块摆放 · 点连线删除 · 双击查看模块卡"):I18n.t("圆口出，方口进 · 拖动空白转动视角");$('#pass-count').textContent='0 / '+c.sampleCount;document.title=I18n.t("神经工坊 · ")+c.title;$('.chapter span').textContent=c.chapter;$('.chapter strong').textContent=c.title;
+ const c=stage();document.body.dataset.stageColor=stageColor(c);renderStructureMap();document.body.classList.toggle('engine-level',!!c.engine);$('#device-docks').hidden=!c.engine;resetReport();$('#engine-controls').hidden=!c.engine;engineControls();$('.inspector').hidden=c.nodes.length===0;$('.scene-legend').hidden=c.nodes.length===0;$('#scene-help').textContent=c.nodes.length?I18n.t("拖模块摆放 · 点连线删除 · 双击查看模块卡"):I18n.t("圆口出，方口进 · 拖动空白转动视角");$('#pass-count').textContent='0 / '+c.sampleCount;document.title=I18n.t("神经工坊 · ")+c.title;$('.chapter span').textContent=c.chapter;$('.chapter strong').textContent=c.title;
  $('.mission h2').textContent=c.mission;$('.mission p').textContent=c.description;$('#mission-limits').innerHTML=c.engine?Object.entries(c.limits).map(([key,value])=>{const [name,unit]=M.metricLabels[key];return `<span>${name} ${key==='tps'||key==='aneMin'?'≥':'≤'} ${value} ${unit}</span>`;}).join(''):'';
  const reason=c.rationale;$('#mission-reason').hidden=!reason;
  $('#mission-reason-title').textContent=reason?.title||I18n.t("为什么要这样算");
@@ -318,7 +329,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=causal-explained-1');
+ const {createSceneArt}=await import('./scene-art.js?v=structure-map-1');
  function scenePalette(){
   if(typeof getComputedStyle!=='function')return {};
   const css=getComputedStyle(document.body),read=name=>css.getPropertyValue(name).trim();
