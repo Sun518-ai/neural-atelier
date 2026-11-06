@@ -8,7 +8,7 @@ async function boot({reduced=true,frameMs=1000,onFrame=()=>{},languages=['zh-CN'
  for(const el of document.querySelectorAll('*')){Object.defineProperty(el,'clientWidth',{get:()=>el.id==='scene'?1400:100});Object.defineProperty(el,'clientHeight',{get:()=>el.id==='scene'?760:60});el.focus=()=>{};el.scrollIntoView=()=>{};}
  let view,renderedCamera;const scenes=[];class Renderer{constructor(){this.domElement=native('canvas');this.shadowMap={};this.capabilities={getMaxAnisotropy:()=>8};}setPixelRatio(){}setClearColor(){}setSize(){}render(scene,camera){renderedCamera=camera;view={position:camera.position.toArray(),width:camera.right-camera.left};scenes.push(scene);scene.updateMatrixWorld();camera.updateMatrixWorld();scene.traverse(o=>{if(o.isMesh)assert.ok(o.matrixWorld.elements.every(Number.isFinite),'nonfinite transform '+o.type);});}}
  const storage=new Map();let now=0;const c={document,console,navigator:{languages},T:{...Three,WebGLRenderer:Renderer},devicePixelRatio:2,ResizeObserver:class{observe(){}},requestAnimationFrame:cb=>setImmediate(()=>{now+=frameMs;onFrame({now,document,window});cb(now);}),cancelAnimationFrame:clearImmediate,performance:{now:()=>now},matchMedia:()=>({matches:reduced}),setTimeout:timers.setTimeout,clearTimeout:timers.clearTimeout,localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)}};c.window=c;vm.createContext(c);
- for(const f of ['locales/en.js','i18n.js','music.js','shell.js','model.js','campaign.js','engine-model.js','original-curriculum.js'])vm.runInContext(fs.readFileSync(__dirname+'/'+f,'utf8'),c,{filename:f});
+ for(const f of ['locales/en.js','i18n.js','music.js','shell.js','model.js','campaign.js','engine-model.js','original-curriculum.js','cloud-curriculum.js'])vm.runInContext(fs.readFileSync(__dirname+'/'+f,'utf8'),c,{filename:f});
  for(const f of ['module-cards.js','level-progress.js','scene-art.js'])vm.runInContext(fs.readFileSync(__dirname+'/'+f,'utf8').replaceAll('export ',''),c,{filename:f});
  let src=fs.readFileSync(__dirname+'/game.js','utf8').replace(/^import .*\n/gm,'').replace("const T=await import('./vendor/three.module.js');",'const T=window.T;').replace(/const \{createSceneArt\}=await import\('\.\/scene-art\.js\?v=[^']+'\);/,'');
  src+='\nwindow.testAPI={switchLevel,run,togglePause,refresh,select,assignDevice,chooseOutput,chooseInput,chooseModule,placeModule,getState:()=>state,setState:s=>state=s,getWorld:()=>world,getFault:()=>fault};';
@@ -1510,4 +1510,13 @@ test('one whole weight column, its output sphere and its attached formula highli
  assert.deepEqual([...columns].sort(),[0,1,2,3]);assert.equal(pausedFrames,3);assert.ok(directions.has('right'));
  for(const unit of allUnits()){assert.equal(unit.userData.activeColumn,null);assert.ok(unit.children.filter(o=>o.userData.projectionColumn!=null).every(o=>!o.visible));}
  assert.equal(app.document.querySelectorAll('.projection-calculation,.projection-result').length,0);
+});
+test('cloud modules render real shard matrices and animate both inputs of gathering and reduction',async()=>{
+ let app;const seen=new Set();app=await boot({reduced:false,frameMs:700,onFrame:({document})=>{
+  if(!app)return;const root=app.scenes.at(-1);root?.traverse(o=>{if(o.visible&&o.userData.processingSecondary==='tp-gather')seen.add('gather-secondary');if(o.visible&&o.userData.additionFeature!=null)seen.add('partial-sum');});
+ }});
+ const M=app.c.NeuralPrologue;
+ for(const id of M.cloud.ids){app.api.switchLevel(id);app.api.setState(M.solutions(id));app.api.getWorld().rebuild();app.api.refresh();await app.api.run();assert.equal(app.api.getFault(),null);assert.equal(app.document.querySelector('#level-complete').open,true,id);}
+ assert.ok(seen.has('gather-secondary'));assert.ok(seen.has('partial-sum'));
+ app.api.select('tp-reduce');app.api.getWorld().focus('tp-reduce');assert.equal(app.document.querySelector('#card-merge-contrast').hidden,true,'communication is not described as a residual');
 });

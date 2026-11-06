@@ -1,5 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs');
-const ctx={console,navigator:{languages:['zh-CN']}};ctx.window=ctx;vm.createContext(ctx);for(const f of ['locales/en.js','i18n.js','music.js','shell.js','model.js','campaign.js','engine-model.js','original-curriculum.js'])vm.runInContext(fs.readFileSync(__dirname+'/'+f,'utf8'),ctx,{filename:f});
+const ctx={console,navigator:{languages:['zh-CN']}};ctx.window=ctx;vm.createContext(ctx);for(const f of ['locales/en.js','i18n.js','music.js','shell.js','model.js','campaign.js','engine-model.js','original-curriculum.js','cloud-curriculum.js'])vm.runInContext(fs.readFileSync(__dirname+'/'+f,'utf8'),ctx,{filename:f});
 const M=ctx.NeuralPrologue;
 const close=(a,b,tol=1e-9)=>a.length===b.length&&a.every((x,i)=>Number.isFinite(x)&&Math.abs(x-b[i])<=tol);
 test('random arrangements fit the table, keep modules apart, and do not change the circuit',()=>{
@@ -122,4 +122,21 @@ test('attention bridge output matches the corresponding computations inside full
   for(let i=0;i<3;i++){assert.ok(a.slice(i*3,i*3+3).every(v=>v>0),'unmasked softmax keeps all positions');assert.ok(Math.abs(a.slice(i*3,i*3+3).reduce((sum,v)=>sum+v,0)-1)<1e-12);}
   const l=M.reference(t.v,'vocabulary-scores');assert.equal(l.length,18);assert.ok(close(M.operations.pick([l]),M.reference(t.v,'vocabulary')));
  }
+});
+test('cloud TP lessons preserve full matrix products and reject swapped, missing or nonlinear shortcuts',()=>{
+ assert.deepEqual(Object.keys(M.routes),['main','modern','cloud','engine']);
+ const expected={
+  'tp-columns':x=>M.linear(x,M.cloud.weights),
+  'tp-rows':x=>M.linear(M.linear(x,M.cloud.weights),M.cloud.down),
+  'tp-ffn':x=>M.linear(M.linear(x,M.cloud.weights).map(v=>Math.max(0,v)),M.cloud.down)
+ };
+ const inputs=[[0,0],[1,0],[0,1],[1,1],[-2,3],[.3,-.9],[5,-4]];
+ for(const [id,reference]of Object.entries(expected)){
+  const fresh=M.initial(id);assert.equal(fresh.nodes.length,0);assert.equal(fresh.sink,null);
+  const state=M.solutions(id);for(const x of inputs)assert.ok(close(M.evaluate(state,x).output,reference(x)));
+  const last=state.nodes.find(n=>n.id===state.sink);last.links[1]=null;assert.ok(M.evaluate(state,[1,1]).error);
+ }
+ const swapped=M.solutions('tp-columns');swapped.nodes.find(n=>n.id==='tp-gather').links.reverse();assert.ok(!close(M.evaluate(swapped,[1,1]).output,expected['tp-columns']([1,1])));
+ const rows=M.solutions('tp-rows');rows.nodes.find(n=>n.id==='tp-row-a').links=['tp-slice-b'];assert.ok(!close(M.evaluate(rows,[1,1]).output,expected['tp-rows']([1,1])));
+ const ffn=M.solutions('tp-ffn');ffn.nodes.find(n=>n.id==='tp-row-b').links=['tp-col-b'];assert.ok(!close(M.evaluate(ffn,[1,1]).output,expected['tp-ffn']([1,1])));
 });

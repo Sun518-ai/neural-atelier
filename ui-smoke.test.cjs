@@ -8,7 +8,7 @@ function boot(storage=new Map(),hash='',languages=['zh-CN']){
  const hashchange=()=>listeners.get('hashchange')?.();
  const navigation={pushState(_,title,url){location.href=new URL(url,location.href).href;entries.splice(++cursor);entries.push(location.href);},replaceState(_,title,url){location.href=new URL(url,location.href).href;entries[cursor]=location.href;},back(){if(cursor){location.href=entries[--cursor];hashchange();}},forward(){if(cursor+1<entries.length){location.href=entries[++cursor];hashchange();}},get length(){return entries.length;}};
  const c={window:{},document,console,navigator:{languages},location,history:navigation,addEventListener:(type,fn)=>listeners.set(type,fn),localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)}};c.window=c;vm.createContext(c);
- for(const file of ['locales/en.js','i18n.js','music.js','shell.js','model.js','campaign.js','engine-model.js','original-curriculum.js'])vm.runInContext(fs.readFileSync(__dirname+'/'+file,'utf8'),c,{filename:file});
+ for(const file of ['locales/en.js','i18n.js','music.js','shell.js','model.js','campaign.js','engine-model.js','original-curriculum.js','cloud-curriculum.js'])vm.runInContext(fs.readFileSync(__dirname+'/'+file,'utf8'),c,{filename:file});
  for(const file of ['module-cards.js','level-progress.js'])vm.runInContext(fs.readFileSync(__dirname+'/'+file,'utf8').replaceAll('export ',''),c,{filename:file});
  let code=fs.readFileSync(__dirname+'/game.js','utf8').replace(/^import .*\n/gm,'');code=code.slice(0,code.indexOf("try{\n const T="));
  vm.runInContext(code+`\nworld={relocalize(){},labels(){},rebuild(){},beforeStage(){},setStage(){},clearPackets(){},focused(){return null},async animate(){}};refresh();`,c);
@@ -713,4 +713,15 @@ test('causal and every later learning shelf group packages without losing old pa
  assert.ok(doc.querySelector('.shelf-earlier [data-add-module="original-encoder"]'),'four-feature encoder is still available among earlier parts');
  app.eval("switchLevel('decoder-layer');state=M.solutions(stageId);save();progress.complete(stageId,state);refresh()");assert.ok(doc.querySelector('[data-shelf-group="packages"] [data-add-module="original-decoder"]'),'newly earned reward appears in its package group');
  for(const id of M.routes.engine.ids){app.eval(`switchLevel('${id}')`);assert.equal(doc.querySelector('[data-earlier-parts]'),null);assert.equal(doc.querySelectorAll('[data-add-module]').length,6);}
+});
+test('cloud track sits before edge inference and preserves independent saves, language and completion',async()=>{
+ const app=boot(new Map(),'#tp-columns'),doc=app.document;
+ app.eval('levelMenu()');assert.deepEqual([...doc.querySelectorAll('[data-track]')].map(el=>el.dataset.track),['main','modern','cloud','engine']);
+ assert.equal(doc.querySelectorAll('#level-list [data-level]').length,3);assert.match(doc.querySelector('.level-menu-intro').textContent,/CUDA Graph/);assert.match(doc.querySelector('.level-menu-intro').textContent,/尚未开放/);
+ app.eval('state=M.solutions(stageId);save()');await app.eval('run()');assert.equal(app.eval('levelPassed()'),true);const before=app.eval('JSON.stringify(state)');
+ const reopened=boot(app.storage,'#tp-columns');assert.equal(reopened.eval('JSON.stringify(state)'),before);assert.equal(reopened.eval('progress.completed(stageId)'),true);
+ app.c.I18n.setPreference('en');app.eval('levelMenu()');assert.doesNotMatch(doc.querySelector('#level-menu').textContent,/[\u3400-\u9fff]/);
+ doc.querySelector('#complete-next').onclick();assert.equal(app.eval('stageId'),'tp-rows');assert.equal(app.eval('state.nodes.length'),0);
+ app.eval("switchLevel('tp-ffn');state=M.solutions(stageId)");await app.eval('run()');assert.equal(doc.querySelector('#complete-next').textContent,'Choose a level');
+ app.eval('progress.resetCompletions()');assert.equal(app.eval("progress.completed('tp-columns')"),false);
 });

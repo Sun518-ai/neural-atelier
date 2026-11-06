@@ -1,5 +1,5 @@
-import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=shelf-groups-1';
-import {createProgress} from './level-progress.js?v=shelf-groups-1';
+import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=cloud-foundations-1';
+import {createProgress} from './level-progress.js?v=cloud-foundations-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -232,7 +232,8 @@ function renderShelf(){
   const current=kinds.filter(kind=>{if(grouping.currentKinds)return grouping.currentKinds.includes(kind);const d=M.definitions[kind];return d.out===grouping.featureWidth&&d.ins.every(dim=>dim===grouping.featureWidth);});
   const ordered=[...grouping.order.filter(kind=>current.includes(kind)),...current.filter(kind=>!grouping.order.includes(kind))],older=kinds.filter(kind=>!current.includes(kind));
   const group=(items,title,type)=>items.length?`<section class="shelf-current" data-shelf-group="${type}" aria-label="${title}"><h4>${title}</h4>${items.map(renderStock).join('')}</section>`:'';
-  const currentHTML=grouping.packages?group(ordered.filter(kind=>M.packages[kind]),grouping.packages,'packages')+group(ordered.filter(kind=>!M.packages[kind]),grouping.basics,'basics'):group(ordered,grouping.current,'current');
+  const isPackage=kind=>grouping.packageKinds?grouping.packageKinds.includes(kind):!!M.packages[kind];
+  const currentHTML=grouping.packages?group(ordered.filter(isPackage),grouping.packages,'packages')+group(ordered.filter(kind=>!isPackage(kind)),grouping.basics,'basics'):group(ordered,grouping.current,'current');
   palette.innerHTML=`${currentHTML}<details class="shelf-earlier" data-earlier-parts data-shelf-level="${stageId}" ${earlierOpen?'open':''}><summary>${grouping.earlier}<span>${older.length}</span></summary><p>${grouping.note}</p><div class="shelf-earlier-list">${older.map(renderStock).join('')}</div></details>`;
  }else palette.innerHTML=kinds.map(renderStock).join('');
  palette.scrollTop=scrollTop;
@@ -304,7 +305,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=shelf-groups-1');
+ const {createSceneArt}=await import('./scene-art.js?v=cloud-foundations-1');
  const art=createSceneArt(T,scene,colors,{anisotropy:renderer.capabilities.getMaxAnisotropy()});art.surroundings(samples(),stage());
  let fusionEffect=null;
  const assembly=new T.Group(),wires=new T.Group();scene.add(assembly,wires);const neuronGeo=new T.SphereGeometry(.115,16,12);let elements=[],curves=[],packets=[],drag=null,preview=null,yaw=.05,pitch=.8,zoom=stage().zoom,lastDepth=-1;
@@ -562,7 +563,7 @@ try{
    $('.card-example-title').firstChild.textContent=I18n.t("用“我”的向量比较两条支路");$('#card-example-input').textContent=input[0]+' = '+vector(input[1]);
    $('#card-example-values').innerHTML=`<div class="card-comparison"><p class="card-example-focus">${I18n.t("只看高亮的这一项：")}</p>${rows.map(row=>vectorRow(row,row[0]==='H',feature,roles[row[0]])).join('')}<div class="card-gate-step">SiLU(${formulaNumber(g)}) ≈ ${fmt(s)}</div><div class="card-gate-result"><span data-role="content"><small>${I18n.t("内容")}</small><b>${fmt(u)}</b></span><i>×</i><span data-role="scale"><small>${I18n.t("调节系数")}</small><b>${fmt(s)}</b></span><i>≈</i><span data-role="result"><small>${I18n.t("相乘结果")}</small><b>${fmt(h)}</b></span></div></div>`;
   }else $('#card-example-values').innerHTML=ex.inputs.map(v=>vectorRow(v)).join('')+vectorRow(ex.output,true);
-  const contrast=$('#card-merge-contrast');contrast.hidden=!['multiply','add','residual'].includes(d.type);contrast.replaceChildren();
+  const contrast=$('#card-merge-contrast');contrast.hidden=d.communication||!['multiply','add','residual'].includes(d.type);contrast.replaceChildren();
   if(!contrast.hidden){
    const a=[4,2],b=[.25,1.5],product=a.map((v,i)=>v*b[i]),sum=a.map((v,i)=>v+b[i]);
    contrast.innerHTML=`<b>${I18n.t('用同两组数比较：')}</b><code>A = ${vector(a)}　B = ${vector(b)}</code><div class="merge-compare-row ${d.type==='multiply'?'current':''}" data-operation="multiply"><strong>×</strong><span><code>A ⊙ B = ${vector(product)}</code><small>${I18n.t('逐项调节强弱；乘以 1 保持原值。')}</small></span></div><div class="merge-compare-row ${d.type!=='multiply'?'current':''}" data-operation="add"><strong>+</strong><span><code>A + B = ${vector(sum)}</code><small>${I18n.t('在原值上增加或减少；加上 0 保持原值。')}</small></span></div><small>${I18n.t('这里只比较运算：门控中 B 是调节系数，残差中 B 是修改量。')}</small>`;
@@ -630,7 +631,7 @@ try{
   const seq=!!stage().sequence,readyNodes=state.nodes.filter(n=>ev.values[n.id]);
   const pairedNode=id=>!seq&&['multiply','add'].includes(definition(id)?.type);
   const mixingNode=id=>definition(id)?.type==='mix';
-  const handledSecondary=id=>pairedNode(id)||mixingNode(id);
+  const handledSecondary=id=>pairedNode(id)||mixingNode(id)||definition(id)?.type==='concat'&&definition(id)?.out===4;
   const wordsFrom=source=>{
    let from=source;const visited=new Set();
    while(from&&!visited.has(from)){visited.add(from);const ids=ev.values[from];if(ids?.length===3&&ids.every(v=>Number.isInteger(v)&&M.math.vocab[v]!=null))return ids.map(i=>M.math.vocab[i]);if(from==='Z'&&stage().secondaryTokenIds)return stage().secondaryTokenIds.map(i=>M.math.vocab[i]);from=state.nodes.find(other=>other.id===from)?.links[0];}
@@ -672,17 +673,22 @@ try{
   readyNodes.forEach(n=>{
    const input=ev.values[n.links[0]],output=ev.values[n.id],p=movingPacket(input,n.id,n.id,'process');
    p.el.classList.add('processing-packet');p.el.dataset.node=n.id;p.mesh.userData.processing=n.id;
-   const operation=definition(n.id).type,mixing=operation==='mix',detailed=operation==='linear'||mixing,sequenceProjection=seq&&detailed,paired=pairedNode(n.id),worked=detailed||paired,other=paired||mixing?ev.values[n.links[1]]:null;
+   const operation=definition(n.id).type,mixing=operation==='mix',detailed=operation==='linear'||mixing,sequenceProjection=seq&&detailed,paired=pairedNode(n.id),gather=operation==='concat'&&output.length===4,worked=detailed||paired,other=paired||mixing||gather?ev.values[n.links[1]]:null;
    const tokenOperation=art.tokenOperation(definition(n.id)),centering=operation==='layernorm',normalizing=operation==='norm'||centering,pairTones=paired?art.pairColorsFor(n.id):null,operator=operation==='add'?'+':'×';
    const columns=mixing?output.length/3:detailed?weightsFor(n.id)[0].length:output.length,matrix=mixing?M.math.rows(other,columns):detailed?weightsFor(n.id):null;
-   Object.assign(p,{detailed,sequenceProjection,columns,matrix,mixing,paired,worked,other,normalizing,centering,tokenOperation});
+   Object.assign(p,{detailed,sequenceProjection,columns,matrix,mixing,paired,gather,worked,other,normalizing,centering,tokenOperation});
    if(mixing)p.valueWords=()=>wordsFrom(n.links[1]);
    if(worked||tokenOperation||centering)art.prepareProjectionPacket(p.mesh,paired?()=>pairTones[0]:mixing?i=>art.rowColor(i%3):undefined);
-   if(paired||mixing){
+   if(paired||mixing||gather){
     const otherMesh=art.packet(other,p.color,{sequence:mixing});otherMesh.userData={processingSecondary:n.id,row:p.el.dataset.row};otherMesh.visible=false;scene.add(otherMesh);
-    art.prepareProjectionPacket(otherMesh,mixing?i=>art.rowColor(Math.floor(i/columns)):()=>pairTones[1]);fadeMaterials(otherMesh);p.otherMesh=otherMesh;
+    art.prepareProjectionPacket(otherMesh,mixing?i=>art.rowColor(Math.floor(i/columns)):()=>gather?0x9b88c4:pairTones[1]);fadeMaterials(otherMesh);p.otherMesh=otherMesh;
    }
    const outputMesh=art.packet(output,p.color,{sequence:seq});outputMesh.userData={processingOutput:n.id,row:p.el.dataset.row};outputMesh.visible=false;scene.add(outputMesh);
+   if(gather){
+    p.cells.textContent=vector(input)+' ∥ '+vector(other);
+    const tint=(mesh,tone)=>mesh.children.filter(o=>o.userData.feature!=null).forEach(o=>{const color=typeof tone==='function'?tone(o.userData.feature):tone;o.material.color.set(color);o.material.emissive.set(color);});
+    tint(p.mesh,0x659bab);tint(p.otherMesh,0x9b88c4);tint(outputMesh,i=>i<2?0x659bab:0x9b88c4);
+   }
    const morph=document.createElement('span');morph.className='packet-morph';p.cells.replaceWith(morph);morph.appendChild(p.cells);
    const after=document.createElement('span');after.className='packet-values';after.textContent=seq?shape(output.length):vector(output);after.style.opacity='0';morph.appendChild(after);
    p.el.style.visibility='hidden';p.el.hidden=false;
@@ -789,6 +795,15 @@ try{
      const inputAlpha=1-ramp(progress,p.worked?.72:.2,p.worked?.86:.42),outputAlpha=ramp(progress,p.worked?.8:.65,p.worked?.96:.9);
      p.mesh.visible=visible&&inputAlpha>0;p.outputMesh.visible=visible&&outputAlpha>0;
      p.materials.forEach(m=>m.opacity=inputAlpha);p.outputMaterials.forEach(m=>m.opacity=outputAlpha);p.outputMesh.position.copy(p.p);
+     if(p.gather){
+      const center=new T.Vector3(p.node.x,1.7,p.node.z),join=ramp(progress,.12,.68),depart=ramp(progress,.8,1);
+      p.mesh.position.copy(point(p.node.id,'in',0)).lerp(center.clone().add(new T.Vector3(-.24,0,0)),join);
+      p.otherMesh.position.copy(point(p.node.id,'in',1)).lerp(center.clone().add(new T.Vector3(.24,0,0)),join);
+      const alpha=1-ramp(progress,.68,.8);p.mesh.visible=p.otherMesh.visible=visible&&alpha>0;
+      p.mesh.traverse(o=>{if(o.material)o.material.opacity=alpha;});p.otherMesh.traverse(o=>{if(o.material)o.material.opacity=alpha;});
+      const outputAlpha=ramp(progress,.68,.8);p.outputMesh.visible=visible&&outputAlpha>0;p.outputMaterials.forEach(m=>m.opacity=outputAlpha);
+      p.outputMesh.position.copy(center).lerp(point(p.node.id),depart);p.p.copy(p.outputMesh.position);
+     }
      if(p.worked){
       if(p.paired){
        p.otherMesh.visible=visible&&inputAlpha>0;

@@ -163,8 +163,8 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   }else if(d.type==='activation'){
    g.userData.activation=d.activation||'silu';
    const panel=backdrop(box(g,1.5,.025,1.7,0,.57,0,0xe4cc9d,{transparent:true,opacity:.34,depthWrite:false}),.12);
-   for(let i=0;i<4;i++){
-    const z=(i-1.5)*.42,pts=Array.from({length:33},(_,j)=>{const x=-3+j*6/32;return [x*.22,.92+.22*(d.activation==='relu'?Math.max(0,x):x/(1+Math.exp(-x))),z];});
+   for(let i=0;i<d.out;i++){
+    const z=(i-(d.out-1)/2)*.42,pts=Array.from({length:33},(_,j)=>{const x=-3+j*6/32;return [x*.22,.92+.22*(d.activation==='relu'?Math.max(0,x):x/(1+Math.exp(-x))),z];});
     inputs.push(neuron(g,...pts[0],0xb6ab83));outputs.push(neuron(g,...pts[32],color));
     const channel=tube(g,pts,0xb38649,.026),gate=ring(g,.19,0,.92,z,color,.025);
     const spark=new T.Mesh(sharedSphere,mat(color,{emissive:color,emissiveIntensity:1.6,transparent:true,depthWrite:false}));spark.visible=false;spark.userData={activationFeature:i};g.add(spark);
@@ -247,6 +247,13 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
     textTile(g,feature?'cos(p)':'sin(p)',.8,.23,0,.55,z,{size:58});
    }
    textTile(g,'X + PE',1,.25,0,.55,1.02,{size:60});
+  }else if(d.type==='concat'&&d.out===4){
+   for(let i=0;i<4;i++){
+    const tone=i<2?0x659bab:0x9b88c4,x=(i-1.5)*.43;
+    neuron(g,x,.72,0,tone);outputs.push(neuron(g,x,1.45,0,tone));
+    tube(g,[[x,.72,0],[x,1.45,0]],tone,.025);
+    textTile(g,i<2?'GPU 0':'GPU 1',.42,.22,x,.55,.65,{size:58});
+   }
   }else if(d.type==='concat'){
    for(let i=0;i<3;i++){
     const z=(i-1)*.58;
