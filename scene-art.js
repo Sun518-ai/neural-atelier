@@ -66,17 +66,18 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   const visible=smallest>=(detailModes[detailScope]?95:105);
   detailModes[detailScope]=visible;labels.forEach(mesh=>mesh.visible=visible);
  }
- function surroundings(samples,layout={}){
+ function surroundings(samples,layout={},palette={}){
   for(const parent of [floor,context])for(const o of [...parent.children]){parent.remove(o);o.traverse(c=>{if(c.geometry&&!c.geometry.userData?.shared)c.geometry.dispose();c.material?.map?.dispose();c.material?.dispose?.();});}
   tokens.length=0;rows.length=0;floor.visible=context.visible=true;
   const sourceX=layout.sourceX??-8.55,sinkX=layout.sinkX??9,dim=layout.sinkDim||2,w=layout.boardWidth??(layout.id==='wire'?11.6:layout.id==='projection'?15:22.1),d=layout.boardDepth??(layout.id==='ffn'||!layout.id?11:7);
-  slab(floor,w,d,.3,0,-.45,0,0xaabcb1);slab(floor,w-.2,d-.2,.09,0,-.12,0,0xd4dfd3);slab(floor,w-.45,d-.45,.035,0,-.01,0,0xeaf0e4);
-  for(let x=Math.ceil(-w/2+1);x<w/2-.5;x++)tube(floor,[[x,.075,-d/2+.5],[x,.075,d/2-.5]],0xb7c8b9,.007,.55);
-  for(let z=Math.ceil(-d/2+1);z<d/2-.5;z++)tube(floor,[[-w/2+.5,.075,z],[w/2-.5,.075,z]],0xb7c8b9,.007,.55);
+  const surface=palette.surface||'#eaf0e4',edge=palette.edge||'#b7c8b9',accent=palette.accent||'#526d5e';
+  slab(floor,w,d,.3,0,-.45,0,palette.edge||0xaabcb1);slab(floor,w-.2,d-.2,.09,0,-.12,0,palette.edge||0xd4dfd3);slab(floor,w-.45,d-.45,.035,0,-.01,0,surface);
+  for(let x=Math.ceil(-w/2+1);x<w/2-.5;x++)tube(floor,[[x,.075,-d/2+.5],[x,.075,d/2-.5]],edge,.007,.55);
+  for(let z=Math.ceil(-d/2+1);z<d/2-.5;z++)tube(floor,[[-w/2+.5,.075,z],[w/2-.5,.075,z]],edge,.007,.55);
   for(const z of [-d/2+.25,d/2-.25])box(floor,w-1.3,.05,.04,0,.08,z,0x92aa9b);
   for(const x of [-w/2+.45,w/2-.45])for(const z of [-d/2+.4,d/2-.4]){const screw=new T.Mesh(new T.CylinderGeometry(.065,.065,.03,12),mat(0x728a7c));screw.position.set(x,.1,z);floor.add(screw);}
-  textTile(context,layout.boardText||'FFN / SWIGLU',3.2,.48,-w/2+3.3,.1,d/2-.8,{color:'#526d5e',bg:'#eaf0e4',size:58});
-  textTile(context,layout.shape||'2 → 4 → 2',2.5,.45,w/2-3.25,.1,d/2-.8,{color:'#526d5e',bg:'#eaf0e4',size:62});
+  textTile(context,layout.boardText||'FFN / SWIGLU',3.2,.48,-w/2+3.3,.1,d/2-.8,{color:accent,bg:surface,size:58});
+  textTile(context,layout.shape||'2 → 4 → 2',2.5,.45,w/2-3.25,.1,d/2-.8,{color:accent,bg:surface,size:62});
   const seq=!!layout.sequence,inputCols=seq?(layout.sourceDim||6)/3:2,outCols=seq?(dim===3?1:dim/3):dim;
   const sourceW=inputCols>2?3.4:seq?2.4:1.8,rackW=seq?3.2:dim===4?2.6:1.8;
   for(const sourceId of layout.dualSource?['Z','R']:['R']){

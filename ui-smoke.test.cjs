@@ -734,3 +734,20 @@ test('single GPU report explains transfers and rejects correct numbers with exce
  app.eval('state=M.solutions(stageId)');await app.eval('run()');assert.equal(app.eval('levelPassed()'),true);assert.match(doc.querySelector('.cloud-copy-report').textContent,/16 B/);
  doc.querySelector('#complete-next').onclick();assert.equal(app.eval('stageId'),'tp-columns');
 });
+
+test('stage colors follow direct links, navigation and language while menu browsing keeps the active scene theme',()=>{
+ const app=boot(new Map(),'#scores'),doc=app.document;
+ assert.equal(doc.body.dataset.stageColor,'attention');
+ for(const [id,color] of [['wire','workbench'],['embedding','foundations'],['encoder-layer','encoder'],['causal','decoder'],['vocabulary','generation'],['ffn','modern'],['placement','engine'],['single-upload','single'],['tp-columns','tensor-parallel']]){
+  app.eval(`switchLevel('${id}')`);assert.equal(doc.body.dataset.stageColor,color,id);
+ }
+ app.navigation.back();assert.equal(doc.body.dataset.stageColor,'single');
+ app.navigation.forward();assert.equal(doc.body.dataset.stageColor,'tensor-parallel');
+ const state=app.eval('JSON.stringify(state)');app.eval('levelMenu()');
+ for(const route of ['modern','engine','main']){
+  doc.querySelector(`[data-track="${route}"]`).dispatchEvent(new app.window.Event('click',{bubbles:true}));
+  assert.equal(doc.querySelector('#level-menu').dataset.stageColor,route);
+  assert.equal(doc.body.dataset.stageColor,'tensor-parallel');
+ }
+ app.c.I18n.setPreference('en');assert.equal(doc.body.dataset.stageColor,'tensor-parallel');assert.equal(app.eval('JSON.stringify(state)'),state);
+});

@@ -1526,3 +1526,12 @@ test('cloud modules render real shard matrices and animate both inputs of gather
  assert.ok(seen.has('gather-secondary'));assert.ok(seen.has('partial-sum'));
  app.api.select('tp-reduce');app.api.getWorld().focus('tp-reduce');assert.equal(app.document.querySelector('#card-merge-contrast').hidden,true,'communication is not described as a residual');
 });
+
+test('board surfaces and grid accept the stage palette without tinting the input vectors',async()=>{
+ const app=await boot(),T=app.c.T,M=app.c.NeuralPrologue,scene=new T.Scene(),art=app.c.createSceneArt(T,scene,{});
+ const input=()=>scene.children[1].children.filter(o=>o.isMesh).map(o=>o.material?.color?.getHex());
+ art.surroundings(M.samplesFor('wire'),M.levels.wire);const original=input();
+ art.surroundings(M.samplesFor('wire'),M.levels.wire,{surface:'#f4e3eb',edge:'#dfbecd',accent:'#8c4d62'});
+ const floor=scene.children[0];assert.equal(floor.children[2].material.color.getHexString(),'f4e3eb');assert.equal(floor.children[3].material.color.getHexString(),'dfbecd');
+ assert.deepEqual(input(),original,'the input and output geometry keeps its own semantic colors');
+});

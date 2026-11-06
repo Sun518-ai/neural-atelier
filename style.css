@@ -284,6 +284,19 @@ html[lang=en] .stock-name{font-size:10px;line-height:12px}
 :is([data-level-group=generation],[data-stage-color=generation]){--group-accent:#806124;--group-bg:#f7edcf;--group-border:#dfcfa0}
 :is([data-level-group=single],[data-stage-color=single]){--group-accent:#396b7c;--group-bg:#e2eff3;--group-border:#bdd6df}
 :is([data-level-group=tensor-parallel],[data-stage-color=tensor-parallel]){--group-accent:#785887;--group-bg:#efe7f4;--group-border:#d7c5e0}
+/* Route colors also cover routes without learning-stage subsections. */
+:is([data-level-group=modern],[data-stage-color=modern]){--group-accent:#8c4d62;--group-bg:#f4e3eb;--group-border:#dfbecd}
+:is([data-level-group=engine],[data-stage-color=engine]){--group-accent:#486578;--group-bg:#e4ebf0;--group-border:#bdcdd9}
+[data-stage-color=cloud]{--group-accent:#396b7c;--group-bg:#e2eff3;--group-border:#bdd6df}
+body[data-stage-color]{--bg:var(--group-bg);--line:var(--group-border);background:var(--group-bg)}
+body[data-stage-color] .arena{background:linear-gradient(145deg,color-mix(in srgb,var(--group-bg) 45%,#fffdf8),var(--group-bg));border-color:var(--group-border)}
+body[data-stage-color] .chapter>span{color:var(--group-accent)}
+#level-menu[data-stage-color]{background:color-mix(in srgb,var(--group-bg) 35%,#fffdf8)}
+#level-tracks button[data-stage-color]{background:var(--group-bg);color:var(--group-accent);border-color:var(--group-border)}
+#level-tracks button[data-stage-color][aria-selected=true]{border-color:var(--group-accent);box-shadow:inset 0 -2px var(--group-accent)}
+#level-list:not(.grouped-levels){padding:14px;background:var(--group-bg);border:1px solid var(--group-border);border-radius:12px}
+#level-list:not(.grouped-levels) .level-choice{border-color:var(--group-border);background:color-mix(in srgb,var(--group-bg) 18%,#fffdf9)}
+#level-list:not(.grouped-levels) .level-choice.current{background:var(--group-bg);border-color:var(--group-accent);box-shadow:inset 0 0 0 1px var(--group-accent)}
 .level-stage-nav button[data-stage-color]{color:var(--group-accent);background:var(--group-bg);border-color:var(--group-border)}
 .level-stage-nav button[data-stage-color][aria-current=step]{border-color:var(--group-accent);box-shadow:inset 0 -2px var(--group-accent);font-weight:600}
 .level-group{margin-top:20px;padding:0 14px 14px;scroll-margin-top:8px;background:var(--group-bg);border:1px solid var(--group-border);border-top:3px solid var(--group-accent);border-radius:12px}
