@@ -826,3 +826,16 @@ test('structure map short labels never overwrite shared animation translations',
  assert.equal(JSON.stringify(app.c.AtelierEnglish),catalog);
  assert.equal(app.c.I18n.t('目标前缀'),'Target prefix');
 });
+
+test('causal offers zero new packaged-score copies while preserving existing saved circuits',()=>{
+ const app=boot(new Map(),'#causal'),M=app.c.NeuralPrologue;
+ assert.equal(M.inventory(M.levels.causal)['original-weights'],0);
+ assert.equal(app.document.querySelector('[data-add-module="original-weights"] .stock-count').textContent,'0');
+ assert.equal(app.document.querySelector('[data-add-module="original-weights"]').dataset.addDisabled,'true');
+ assert.equal(M.canAdd(app.eval('state'),'original-weights'),false);
+ assert.equal(M.inventory(M.levels['weighted-sum'])['original-weights'],2);
+ const saved=M.solutions('causal');saved.nodes.push({id:'original-weights',x:-4,z:3,links:['R']});
+ const storage=new Map([['neural-atelier-level-causal-v1',JSON.stringify(saved)]]),restored=boot(storage,'#causal');
+ assert.equal(restored.eval('state.nodes.length'),saved.nodes.length);assert.equal(restored.eval("state.nodes.find(n=>n.id==='original-weights').links[0]"),'R');
+ restored.eval("removeModule('original-weights')");assert.equal(restored.eval("M.stock(state,'original-weights')"),0);assert.equal(restored.eval("M.canAdd(state,'original-weights')"),false);
+});

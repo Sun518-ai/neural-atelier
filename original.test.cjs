@@ -36,7 +36,10 @@ test('learned shelves accumulate in teaching order without exposing future opera
   const l=M.levels[id];l.nodes.forEach(k=>seen.add(k));if(M.fusions[id])seen.add(M.fusions[id].kind);
   if(l.practice)continue;
   const stock=M.inventory(l);
-  for(const kind of seen)if(sequenceKind(kind)===!!l.sequence)assert.ok(stock[kind]>0,id+' retains '+kind);
+  for(const kind of seen)if(sequenceKind(kind)===!!l.sequence){
+   if(id==='causal'&&kind==='original-weights')assert.equal(stock[kind],0,'causal keeps the unmasked package visible but unavailable');
+   else assert.ok(stock[kind]>0,id+' retains '+kind);
+  }
   for(const kind of Object.keys(stock))assert.ok(seen.has(kind),id+' must not unlock '+kind+' early');
  }
  assert.equal(M.levels.scores.chapter,'原版基础 / 06');

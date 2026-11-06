@@ -1544,3 +1544,28 @@ test('attention outlets distinguish attention weights from aggregated and projec
   assert.ok(label,id);assert.equal(label.textContent.includes(M.causalGuide.weightsNote),weights,id);
  }
 });
+
+test('causal masking routes real scores through shutters, keeps allowed values and gathers all outputs',async()=>{
+ let app,paused=false,pauseFrames=0,frozen;const rows=new Set(),stages=new Set(),blocked=new Set(),allowed=new Set();let shutters=false,gather=false,frames=0;
+ app=await boot({reduced:false,frameMs:120,onFrame:({document})=>{
+  if(!app)return;const scene=app.scenes.at(-1);let flow;
+  scene.traverse(o=>{if(o.userData.tokenFlow?.operation==='mask')flow=o.userData.tokenFlow;
+   if(o.userData.maskShutter&&o.visible&&o.material.opacity>.1)shutters=true;
+   if(o.userData.operation==='mask'&&o.visible){const d=o.userData;assert.equal(d.blocked,d.feature>d.row);if(d.blocked){assert.equal(d.value,-Infinity);blocked.add(d.row+':'+d.feature);}else{assert.equal(d.value,d.input);allowed.add(d.row+':'+d.feature);}}
+   if(o.userData.processingOutput==='mask'&&o.visible&&o.userData.gather>0)gather=true;
+  });
+  if(!flow)return;frames++;rows.add(flow.row);stages.add(flow.stage);
+  const label=document.querySelector('.token-calculation[data-operation="mask"]');assert.ok(label);assert.doesNotMatch(label.textContent,/NaN|undefined/);
+  if(!paused&&flow.row===1&&flow.stage==='restrict'){paused=true;frozen=JSON.stringify(flow);app.api.togglePause();}
+  else if(paused&&pauseFrames<3){assert.equal(JSON.stringify(flow),frozen);if(++pauseFrames===3)app.api.togglePause();}
+ }});
+ const M=app.c.NeuralPrologue;app.api.switchLevel('causal');app.api.setState(M.solutions('causal'));app.api.getWorld().rebuild();await app.api.run();
+ assert.deepEqual([...rows].sort(),[0,1,2]);for(const stage of ['arrive','restrict','replace','ready'])assert.ok(stages.has(stage));
+ assert.equal(blocked.size,3);assert.equal(allowed.size,6);assert.ok(shutters&&gather&&frames>20);assert.equal(pauseFrames,3);
+ assert.equal(app.document.querySelectorAll('#test-results .pass').length,3);
+ assert.equal(app.document.querySelectorAll('.token-calculation[data-operation="mask"]').length,0);
+ app.scenes.at(-1).traverse(o=>{assert.ok(o.userData.tokenFlow?.operation!=='mask');if(o.userData.maskShutter||o.userData.maskResult)assert.equal(o.visible,false);});
+ const t=app.c.createSceneArt(app.c.T,new app.c.T.Scene(),{}).tokenFrame;
+ assert.equal(t(.22,'mask').row,0);assert.equal(t(.22+1.8,'mask').row,1);assert.equal(t(.22+3.6,'mask').row,2);
+ assert.equal(t(0,'mask').step,1.8);
+});

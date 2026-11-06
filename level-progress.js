@@ -24,7 +24,7 @@ export function createProgress(M,storage){
   const valid=new Set([...l.sources,...s.nodes.map(n=>n?.id)]),counts={};
   if((l.buildable?s.nodes.length>M.moduleLimit(l):s.nodes.length!==l.nodes.length)||new Set(s.nodes.map(n=>n?.id)).size!==s.nodes.length||s.nodes.some(n=>{
    const kind=M.nodeKind(n);counts[kind]=(counts[kind]||0)+1;
-   return !n||!allowed.includes(kind)||!M.validNodeId(n.id,kind)||(!l.buildable&&n.id!==kind)||counts[kind]>stock[kind]||!Number.isFinite(n.x)||!Number.isFinite(n.z)||!Array.isArray(n.links)||n.links.length!==M.definitions[kind].ins.length||n.links.some(k=>k!==null&&!valid.has(k));
+   return !n||!allowed.includes(kind)||!M.validNodeId(n.id,kind)||(!l.buildable&&n.id!==kind)||counts[kind]>Math.max(stock[kind]||0,l.legacyInventory?.[kind]||0)||!Number.isFinite(n.x)||!Number.isFinite(n.z)||!Array.isArray(n.links)||n.links.length!==M.definitions[kind].ins.length||n.links.some(k=>k!==null&&!valid.has(k));
   })||(s.sink!==null&&!valid.has(s.sink)))return null;
   // Old saves keep their IDs and positions; only append newly available stock.
   s.palette=[...new Set((Array.isArray(s.palette)?s.palette:[]).filter(k=>allowed.includes(k)))];

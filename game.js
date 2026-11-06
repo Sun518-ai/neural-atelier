@@ -1,5 +1,5 @@
-import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=structure-map-1';
-import {createProgress} from './level-progress.js?v=structure-map-1';
+import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=mask-flow-1';
+import {createProgress} from './level-progress.js?v=mask-flow-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -329,7 +329,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=structure-map-1');
+ const {createSceneArt}=await import('./scene-art.js?v=mask-flow-1');
  function scenePalette(){
   if(typeof getComputedStyle!=='function')return {};
   const css=getComputedStyle(document.body),read=name=>css.getPropertyValue(name).trim();
@@ -519,7 +519,7 @@ try{
   const width=Math.max(4.1,3.5*host.clientWidth/host.clientHeight);transition(new T.Vector3(n.x,.7,n.z),width/23,.32,.92);
  }
  function focusShelf(kind){
-  if(busy||!shelfUnlocked(kind)||!shelfInventory()[kind])return;
+  if(busy||!shelfUnlocked(kind)||!Object.prototype.hasOwnProperty.call(shelfInventory(),kind))return;
   if(focusId)leaveFocus();
   overview={target:cameraTarget.clone(),zoom,yaw,pitch};shelfFocus={kind,selected};focusId='shelf-card';
   selected=actionNode=pending=placing=selectedWire=null;drag=lastTap=null;clearPreview();clearPlacement();
@@ -751,6 +751,9 @@ try{
      token.textContent=words()[row]+' · ';result.textContent='';
      if(tokenOperation==='lookup'){
       left.textContent=timing.stage==='address'?'ID '+input[row]:'E['+input[row]+']';join.textContent=timing.stage==='address'?' → ':' = ';right.textContent=timing.stage==='address'?'E['+input[row]+']':vector(values);abstract.textContent='E[ ]';
+     }else if(tokenOperation==='mask'){
+      left.textContent=vector(values);join.textContent=' → ';right.textContent=timing.stage==='arrive'?vector(values):vector(out);abstract.textContent='◩';
+      calculation.dataset.maskedColumns=Array.from({length:width},(_,j)=>j>row?j:null).filter(j=>j!==null).join(',');
      }else{
       const scaled=values.map(x=>x*Math.sqrt(width)),angles=values.map((_,j)=>row/10000**(2*Math.floor(j/2)/width)),codes=angles.map((angle,j)=>(j%2?Math.cos:Math.sin)(angle));
       if(timing.stage==='scale'){left.textContent=vector(values)+' × '+(width===2?'√2':'2');join.textContent=' ≈ ';right.textContent=vector(scaled);abstract.textContent='×';}

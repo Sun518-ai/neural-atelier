@@ -8,7 +8,7 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
  const pairColors=[0x8b6ea5,0x368d77];
  const additionColors=[0x397aa2,0xb68036];
  const rowZ=i=>-1.05+i*.96;
- const tokenOperation=d=>d.type==='embedding'&&d.ins[0]===3?'lookup':d.type==='position'&&d.ins[0]===d.out?'position':null;
+ const tokenOperation=d=>d.type==='mask'&&d.out===9?'mask':d.type==='embedding'&&d.ins[0]===3?'lookup':d.type==='position'&&d.ins[0]===d.out?'position':null;
  const positionalValue=(p,j,width)=>(j%2?Math.cos:Math.sin)(p/10000**(2*Math.floor(j/2)/width));
  sharedSphere.userData.shared=true;
  const mat=(color,extra={})=>new T.MeshStandardMaterial({color,roughness:.5,metalness:.12,...extra});
@@ -185,7 +185,23 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
     socketBackdrop(left,.15,active);socketBackdrop(right,.15,active);
     [leftPath,rightPath,outPath,gate].forEach(mesh=>backdrop(mesh,.1,active));
    }
-  }else if(['score','mask','softmax','attention'].includes(d.type)){
+  }else if(d.type==='mask'){
+   for(let row=0;row<3;row++){
+    const z=(row-1)*.66,tone=rowColor(row),features=[];
+    const band=box(g,1.7,.025,.55,0,.47,z,tone,{transparent:true,opacity:.06,depthWrite:false});
+    const word=textTile(g,'·',.36,.24,-.9,1.83,z,{size:72,color:'#456052',bg:'#edf3e8'});
+    for(let j=0;j<3;j++){
+     const x=(j-1)*.49,blocked=j>row,tint=blocked?0xc58b65:tone;
+     const tile=box(g,.43,.05,.45,x,.52,z,tint,{transparent:true,opacity:.28});
+     const face=textTile(g,blocked?'−∞':'✓',.4,.35,x,.56,z,{size:68,color:blocked?'#8d5239':'#456052',bg:blocked?'#edddcf':'#e2e9da'});
+     const input=neuron(g,x,.77,z,featureColor(j)),output=neuron(g,x,1.72,z,tint);inputs.push(input);outputs.push(output);
+     const shutter=box(g,.43,.34,.07,x,1.15,z,tint,{transparent:true,opacity:.12,depthWrite:false,emissive:tint,emissiveIntensity:0});shutter.visible=false;shutter.userData.maskShutter={row,column:j};
+     const carrier=new T.Mesh(new T.BoxGeometry(.15,.15,.15),mat(tint,{emissive:tint,emissiveIntensity:1.4,transparent:true,depthWrite:false}));carrier.visible=false;carrier.userData.maskResult=true;g.add(carrier);
+     features.push({index:j,blocked,tile,face,input,output,shutter,carrier});
+    }
+    tokenRows.push({row,z,tone,band,word,features});
+   }
+  }else if(['score','softmax','attention'].includes(d.type)){
    // Three rows correspond to positions; crossed threads depict information mixing.
    for(let i=0;i<3;i++)for(let j=0;j<3;j++){
     const c=d.type==='mask'&&j>i?0xc3b6a5:color,x=(j-1)*.47,z=(i-1)*.48;
@@ -394,13 +410,14 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   return {...local,row,rowTime,rowDuration,end,duration,localPhase:local.phase,phase:Math.max(0,Math.min(1,phase))};
  }
  function tokenFrame(time,kind,count=3){
-  const start=.22,step=kind==='lookup'?.9:1.2,end=start+count*step,duration=end+.3;
+  const start=.22,step=kind==='mask'?1.8:kind==='lookup'?.9:1.2,end=start+count*step,duration=end+.3;
   const row=Math.max(0,Math.min(count-1,Math.floor((time-start)/step))),local=Math.max(0,Math.min(1,(time-start-row*step)/step));
   const phase=time<start?time/start*.18:time<end?.18+(time-start)/(count*step)*.62:.8+(time-end)/.3*.2;
-  const stage=kind==='lookup'?(local<.3?'address':local<.58?'read':local<.84?'copy':'ready'):(local<.28?'scale':local<.56?'position':local<.84?'add':'ready');
+  const stage=kind==='mask'?(local<.28?'arrive':local<.53?'restrict':local<.84?'replace':'ready'):kind==='lookup'?(local<.3?'address':local<.58?'read':local<.84?'copy':'ready'):(local<.28?'scale':local<.56?'position':local<.84?'add':'ready');
   return {row,local,start,step,end,duration,stage,phase:Math.max(0,Math.min(1,phase))};
  }
  function processingToken(u,time,input,output,words){
+  if(u.tokenKind==='mask'){processingMask(u,time,input,output,words);return;}
   const timing=tokenFrame(time,u.tokenKind),active=time>=0&&time<timing.duration,width=u.tokenWidth;
   u.g.userData.processing=active;
   if(!active){clearToken(u);return;}
@@ -445,13 +462,35 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   }
   u.g.userData.tokenFlow={operation:u.tokenKind,row:timing.row,stage:timing.stage,local,groups};
  }
+ function processingMask(u,time,input,output,words){
+  const timing=tokenFrame(time,'mask');u.g.userData.processing=time>=0&&time<timing.duration;
+  if(!u.g.userData.processing){clearToken(u);return;}
+  const groups=[];
+  for(const row of u.tokenRows){
+   const clock=(time-timing.start-row.row*timing.step)/timing.step,active=clock>=0&&clock<1,done=clock>=.82;
+   row.band.material.opacity=active?.28:done?.12:.06;row.word.write(words[row.row]||'·');
+   for(const f of row.features){
+    const index=row.row*3+f.index,value=output[index],tone=f.blocked?0xc58b65:row.tone;
+    f.tile.material.opacity=active?.88:done?.48:.2;f.tile.material.emissive.set(tone);f.tile.material.emissiveIntensity=active?.65:0;
+    f.face.write(clock>=.53?(value===-Infinity?'−∞':String(Number(value.toFixed(2)))):active?String(Number(input[index].toFixed(2))):f.blocked?'−∞':'✓');
+    f.shutter.visible=f.blocked&&active&&clock>=.28&&clock<.86;f.shutter.position.y=1.45-.35*ramp(clock,.28,.46);f.shutter.material.opacity=.68*ramp(clock,.28,.42)*(1-ramp(clock,.77,.86));f.shutter.material.emissiveIntensity=.7;
+    f.input.material.emissiveIntensity=active&&clock<.53?1:.08;
+    f.output.material.color.set(tone);f.output.material.emissive.set(tone);f.output.material.emissiveIntensity=active&&clock>=.53?1.25:done?.3:.08;
+    f.carrier.visible=active&&clock>=.53&&clock<.84;f.carrier.material.wireframe=f.blocked;f.carrier.material.color.set(tone);f.carrier.material.opacity=ramp(clock,.53,.57)*(1-ramp(clock,.79,.84));
+    f.carrier.position.set(f.output.position.x,1.14,row.z).lerp(f.output.position,ramp(clock,.53,.82));
+    Object.assign(f.carrier.userData,{operation:'mask',row:row.row,feature:f.index,input:input[index],value,blocked:f.blocked});
+   }
+   groups.push({row:row.row,input:input.slice(row.row*3,row.row*3+3),output:output.slice(row.row*3,row.row*3+3)});
+  }
+  u.g.userData.tokenFlow={operation:'mask',row:timing.row,stage:timing.stage,local:timing.local,groups};
+ }
  function clearToken(u){
   delete u.g.userData.tokenFlow;
   u.lookupRows.forEach(entry=>{entry.cue.visible=false;entry.cells.forEach(({tile,face})=>{tile.material.emissiveIntensity=0;face.material.color.set(0xffffff);});});
   u.positionWaves.forEach(wave=>{wave.material.opacity=.35;wave.material.emissiveIntensity=0;});
   for(const row of u.tokenRows){
    row.band.material.opacity=.06;row.word.write('·');
-   for(const f of row.features){f.carrier.visible=false;if(f.code){f.code.visible=false;f.input.material.emissiveIntensity=f.marker.material.emissiveIntensity=.08;f.scaleGate.material.emissiveIntensity=f.join.material.emissiveIntensity=0;f.join.scale.setScalar(1);}}
+   for(const f of row.features){f.carrier.visible=false;if(u.tokenKind==='mask'){f.shutter.visible=false;f.tile.material.opacity=.28;f.tile.material.emissiveIntensity=0;f.input.material.emissiveIntensity=.08;f.face.write(f.blocked?'−∞':'✓');}if(f.code){f.code.visible=false;f.input.material.emissiveIntensity=f.marker.material.emissiveIntensity=.08;f.scaleGate.material.emissiveIntensity=f.join.material.emissiveIntensity=0;f.join.scale.setScalar(1);}}
   }
  }
  function layerNormFrame(time,count=3){
@@ -716,6 +755,7 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   }
  }
  function routeTokenInput(id,mesh,time,origin,anchor){
+  if(units.get(id).tokenKind==='mask'){routeMaskInput(id,mesh,time,origin,anchor);return;}
   const u=units.get(id),timing=tokenFrame(time,u.tokenKind),lookup=u.tokenKind==='lookup',width=u.tokenWidth,fan=ramp(timing.phase,.04,.17);
   mesh.userData.routing=fan>0;
   mesh.children.find(o=>o.userData.packetTray).material.opacity=1-ramp(timing.phase,.04,.17);
@@ -734,6 +774,18 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
    pad.material.opacity=(1-fan)*alpha;label.material.opacity=fan*alpha;label.visible=fan>0&&alpha>0&&detailModes[detailScope];
    write(lookup?'ID '+value:String(Number(shown.toFixed(2))));
    Object.assign(bar.userData,{tokenInput:true,tokenRow:row,lookupId:lookup?value:null,mappingProgress:to,displayValue:shown});
+  }
+ }
+ function routeMaskInput(id,mesh,time,origin,anchor){
+  const u=units.get(id),timing=tokenFrame(time,'mask'),fan=ramp(timing.phase,.04,.17);
+  mesh.userData.routing=fan>0;mesh.children.find(o=>o.userData.packetTray).material.opacity=1-fan;
+  for(const {bar,pad,label,write,home,padHome,labelHome}of mesh.userData.featureRoutes){
+   const index=bar.userData.feature,row=Math.floor(index/3),f=u.tokenRows[row].features[index%3],local=(time-timing.start-row*timing.step)/timing.step;
+   const advance=ramp(local,.06,.46),alpha=1-ramp(local,.46,.57),target=f.input.position.clone().lerp(new T.Vector3(f.output.position.x,1.14,u.tokenRows[row].z),advance).add(u.g.position);
+   for(const [object,start]of [[bar,home],[pad,padHome],[label,labelHome]])object.position.copy(timing.phase<.04?origin:anchor).add(start).lerp(target.clone().add(new T.Vector3(0,object===label?.22:0,0)),fan).sub(origin);
+   const tone=f.blocked?0xc58b65:rowColor(row);bar.material.color.set(tone);bar.material.emissive.set(tone);bar.material.emissiveIntensity=local>=0&&local<.57?1:.25;bar.material.opacity=alpha;
+   pad.material.opacity=(1-fan)*alpha;label.material.opacity=fan*alpha;label.visible=fan>0&&alpha>0&&detailModes[detailScope];write(bar.userData.value===-Infinity?'−∞':String(Number(bar.userData.value.toFixed(2))));
+   Object.assign(bar.userData,{maskInput:true,tokenRow:row,blocked:f.blocked,mappingProgress:advance});
   }
  }
  function routeLayerNormInput(id,mesh,time,origin,anchor,input,output){

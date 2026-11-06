@@ -465,6 +465,9 @@ for(const id of groupedLater){
  I18n.prepare(l.shelf);
 }
 
+// Keep the packaged unmasked weights inspectable, but do not offer new copies here.
+M.levels.causal.legacyInventory={'original-weights':M.levels.causal.inventory['original-weights']};
+M.levels.causal.inventory['original-weights']=0;
 M.levels.qkv.mission=L('把内容向量送到出口','Send the value vectors to the outlet');
 M.levels.qkv.description=L('本关只检查出口的 V。Q/K 用于后续的注意力打分，这里不要求放置或接线。','This lesson checks only V at the outlet. Q/K are used for attention scoring in later lessons; placing or connecting them is optional here.');
 M.levels.qkv.summary=M.levels.qkv.description;
