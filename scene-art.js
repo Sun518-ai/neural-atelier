@@ -247,6 +247,14 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
     textTile(g,feature?'cos(p)':'sin(p)',.8,.23,0,.55,z,{size:58});
    }
    textTile(g,'X + PE',1,.25,0,.55,1.02,{size:60});
+  }else if(d.type==='transfer'){
+   const count=d.out;
+   for(let i=0;i<count;i++){
+    const z=(i-(count-1)/2)*.42,tone=d.memoryOutput==='gpu'?0x659bab:0xc7a166;
+    inputs.push(neuron(g,-.62,.82,z,0xa3aca9));outputs.push(neuron(g,.62,.82,z,tone));
+    tube(g,[[-.62,.82,z],[.62,.82,z]],tone,.025);
+   }
+   textTile(g,d.memoryInput.toUpperCase()+' → '+d.memoryOutput.toUpperCase(),1.65,.28,0,.5,.98,{size:62});
   }else if(d.type==='concat'&&d.out===4){
    for(let i=0;i<4;i++){
     const tone=i<2?0x659bab:0x9b88c4,x=(i-1.5)*.43;

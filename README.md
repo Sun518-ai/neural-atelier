@@ -8,7 +8,7 @@
 
 **[Play in your browser →](https://hacking.pub/games/neural-atelier/)** · [Run locally](#run-locally) · [How to play](#how-to-play)
 
-54 levels · Desktop / WebGL 2 · English + Chinese · No account required
+57 levels · Desktop / WebGL 2 · English + Chinese · No account required
 
 ## Inside the workshop
 
@@ -26,11 +26,11 @@ In **Settings → Clear all completions**, confirm to mark every level incomplet
 
 From Causal masking onward, the shelf groups combined modules and basic modules, with earlier parts in an expandable section. Compatible alternatives stay available; grouping does not reveal the required wiring. The same organization applies to modern extensions.
 
-The **Cloud inference** track sits between modern models and on-device inference. Its first three playable lessons teach column sharding, row sharding, and a two-GPU FFN. See the [cloud curriculum and pinned model references](docs/cloud-curriculum.md) for the planned multi-node, MoE, CUDA Graph and MTP progression. Later stages are not playable yet.
+The **Cloud inference** track sits between modern models and on-device inference. Six playable lessons start with CPU/GPU transfers, CPU fallback and resident GPU intermediates, then teach column sharding, row sharding, and a two-GPU FFN. See the [cloud curriculum and pinned model references](docs/cloud-curriculum.md) for the planned multi-node, MoE, CUDA Graph and MTP progression. Later stages are not playable yet.
 
 ## From the first wire to an inference engine
 
-The **29-level main track** teaches the original Transformer first. **13 modern extensions** then compare SiLU, SwiGLU, RMSNorm, Pre-LN, and RoPE. The **3-level cloud track** introduces tensor parallelism before a separate **9-level bonus track** explores on-device inference inspired by Qwen 27B, Kapitsa, and Apple ANE. Choose a track from the level menu; finishing one does not automatically enter another.
+The **29-level main track** teaches the original Transformer first. **13 modern extensions** then compare SiLU, SwiGLU, RMSNorm, Pre-LN, and RoPE. The **6-level cloud track** starts with one GPU and then introduces tensor parallelism before a separate **9-level bonus track** explores on-device inference inspired by Qwen 27B, Kapitsa, and Apple ANE. Choose a track from the level menu; finishing one does not automatically enter another.
 
 | Stage | What you build and explore |
 | --- | --- |

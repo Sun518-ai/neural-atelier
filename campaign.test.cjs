@@ -140,3 +140,15 @@ test('cloud TP lessons preserve full matrix products and reject swapped, missing
  const rows=M.solutions('tp-rows');rows.nodes.find(n=>n.id==='tp-row-a').links=['tp-slice-b'];assert.ok(!close(M.evaluate(rows,[1,1]).output,expected['tp-rows']([1,1])));
  const ffn=M.solutions('tp-ffn');ffn.nodes.find(n=>n.id==='tp-row-b').links=['tp-col-b'];assert.ok(!close(M.evaluate(ffn,[1,1]).output,expected['tp-ffn']([1,1])));
 });
+test('single GPU lessons enforce actual tensor residency and count copies independently of values',()=>{
+ const ids=['single-upload','single-fallback','single-resident'];assert.deepEqual(Array.from(M.routes.cloud.ids.slice(0,3)),ids);
+ for(const [i,id] of ids.entries()){
+  assert.equal(M.initial(id).nodes.length,0);const s=M.solutions(id),ev=M.evaluate(s,[1,1]);assert.equal(ev.error,null);assert.equal(ev.cloudMemory.bytes,[24,48,16][i]);assert.equal(ev.cloudMemory.locations[s.sink],'cpu');
+  for(const t of M.samplesFor(id))assert.ok(close(M.evaluate(s,t.v).output,M.reference(t.v,id)));
+ }
+ const missing=M.solutions('single-upload');missing.nodes.find(n=>n.id==='sg-project').links=['R'];let ev=M.evaluate(missing,[1,1]);assert.ok(ev.error.includes('GPU'));assert.ok(close(ev.output,M.reference([1,1],'single-upload')),'numerically right still needs a valid device path');
+ const unread=M.solutions('single-upload');unread.sink='sg-project';assert.match(M.evaluate(unread,[1,1]).error,/出口在 CPU/);
+ const wrongCpu=M.solutions('single-fallback');wrongCpu.nodes.find(n=>n.id==='sg-cpu-relu').links=['sg-project'];assert.match(M.evaluate(wrongCpu,[1,1]).error,/CPU/);
+ const detour=M.solutions('single-fallback');detour.levelId='single-resident';ev=M.evaluate(detour,[1,1]);assert.ok(close(ev.output,M.reference([1,1],'single-resident')));assert.equal(ev.cloudMemory.bytes,48);assert.match(ev.error,/上限/);
+ const valid=M.solutions('single-resident');const x=[-1,2];assert.equal(M.evaluate(valid,x).cloudMemory.bytes,16,'byte count comes from shapes, not input values');
+});

@@ -717,11 +717,20 @@ test('causal and every later learning shelf group packages without losing old pa
 test('cloud track sits before edge inference and preserves independent saves, language and completion',async()=>{
  const app=boot(new Map(),'#tp-columns'),doc=app.document;
  app.eval('levelMenu()');assert.deepEqual([...doc.querySelectorAll('[data-track]')].map(el=>el.dataset.track),['main','modern','cloud','engine']);
- assert.equal(doc.querySelectorAll('#level-list [data-level]').length,3);assert.match(doc.querySelector('.level-menu-intro').textContent,/CUDA Graph/);assert.match(doc.querySelector('.level-menu-intro').textContent,/尚未开放/);
+ assert.equal(doc.querySelectorAll('#level-list [data-level]').length,6);assert.deepEqual([...doc.querySelectorAll('[data-level-group]')].map(el=>el.dataset.levelGroup),['single','tensor-parallel']);assert.match(doc.querySelector('.level-menu-intro').textContent,/CUDA Graph/);assert.match(doc.querySelector('.level-menu-intro').textContent,/尚未开放/);
  app.eval('state=M.solutions(stageId);save()');await app.eval('run()');assert.equal(app.eval('levelPassed()'),true);const before=app.eval('JSON.stringify(state)');
  const reopened=boot(app.storage,'#tp-columns');assert.equal(reopened.eval('JSON.stringify(state)'),before);assert.equal(reopened.eval('progress.completed(stageId)'),true);
  app.c.I18n.setPreference('en');app.eval('levelMenu()');assert.doesNotMatch(doc.querySelector('#level-menu').textContent,/[\u3400-\u9fff]/);
  doc.querySelector('#complete-next').onclick();assert.equal(app.eval('stageId'),'tp-rows');assert.equal(app.eval('state.nodes.length'),0);
  app.eval("switchLevel('tp-ffn');state=M.solutions(stageId)");await app.eval('run()');assert.equal(doc.querySelector('#complete-next').textContent,'Choose a level');
  app.eval('progress.resetCompletions()');assert.equal(app.eval("progress.completed('tp-columns')"),false);
+});
+test('single GPU report explains transfers and rejects correct numbers with excessive copies',async()=>{
+ const app=boot(new Map(),'#single-upload'),doc=app.document;
+ app.eval('state=M.solutions(stageId)');await app.eval('run()');assert.match(doc.querySelector('.cloud-copy-report').textContent,/24 B/);
+ doc.querySelector('#complete-next').onclick();assert.equal(app.eval('stageId'),'single-fallback');app.eval('state=M.solutions(stageId)');await app.eval('run()');assert.match(doc.querySelector('.cloud-copy-report').textContent,/48 B/);
+ doc.querySelector('#complete-next').onclick();assert.equal(app.eval('stageId'),'single-resident');app.eval("state=M.solutions('single-fallback');state.levelId='single-resident'");await app.eval('run()');assert.equal(app.eval('levelPassed()'),false);assert.match(doc.querySelector('.cloud-copy-report').textContent,/48 \/ 16 B/);
+ app.c.I18n.setPreference('en');assert.doesNotMatch(doc.querySelector('.cloud-copy-report').textContent,/[\u3400-\u9fff]/);
+ app.eval('state=M.solutions(stageId)');await app.eval('run()');assert.equal(app.eval('levelPassed()'),true);assert.match(doc.querySelector('.cloud-copy-report').textContent,/16 B/);
+ doc.querySelector('#complete-next').onclick();assert.equal(app.eval('stageId'),'tp-columns');
 });
