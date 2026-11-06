@@ -36,7 +36,7 @@ test('all levels automatically display their report beside the run controls',asy
  for(const id of Object.keys(M.levels)){
   app.eval(`switchLevel('${id}');state=M.solutions(stageId);if(stage().engine)state.settings.precision=16;`);
   assert.ok(app.document.querySelector('.mission h2').textContent.length);
-  const reason=app.document.querySelector('#mission-reason'),example=app.document.querySelector('#mission-reason-example'),hasExample=['gating','residual','ffn','wider-features','causal'].includes(id)||!!M.levels[id].packages?.length;
+  const reason=app.document.querySelector('#mission-reason'),example=app.document.querySelector('#mission-reason-example'),hasExample=['gating','residual','ffn','wider-features','causal','masked-multihead'].includes(id)||!!M.levels[id].packages?.length;
   assert.equal(reason.hidden,false,id+' explains its purpose');
   for(const field of ['title','text','takeaway'])assert.ok(app.document.querySelector('#mission-reason-'+field).textContent.trim(),id+' '+field);
   assert.equal(example.hidden,!hasExample);assert.equal(example.hasChildNodes(),hasExample,'text-only lessons clear earlier worked examples');
