@@ -48,7 +48,7 @@ test('all levels automatically display their report beside the run controls',asy
   assert.equal(panel.hidden,false);
   assert.equal(panel.parentElement.className,'run-toolbar');
   assert.equal(app.document.querySelector('#report-toggle'),null);
-  for(const n of M.levels[id].nodes){app.eval(`select('${n}')`);assert.ok(app.document.querySelector('#inspect-name').textContent.length);const card=app.eval(`cardFor('${n}',stageId)||M.extraCard('${n}',stageId)`);assert.ok(card.meaning);const example=app.eval(`M.extraExample('${n}',stageId)||exampleFor(M,'${n}',stageId)`);assert.ok(example.output[1].every(Number.isFinite)||n==='mask');}
+  for(const n of M.levels[id].nodes){app.eval(`select('${n}')`);const card=app.eval(`cardFor('${n}',stageId)||M.extraCard('${n}',stageId)`);assert.ok(card.meaning);const example=app.eval(`M.extraExample('${n}',stageId)||exampleFor(M,'${n}',stageId)`);assert.ok(example.output[1].every(Number.isFinite)||n==='mask');}
  }
 });
 test('gating rationale uses actual weights to show equal content receiving different scales',()=>{
@@ -91,7 +91,7 @@ test('wire deletion and undo preserve other branches and survive reload',()=>{
 test('partially constructed tables and older complete saves retain their positions and connections',()=>{
  const app=boot();app.eval("switchLevel('ffn');chooseModule('gate');placeModule(-3,-2);chooseOutput('Z');chooseInput('gate',0)");assert.equal(app.eval('state.nodes.length'),1);
  const saved=app.eval('JSON.stringify(state)'),reloaded=boot(app.storage,'#ffn');assert.equal(reloaded.eval('JSON.stringify(state)'),saved);assert.equal(reloaded.document.querySelector('[data-add-module="gate"]').getAttribute('data-add-disabled'),'false');
- reloaded.eval("select('gate');$('#remove-module').onclick()");assert.equal(reloaded.eval('state.nodes.length'),0);reloaded.eval("$('#undo').onclick()");assert.equal(reloaded.eval('JSON.stringify(state)'),saved);
+ reloaded.eval("select('gate');removeModule()");assert.equal(reloaded.eval('state.nodes.length'),0);reloaded.eval("$('#undo').onclick()");assert.equal(reloaded.eval('JSON.stringify(state)'),saved);
  const old=app.eval("M.solutions('ffn')");delete old.palette;old.nodes[0].x=1.234;
  const legacy=boot(new Map([['neural-atelier-prologue-v1',JSON.stringify(old)]]));assert.equal(legacy.eval('stageId'),'ffn');assert.equal(legacy.eval('state.nodes.length'),6);assert.equal(legacy.eval('state.nodes[0].x'),1.234);assert.equal(legacy.eval('state.sink'),'add');
 });
@@ -292,13 +292,13 @@ test('language changes preserve the current circuit, results, level hash and spe
  app.c.I18n.setPreference('en');assert.equal(app.document.querySelector('#settings-title').textContent,'Game settings');assert.match(app.document.querySelector('#run').textContent,/Run my network/);assert.equal(app.eval('JSON.stringify(state)'),before);assert.equal(app.eval('JSON.stringify(results)'),results);assert.equal(app.location.hash,hash);assert.equal(app.eval('playbackSpeed'),2);assert.equal(app.eval('M.samples[1].word'),'love');assert.equal(app.eval("M.readTokens([0,1,2])"),'I love cats');
  app.c.I18n.setPreference('zh');assert.equal(app.document.querySelector('#settings-title').textContent,'游戏设置');assert.equal(app.eval('JSON.stringify(state)'),before);assert.equal(app.eval('M.samples[1].word'),'爱');
 });
-test('English covers every level, inspector, module card and generated report',async()=>{
+test('English covers every level, module card and generated report',async()=>{
  const app=boot(new Map(),'', ['en-US']),M=app.c.NeuralPrologue;
  for(const id of Object.keys(M.levels)){
   app.eval(`switchLevel('${id}');state=M.solutions(stageId);if(stage().engine)state.settings.precision=16;`);await app.eval('run()');
   assert.doesNotMatch(app.document.querySelector('.mission').textContent,/[\u3400-\u9fff]/,id+' mission');
   assert.doesNotMatch(app.document.querySelector('#run-report').textContent,/[\u3400-\u9fff]/,id+' report');
-  for(const n of M.levels[id].nodes){app.eval(`select('${n}')`);assert.doesNotMatch(app.document.querySelector('.inspector').textContent,/[\u3400-\u9fff]/);const card=app.eval(`cardFor('${n}',stageId)||M.extraCard('${n}',stageId)`);assert.doesNotMatch(card.meaning+card.purpose,/[\u3400-\u9fff]/);}
+  for(const n of M.levels[id].nodes){app.eval(`select('${n}')`);const card=app.eval(`cardFor('${n}',stageId)||M.extraCard('${n}',stageId)`);assert.doesNotMatch(card.meaning+card.purpose,/[\u3400-\u9fff]/);}
  }
  assert.deepEqual([...app.c.I18n.missing],[]);
 });
@@ -331,7 +331,7 @@ test('multiple module saves preserve instance identities and undo refunds only t
  app.eval("switchLevel('ffn');chooseModule('project');placeModule(-3,-2);chooseModule('project');placeModule(1,-2);chooseOutput('Z');chooseInput('project-2',0)");
  assert.equal(app.eval('selected'),'project-2');assert.equal(app.document.querySelector('[data-add-module="project"]').getAttribute('data-add-disabled'),'false');assert.equal(app.eval("M.stock(state,'project')"),2);
  const saved=app.eval('JSON.stringify(state)'),reloaded=boot(app.storage,'#ffn');assert.equal(reloaded.eval('JSON.stringify(state)'),saved);
- reloaded.eval("select('project');$('#remove-module').onclick()");assert.equal(reloaded.eval("state.nodes[0].id"),'project-2');assert.equal(reloaded.eval("state.nodes[0].links[0]"),'Z');assert.equal(reloaded.document.querySelector('[data-add-module="project"]').getAttribute('data-add-disabled'),'false');
+ reloaded.eval("select('project');removeModule()");assert.equal(reloaded.eval("state.nodes[0].id"),'project-2');assert.equal(reloaded.eval("state.nodes[0].links[0]"),'Z');assert.equal(reloaded.document.querySelector('[data-add-module="project"]').getAttribute('data-add-disabled'),'false');
  reloaded.eval("$('#undo').onclick()");assert.equal(reloaded.eval('JSON.stringify(state)'),saved);
  const corrupt=JSON.parse(saved);corrupt.nodes[1].kind='down';const storage=new Map([['neural-atelier-prologue-v1',JSON.stringify(corrupt)]]);assert.equal(boot(storage,'#ffn').eval('state.nodes.length'),0,'invalid ID/type pair does not become a different operator');
 });
@@ -360,7 +360,7 @@ test('legacy content projections merge without losing coexisting copies, wiring,
   const saved=snapshot(migrated);await app.eval('run()');assert.ok(app.eval('results.every(r=>r.pass)'));assert.equal(snapshot(app.eval('state')),saved);
   const reloaded=boot(store,'#'+id);assert.equal(snapshot(reloaded.eval('state')),saved);
   if(id==='ffn'){
-   reloaded.eval("select('project-2');$('#remove-module').onclick()");assert.equal(reloaded.eval("state.nodes.find(n=>n.id==='multiply').links[1]"),null);assert.equal(reloaded.eval("M.stock(state,'project')"),2);
+   reloaded.eval("select('project-2');removeModule()");assert.equal(reloaded.eval("state.nodes.find(n=>n.id==='multiply').links[1]"),null);assert.equal(reloaded.eval("M.stock(state,'project')"),2);
    reloaded.eval("$('#undo').onclick()");assert.equal(snapshot(reloaded.eval('state')),saved);
   }
  }
