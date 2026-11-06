@@ -340,3 +340,11 @@ html[lang=en] .stock-name{font-size:10px;line-height:12px}
 .encoder-stage-path{padding:9px 10px;margin-top:10px;border-left:3px solid #43897a;background:#43897a0b;font-size:12px;font-weight:600;line-height:1.8;color:#365d53}.encoder-job[data-encoder-job=process] .encoder-stage-path{border-color:#846990;background:#8469900b;color:#715780}.encoder-job .encoder-stage-source{font-weight:600}.encoder-job .encoder-stage-finish{margin-top:5px}.progress-setting{align-items:flex-start;flex-direction:column;gap:10px}.progress-setting button,#progress-reset-confirm button{font-size:12px}#progress-reset-confirm{padding:12px;background:#ac694b0b;border:1px solid #d7b6a5;border-radius:9px;margin-bottom:12px}#progress-reset-confirm p,#progress-reset-status{font-size:12px;line-height:1.7;margin:0 0 10px}#progress-reset-confirm>div{display:flex;justify-content:flex-end;gap:8px}#progress-reset-apply{color:#914d36;border-color:#cda18c}#progress-reset-status{color:#45685c}#progress-reset-confirm[hidden],#progress-reset-status[hidden]{display:none}
 
 .shelf-current+.shelf-current{margin-top:8px;padding-top:7px;border-top:1px solid #d3decf}
+/* Reserve real space for the open shelf; canvas and hit-target labels share a viewport. */
+.arena{--shelf-space:0px;--shelf-width:176px}
+.arena:has(>#module-shelf[data-size=small]){--shelf-width:112px}
+.arena:has(>#module-shelf[data-size=large]){--shelf-width:212px}
+.arena:has(>#module-shelf[open]:not([hidden])){--shelf-space:calc(var(--shelf-width) + 34px)}
+.arena>#scene,.arena>#labels,.arena>#component-fusion{left:var(--shelf-space)}
+.arena>#labels{overflow:hidden}
+.arena>.scene-bottom,.arena>#device-docks{left:calc(var(--shelf-space) + 17px)}

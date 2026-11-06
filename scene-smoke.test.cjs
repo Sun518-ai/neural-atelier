@@ -1290,18 +1290,24 @@ test('stopping a paused run clears its effects and the next run starts unpaused'
 });
 
 test('dragging a module card previews the operator, places one copy and dismisses the tutorial guide',async()=>{
+ for(const left of [0,210]){
  const app=await boot(),doc=app.document;doc.querySelector('#welcome').close();app.api.switchLevel('workshop');
  const scene=()=>app.scenes.at(-1),ghost=()=>scene().children.find(o=>o.userData.placementGhost),guide=()=>doc.querySelector('.placement-guide');
  const event=(target,type,properties={})=>{const e=new app.window.Event(type,{bubbles:true,cancelable:true});Object.assign(e,properties);target.dispatchEvent(e);};
- doc.querySelector('#scene').getBoundingClientRect=()=>({left:0,top:0,width:1400,height:760,right:1400,bottom:760});
+ doc.querySelector('#scene').getBoundingClientRect=()=>({left,top:0,width:1400,height:760,right:left+1400,bottom:760});
  assert.equal(guide().hasAttribute('hidden'),false);const card=doc.querySelector('[data-add-module="project"]');
- event(card,'pointerdown',{clientX:120,clientY:160});event(doc,'pointermove',{clientX:700,clientY:380});
+ event(card,'pointerdown',{clientX:120,clientY:160});event(doc,'pointermove',{clientX:left+700,clientY:380});
  assert.ok(ghost());assert.ok(ghost().children.length>10,'preview is the matrix module, not a placeholder cube');assert.equal(app.api.getState().nodes.length,0);
- event(doc,'pointerup',{clientX:700,clientY:380});card.dispatchEvent(new app.window.Event('click',{bubbles:true}));
+ event(doc,'pointerup',{clientX:left+700,clientY:380});card.dispatchEvent(new app.window.Event('click',{bubbles:true}));
  assert.equal(ghost(),undefined);assert.equal(app.api.getState().nodes.length,1);assert.equal(guide().hasAttribute('hidden'),true);assert.equal(doc.querySelector('#module-count').textContent,'1 / 1');
  app.api.chooseOutput('R');app.api.chooseInput('project',0);app.api.chooseOutput('project');app.api.chooseInput('sink',0);await app.api.run();assert.equal(doc.querySelectorAll('#test-results .pass').length,3);
  app.document.querySelector('#reset').onclick();assert.equal(guide().hasAttribute('hidden'),false);
- event(doc.querySelector('[data-add-module="project"]'),'pointerdown',{clientX:120,clientY:160});event(doc,'pointermove',{clientX:700,clientY:380});event(doc,'pointerup',{clientX:1500,clientY:380});assert.equal(ghost(),undefined);assert.equal(app.api.getState().nodes.length,0,'dropping outside does not create or spend a copy');
+ event(doc.querySelector('[data-add-module="project"]'),'pointerdown',{clientX:120,clientY:160});event(doc,'pointermove',{clientX:left+700,clientY:380});event(doc,'pointerup',{clientX:left+1500,clientY:380});assert.equal(ghost(),undefined);assert.equal(app.api.getState().nodes.length,0,'dropping outside does not create or spend a copy');
+ if(left){
+  event(doc.querySelector('[data-add-module="project"]'),'pointerdown',{clientX:120,clientY:160});event(doc,'pointermove',{clientX:180,clientY:380});event(doc,'pointerup',{clientX:180,clientY:380});
+  assert.equal(app.api.getState().nodes.length,0,'dropping in the reserved shelf space does not create a component');
+ }
+ }
 });
 
 function noticeTimers(){

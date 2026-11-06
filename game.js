@@ -1,5 +1,5 @@
-import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=single-gpu-1';
-import {createProgress} from './level-progress.js?v=single-gpu-1';
+import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=shelf-space-1';
+import {createProgress} from './level-progress.js?v=shelf-space-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -237,7 +237,7 @@ function renderShelf(){
   const group=(items,title,type)=>items.length?`<section class="shelf-current" data-shelf-group="${type}" aria-label="${title}"><h4>${title}</h4>${items.map(renderStock).join('')}</section>`:'';
   const isPackage=kind=>grouping.packageKinds?grouping.packageKinds.includes(kind):!!M.packages[kind];
   const currentHTML=grouping.packages?group(ordered.filter(isPackage),grouping.packages,'packages')+group(ordered.filter(kind=>!isPackage(kind)),grouping.basics,'basics'):group(ordered,grouping.current,'current');
-  palette.innerHTML=`${currentHTML}<details class="shelf-earlier" data-earlier-parts data-shelf-level="${stageId}" ${earlierOpen?'open':''}><summary>${grouping.earlier}<span>${older.length}</span></summary><p>${grouping.note}</p><div class="shelf-earlier-list">${older.map(renderStock).join('')}</div></details>`;
+  palette.innerHTML=`${currentHTML}${older.length?`<details class="shelf-earlier" data-earlier-parts data-shelf-level="${stageId}" ${earlierOpen?'open':''}><summary>${grouping.earlier}<span>${older.length}</span></summary><p>${grouping.note}</p><div class="shelf-earlier-list">${older.map(renderStock).join('')}</div></details>`:''}`;
  }else palette.innerHTML=kinds.map(renderStock).join('');
  palette.scrollTop=scrollTop;
  world?.syncShelf?.();
@@ -308,7 +308,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=single-gpu-1');
+ const {createSceneArt}=await import('./scene-art.js?v=shelf-space-1');
  const art=createSceneArt(T,scene,colors,{anisotropy:renderer.capabilities.getMaxAnisotropy()});art.surroundings(samples(),stage());
  let fusionEffect=null;
  const assembly=new T.Group(),wires=new T.Group();scene.add(assembly,wires);const neuronGeo=new T.SphereGeometry(.115,16,12);let elements=[],curves=[],packets=[],drag=null,preview=null,yaw=.05,pitch=.8,zoom=stage().zoom,lastDepth=-1;
