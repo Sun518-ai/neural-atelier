@@ -36,7 +36,7 @@ test('all levels automatically display their report beside the run controls',asy
  for(const id of Object.keys(M.levels)){
   app.eval(`switchLevel('${id}');state=M.solutions(stageId);if(stage().engine)state.settings.precision=16;`);
   assert.ok(app.document.querySelector('.mission h2').textContent.length);
-  const reason=app.document.querySelector('#mission-reason'),example=app.document.querySelector('#mission-reason-example'),hasExample=['gating','residual','ffn','wider-features'].includes(id)||!!M.levels[id].packages?.length;
+  const reason=app.document.querySelector('#mission-reason'),example=app.document.querySelector('#mission-reason-example'),hasExample=['gating','residual','ffn','wider-features','causal'].includes(id)||!!M.levels[id].packages?.length;
   assert.equal(reason.hidden,false,id+' explains its purpose');
   for(const field of ['title','text','takeaway'])assert.ok(app.document.querySelector('#mission-reason-'+field).textContent.trim(),id+' '+field);
   assert.equal(example.hidden,!hasExample);assert.equal(example.hasChildNodes(),hasExample,'text-only lessons clear earlier worked examples');
@@ -750,4 +750,19 @@ test('stage colors follow direct links, navigation and language while menu brows
   assert.equal(doc.body.dataset.stageColor,'tensor-parallel');
  }
  app.c.I18n.setPreference('en');assert.equal(doc.body.dataset.stageColor,'tensor-parallel');assert.equal(app.eval('JSON.stringify(state)'),state);
+});
+
+test('causal guidance explains visibility and score provenance; the screenshot bypass is not a correct Q/K result',async()=>{
+ const app=boot(new Map(),'#causal'),doc=app.document,M=app.c.NeuralPrologue;
+ assert.equal(doc.querySelectorAll('.causal-primer td.allowed').length,6);assert.equal(doc.querySelectorAll('.causal-primer td.blocked').length,3);
+ assert.equal(doc.querySelector('.causal-primer details').hasAttribute('open'),false);
+ assert.deepEqual([...doc.querySelectorAll('.causal-step code')].map(el=>el.textContent),['[-0.07, 0.78, 0.71]','[-0.07, 0.78, −∞]','[0.3, 0.7, 0]']);
+ app.eval("state=M.solutions('causal');state.nodes.find(n=>n.id==='score').links=['R','R']");
+ const wrong=M.evaluate(app.eval('state'),M.samplesFor('causal')[0].v).output;
+ assert.equal(wrong[1],0);assert.equal(wrong[2],0);assert.equal(wrong[5],0);assert.ok(Math.abs(wrong[3]-.33)<.01);
+ await app.eval('run()');assert.equal(app.eval('levelPassed()'),false);
+ app.eval("state=M.solutions('causal')");await app.eval('run()');assert.equal(app.eval('levelPassed()'),true);
+ app.c.I18n.setPreference('en');assert.doesNotMatch(doc.querySelector('.mission').textContent,/[\u3400-\u9fff]/);
+ const card=app.eval("cardFor('mask','causal')");assert.match(card.purpose,/\[2, 1, 3\]/);assert.doesNotMatch(card.meaning+card.purpose,/[\u3400-\u9fff]/);
+ app.eval("switchLevel('scores')");assert.equal(doc.querySelector('.causal-primer'),null);
 });

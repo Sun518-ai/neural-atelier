@@ -1,5 +1,5 @@
-import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=stage-world-1';
-import {createProgress} from './level-progress.js?v=stage-world-1';
+import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=causal-explained-1';
+import {createProgress} from './level-progress.js?v=causal-explained-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -108,6 +108,12 @@ function renderReport(){
 $('#engine-controls').addEventListener('change',e=>{const key=e.target.dataset.setting;if(!key||busy)return;checkpoint();state.settings[key]=M.engineControls[key].values.find(([v])=>String(v)===e.target.value)[0];changed();});
 $('#device-docks').addEventListener('click',e=>{const b=e.target.closest('[data-device]');if(!b)return;if(!selected)return say(I18n.t("先选中需要分配的模块。"));assignDevice(selected,b.dataset.device);});
 $('#run-report').addEventListener('click',e=>{if(e.target.closest('[data-close-report]'))closeReport(true);});
+function causalPrimer(){
+ const g=M.causalGuide,words=M.samplesFor('causal')[0].word.split(' / '),x=M.samplesFor('causal')[0].v;
+ const scores=M.operations.score([M.operations.q([x]),M.operations.k([x])]),masked=M.operations.mask([scores]),weights=M.operations.softmax([masked]);
+ const values=v=>vector(v.slice(3,6));
+ return `<div class="causal-primer"><table><caption>${g.caption}</caption><thead><tr><th>${g.reference}</th>${words.map(word=>`<th scope="col">${word}</th>`).join('')}</tr></thead><tbody>${words.map((word,i)=>`<tr><th scope="row">${word}</th>${words.map((_,j)=>`<td class="${j<=i?'allowed':'blocked'}" aria-label="${j<=i?g.allowed:g.blocked}">${j<=i?'✓':'0'}</td>`).join('')}</tr>`).join('')}</tbody></table><small>${g.legend}</small><p>${g.read}</p><details><summary>${g.detail}</summary>${[[g.before,scores],[g.masked,masked],[g.after,weights]].map(([label,value])=>`<div class="causal-step"><span>${label}</span><code>${values(value)}</code></div>`).join('')}<p>${g.why}</p></details></div>`;
+}
 function stageColor(c){return M.routes[c.track]?.groups?.find(group=>group.ids.includes(c.id))?.id||c.track;}
 function stageChrome(){
  const c=stage();document.body.dataset.stageColor=stageColor(c);document.body.classList.toggle('engine-level',!!c.engine);$('#device-docks').hidden=!c.engine;resetReport();$('#engine-controls').hidden=!c.engine;engineControls();$('.inspector').hidden=c.nodes.length===0;$('.scene-legend').hidden=c.nodes.length===0;$('#scene-help').textContent=c.nodes.length?I18n.t("拖模块摆放 · 点连线删除 · 双击查看模块卡"):I18n.t("圆口出，方口进 · 拖动空白转动视角");$('#pass-count').textContent='0 / '+c.sampleCount;document.title=I18n.t("神经工坊 · ")+c.title;$('.chapter span').textContent=c.chapter;$('.chapter strong').textContent=c.title;
@@ -121,6 +127,8 @@ function stageChrome(){
   $('#mission-reason-example').innerHTML=`<div class="swiglu-primer"><h4>${I18n.t("SwiGLU 是哪一段？")}</h4><p>${I18n.t("前面的进阶关已经把双路门控与降维组成 SwiGLU FFN；本关再接入归一化输入和残差。")}</p><div class="swiglu-source">${I18n.t("同一份输入 Z")}</div><div class="swiglu-branches"><div><b>${I18n.t("线性投影")}</b><span>${I18n.t("内容特征")}</span></div><div class="swiglu-gate"><b>${I18n.t("门投影 → SiLU")}</b><span>${I18n.t("调节系数")}</span></div></div><div class="swiglu-merge"><span aria-hidden="true">↓</span><b>${I18n.t("逐元素相乘")}</b><span aria-hidden="true">↓</span><b>${I18n.t("降维投影")}</b></div><p>${I18n.t("同样的内容值 2，乘系数 0.3 得到 0.6，乘 1.5 得到 3。系数随输入变化，决定这个特征贡献多少。")}</p></div>`;
  }else if(reason?.kind==='encoder-layer'){
   $('#mission-reason-example').innerHTML=encoderPrimer();
+ }else if(reason?.kind==='causal'){
+  $('#mission-reason-example').innerHTML=causalPrimer();
  }else if(reason?.kind==='embedding-width'){
   const ex=M.embeddingWidthExample;
   $('#mission-reason-example').innerHTML=`<div class="embedding-width-example">${[[ex.beforeLabel,ex.before],[ex.afterLabel,ex.after]].map(([label,values])=>`<div data-width="${values.length}"><small>${label}</small><div class="embedding-lookup"><b>${ex.token}</b><span aria-hidden="true">→</span><div class="embedding-coordinates">${values.map((value,i)=>`<span style="--feature-color:${['#397aa2','#8862aa','#b68036','#288778'][i]}">${fmt(value)}</span>`).join('')}</div></div></div>`).join('')}</div>`;
@@ -310,7 +318,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=stage-world-1');
+ const {createSceneArt}=await import('./scene-art.js?v=causal-explained-1');
  function scenePalette(){
   if(typeof getComputedStyle!=='function')return {};
   const css=getComputedStyle(document.body),read=name=>css.getPropertyValue(name).trim();
@@ -369,7 +377,7 @@ try{
   if(removable&&!busy&&!focusId&&!pending&&!placing&&!selectedWire)addLabel('div','wire-actions node-actions',`<button type="button" data-delete-node="${removable.id}">${I18n.t("删除组件")}</button><button type="button" data-close-node aria-label="${I18n.t("关闭")}">×</button>`,{'data-owner':removable.id},()=>new T.Vector3(removable.x,.7,removable.z+1.1));
   addLabel('span','source-label',`<b>${stage().sourceTitle}</b>${stage().sourceNote?'<br>'+stage().sourceNote:''}`,{},()=>new T.Vector3(stage().sourceX,1.6,-2.05+(stage().dualSource?2.15:0)));
   if(stage().dualSource)addLabel('span','source-label',`<b>${stage().sourceNames.Z}</b><br>${stage().secondaryTitle}`,{},()=>new T.Vector3(stage().sourceX,1.6,-4.2));
-  addLabel('span','source-label',`<b>${stage().outputTitle}</b><br>${stage().tokenOutput?I18n.t("词表选择后的文字"):shape(stage().sinkDim)+I18n.t(" · 各位置的特征")}`,{},()=>new T.Vector3(stage().sinkX,1.6,-2.05));
+  addLabel('span','source-label',`<b>${stage().outputTitle}</b><br>${stage().tokenOutput?I18n.t("词表选择后的文字"):shape(stage().sinkDim)+(stage().attentionReadout?' · '+M.causalGuide.weightsNote:I18n.t(" · 各位置的特征"))}`,{},()=>new T.Vector3(stage().sinkX,1.6,-2.05));
   if(busy&&!stage().sequence){const marker=addLabel('span','row-marker',flowIdentity(),{'data-owner':'R','data-row':sample<3?String(sample):'validation'},()=>sample<3?new T.Vector3(stage().sourceX-1,.99,art.rowZ(sample)):new T.Vector3(stage().sourceX,1.4,2));marker.style.setProperty('--row-color',colorHex(art.rowColor(sample)));}
   stage().sources.forEach(id=>addLabel('button','port '+(pending===id?'pending':''),(stage().sourcePorts?.[id]||(id==='R'&&stageId!=='ffn'?'X':id))+' · '+shape(stage().sourceDim||2),{'type':'button','data-output':id,'aria-label':`${outputName(id)}${I18n.t(" 输出口，")}${shape(stage().sourceDim||2)}`},()=>point(id)));
   if(stageId==='ffn')addLabel('span','source-label','Z = RMSNorm(R)',{},()=>new T.Vector3(stage().sourceX,.65,2.55));

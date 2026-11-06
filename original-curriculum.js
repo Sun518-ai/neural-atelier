@@ -334,6 +334,27 @@ menuLesson('decoder-layer','assemble',L('组装另一半','Assemble the other ha
 menuLesson('encoder-decoder','connect',L('连接两端','Connect both halves'),L('前面两半都搭好了。让源句经过编码器、目标前缀经过解码器，把两端接起来，再输出词表分数。','Both halves are ready. Send the source through the encoder and the target prefix through the decoder, connect the two, then produce vocabulary scores.'));
 M.levelMenuCopy={stages:L('按学习阶段浏览','Browse learning stages'),progress:L('关已通过','levels completed'),connections:L('这些关卡怎样接起来','How these lessons connect')};
 I18n.prepare(M.levelMenuCopy);
+// Explain visibility separately from the Q/K scores whose values are checked.
+Object.assign(M.levels.causal,{
+ mission:L('让每个词只能参考自己和前面的词','Let each token read only itself and earlier tokens'),
+ description:L('沿用 Q、K 投影和打分，加入“不能看后面”的限制。出口要得到注意力权重 A；这一关还不需要 V 和内容汇合。','Keep the Q/K projections and scoring, and add a no-looking-ahead restriction. Produce attention weights A at the output; V and value aggregation are not needed in this lesson.'),
+ rationale:{kind:'causal',
+ title:L('预测“猫”时，不能先读到“猫”','When predicting Cat, do not read Cat first'),
+ text:L('在完整解码器里，“爱”位置的结果用来预测它后面的词。如果它提前读到“猫”，就等于看了答案。因此，即使一次送入整句，也要让“爱”只能参考“我、爱”。','In a complete decoder, the result at Love predicts the following token. Reading Cat there would reveal the answer. Even when the whole sentence is supplied at once, Love must read only I and Love.'),
+ takeaway:L('遮罩决定“哪些词不能参考”；Q/K 打分和 Softmax 决定“其余词各占多少比例”。本关检查整张 A，不能只把未来的权重变成 0：直接用 X 代替 Q/K，其他比例也会算错。','The mask decides which tokens are forbidden; Q/K scoring and Softmax decide how to divide weight among the rest. This lesson checks all of A, not just future zeros. Using X in place of Q/K changes the remaining proportions.'),
+ scope:L('本关只计算参考比例，还没有汇合 V，也不会生成下一个词。','This lesson computes reference weights only. It does not yet aggregate V or generate the next token.')}
+});
+M.causalGuide={
+ caption:L('以“我 / 爱 / 猫”为例：谁能参考谁？','For I / Love / Cat: who may read whom?'),
+ reference:L('参考 →','Read →'),allowed:L('可参考','Allowed'),blocked:L('不可参考','Blocked'),
+ legend:L('✓ 可参考，由分数决定比例；0 不可参考。','✓ Allowed: scores determine the weight. 0 Blocked.'),
+ read:L('看“爱”这一组：三个数依次表示参考“我、爱、猫”的比例，加起来是 1。','For Love, the three numbers are its weights for I, Love and Cat, in that order. They sum to 1.'),
+ detail:L('遮罩在计算里改了什么？','What does the mask change in the calculation?'),
+ before:L('“爱”的 Q/K 分数','Love’s Q/K scores'),masked:L('遮住后面的“猫”','Mask the later Cat'),after:L('Softmax 后的比例','Weights after Softmax'),
+ why:L('把“猫”的分数改成 −∞，Softmax 才会给它 0 权重。不能只把分数改成 0，因为 exp(0) = 1，它仍会分到权重。其余分数保持不变，再由 Softmax 分配合计为 1 的比例。','Set Cat’s score to −∞ so Softmax gives it zero weight. A score of 0 does not block it: exp(0) = 1 still receives weight. Keep all allowed scores unchanged; Softmax then normalizes their weights to sum to 1.'),
+ weightsNote:L('每个位置参考各词的比例','Weights for reading each token')
+};
+I18n.prepare(M.causalGuide);I18n.prepare(M.levels.causal.rationale);
 // After the placement tutorial, the shelf remains a usable part of the game.
 // Preserve each lesson's prepared table and existing inventory; removing a
 // module makes that copy available to place again without changing the puzzle.
@@ -574,6 +595,12 @@ M.outputProjectionGuide={
  multihead:L('多头注意力先把各个头的输出拼成一个向量，再乘 Wo。每个新的输出特征都可以同时使用多个头的分量。即使拼接后已经是模型需要的宽度，Wo 仍然负责重组各个头带回的信息。','Multi-head attention concatenates the head outputs into one vector, then multiplies by Wo. Each new output feature can use components from several heads. Even when concatenation already gives the model’s required width, Wo still recombines the information retrieved by the heads.')
 };
 I18n.prepare(M.outputProjectionGuide);
+cards.mask={number:'',seal:L('遮','Mask'),english:'CAUSAL MASK',family:L('注意力','Attention'),color:'#9a813d',
+ ability:L('禁止当前位置偷看后面的词','Prevent each position from looking ahead'),
+ formula:'Q/K scores → mask → Softmax',
+ meaning:L('输入是 Q/K 算出的匹配分数，还不是注意力比例。对于“爱”这个位置，保留它对“我、爱”的分数，把对后面的“猫”的分数改成 −∞。其他位置各自按同样规则处理。','The input contains Q/K matching scores, not attention weights yet. For Love, keep the scores for I and Love and replace the score for the later Cat with −∞. Apply the same rule independently at every position.'),
+ purpose:L('例如分数 [2, 1, 3] 变成 [2, 1, −∞]，再经 Softmax 得到约 [0.73, 0.27, 0]。这是一组便于说明的数字，不是本关答案。遮罩限制可见范围，Softmax 才负责把可见分数变成合计为 1 的比例；分数设成 0 并不等于屏蔽。','For example, scores [2, 1, 3] become [2, 1, −∞], then Softmax produces about [0.73, 0.27, 0]. These illustrative numbers are not the lesson’s target. The mask limits visibility; Softmax converts allowed scores into weights summing to 1. Setting a score to 0 does not block it.'),
+ input:L('Q/K 匹配分数','Q/K matching scores'),output:L('遮住未来后的分数','Scores with future positions masked'),weight:L('无','None'),trait:L('保留自己与过去','Keep self and earlier positions'),stage:0};
 I18n.prepare(cards);
 M.original={relu,ln,position,embed,wide,project,vocabulary,classicFFN,sequenceFFN,head,concat,multi,singleAttention,encoder,decoderSelf,decoder,sourceIds,
  exampleLabels(levelId){return {Oa:L('自注意力更新','Self-attention update'),Om:L('因果注意力更新','Masked attention update'),Oc:L('交叉注意力更新','Cross-attention update'),A:['relu','original-ffn'].includes(levelId)?L('ReLU 输出','ReLU output'):I18n.t('注意力'),E:L('编码器输出','Encoder output'),D:L('目标特征','Target features'),Xs:L('源词向量与位置','Source embeddings and positions'),Xt:L('目标词向量与位置','Target embeddings and positions'),Xp:L('含位置的特征','Position-enriched features'),H_A:L('头 A 的结果','Head A output'),H_B:L('头 B 的结果','Head B output'),C:L('拼接结果','Concatenated features'),X1:levelId==='encoder-layer'?L('交流后的特征','Features after exchange'):L('第一次归一化','First normalized state'),X2:L('交叉注意力后的特征','Features after cross-attention'),R1:L('Attention 残差结果','Attention residual result'),R2:L('FFN 残差结果','FFN residual result'),Rc:L('交叉注意力残差结果','Cross-attention residual result')};},
