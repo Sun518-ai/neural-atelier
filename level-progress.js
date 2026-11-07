@@ -2,9 +2,13 @@ export function createProgress(M,storage){
  const legacy='neural-atelier-prologue-v1',metaKey='neural-atelier-chapters-v1';
  const read=key=>{try{return JSON.parse(storage.getItem(key));}catch{return null;}};
  const write=(key,value)=>{try{storage.setItem(key,JSON.stringify(value));return true;}catch{return false;}};
- const key=id=>id==='ffn'?legacy:`neural-atelier-level-${id}-v1`;
  const saved=read(metaKey),meta={current:M.levels[saved?.current]?saved.current:(read(legacy)?'ffn':'wire'),completed:(Array.isArray(saved?.completed)?saved.completed:[]).filter(id=>M.levels[id]),practiceRuns:{}};
  for(const [id,run]of Object.entries(saved?.practiceRuns||{}))if(M.levels[id]?.practice&&run&&typeof run.finished==='boolean'&&(!run.finished||typeof run.circuit==='string'))meta.practiceRuns[id]={finished:run.finished,...(run.finished?{circuit:run.circuit}:{})};
+ const generation=value=>Number.isSafeInteger(value)&&value>=0?value:0;
+ meta.generation=generation(saved?.generation);meta.nextGeneration=Math.max(meta.generation,generation(saved?.nextGeneration));
+ const backup=saved?.restartBackup;
+ if(backup&&generation(backup.generation)===backup.generation&&Array.isArray(backup.completed)&&backup.practiceRuns&&typeof backup.practiceRuns==='object')meta.restartBackup={generation:backup.generation,completed:backup.completed.filter(id=>M.levels[id]),practiceRuns:backup.practiceRuns};
+ const key=id=>{const base=id==='ffn'?legacy:`neural-atelier-level-${id}-v1`;return meta.generation?base+'-run-'+meta.generation:base;};
  const completedKey=id=>key(id)+'-completed';
  const placementKey=id=>key(id)+'-before-placement';
  const circuitKey=(s,positions=false)=>JSON.stringify([s.sink,[...s.nodes].sort((a,b)=>a.id.localeCompare(b.id)).map(n=>[n.id,M.nodeKind(n),n.links,...(positions?[n.x,n.z]:[])])]);
@@ -48,7 +52,7 @@ export function createProgress(M,storage){
    return !ev.error&&ev.output?.length===expected.length&&ev.output.every((x,i)=>Number.isFinite(x)&&Math.abs(x-expected[i])<1e-9);
   });
  }
- function load(id){
+ function load(id,{resume=false}={}){
   if(M.levels[id]?.demonstration)return M.initial(id);
   const l=M.levels[id],raw=read(key(id)),upgraded=upgradeReadout(raw,id);
   // Keep an exact recovery copy before upgrading old two-feature modules.
@@ -65,7 +69,7 @@ export function createProgress(M,storage){
   }
   if(!l.practice)return s;
   const run=meta.practiceRuns[id],finished=run?run.finished&&run.circuit===circuitKey(s):meta.completed.includes(id)&&solved(s,id);
-  if(finished){
+  if(finished&&!resume){
    // Keep the only copy if browser storage cannot archive it.
    if(!write(completedKey(id),s))return s;const fresh=M.initial(id);
    meta.practiceRuns[id]={finished:false};write(key(id),fresh);write(metaKey,meta);return fresh;
@@ -78,7 +82,7 @@ export function createProgress(M,storage){
   if(M.levels[id]?.practice&&(!run||(run.finished&&run.circuit!==circuitKey(state)))){
    meta.practiceRuns[id]={finished:false};write(metaKey,meta);
   }
-  write(key(id),state);
+  return write(key(id),state);
  }
  const previous=id=>M.levels[id]?.practice?validated(read(completedKey(id)),id):M.levels[id]?.requirePlacement?validated(read(placementKey(id)),id):null;
  return {current:()=>meta.current,completed:id=>meta.completed.includes(id),load,
@@ -87,6 +91,20 @@ export function createProgress(M,storage){
    const next={...meta,completed:[],practiceRuns:Object.fromEntries(Object.keys(meta.practiceRuns).map(id=>[id,{finished:false}]))};
    if(!write(metaKey,next))return false;
    meta.completed=next.completed;meta.practiceRuns=next.practiceRuns;return true;
+  },
+  restartAll(){
+   // Switch all boards with one storage write. Older saves remain intact for
+   // undo; the generation counter never rewinds or reuses a played board.
+   const next={...meta,generation:meta.nextGeneration+1,nextGeneration:meta.nextGeneration+1,completed:[],practiceRuns:{},restartBackup:JSON.parse(JSON.stringify({generation:meta.generation,completed:meta.completed,practiceRuns:meta.practiceRuns}))};
+   if(!write(metaKey,next))return false;
+   Object.assign(meta,next);return true;
+  },
+  canUndoRestart:()=>!!meta.restartBackup,
+  undoRestart(){
+   if(!meta.restartBackup)return false;
+   const next={...meta,...meta.restartBackup,restartBackup:null};
+   if(!write(metaKey,next))return false;
+   Object.assign(meta,next);return true;
   },
   canRestore(id,state){const s=previous(id);return !!s&&(!state||circuitKey(s,true)!==circuitKey(state,true));},
   restore(id){let s=previous(id);if(!s)return null;if(M.levels[id].practice)meta.practiceRuns[id]={finished:false};if(M.levels[id].requirePlacement)s={...s,placementRevision:1};write(metaKey,meta);write(key(id),s);return s;},

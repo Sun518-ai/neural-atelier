@@ -16,6 +16,16 @@ async function boot({reduced=true,frameMs=1000,onFrame=()=>{},languages=['zh-CN'
  await vm.runInContext('(async()=>{'+src+'})()',c);
  assert.ok(c.testAPI.getWorld(),'3D boot failed');return {c,document,window,api:c.testAPI,scenes,time:()=>now,setFrameMs:value=>{frameMs=value;},view:()=>view,camera:()=>renderedCamera};
 }
+test('a full restart replaces visible residual wires with the tutorial start and undo restores the scene',async()=>{
+ const app=await boot(),doc=app.document;app.api.switchLevel('residual');
+ app.api.setState(app.c.NeuralPrologue.solutions('residual'));app.api.getWorld().rebuild();app.api.refresh();
+ const board=JSON.stringify(app.api.getState()),connections=doc.querySelectorAll('.port.input.connected').length;
+ assert.ok(connections>0);
+ doc.querySelector('#progress-restart').onclick();doc.querySelector('#progress-reset-apply').onclick();
+ assert.equal(doc.querySelectorAll('.port.input.connected').length,0);assert.equal(doc.querySelectorAll('.node-label').length,3);assert.equal(doc.querySelector('#undo').disabled,true);assert.equal(app.api.getState().sink,null);
+ doc.querySelector('#progress-restart-undo').onclick();assert.equal(JSON.stringify(app.api.getState()),board);assert.equal(doc.querySelectorAll('.port.input.connected').length,connections);assert.equal(doc.querySelectorAll('.node-label').length,3);
+});
+
 test('the ready-to-run full Transformer renders and completes every basic operator without editing',async()=>{
  const app=await boot({frameMs:5000}),M=app.c.NeuralPrologue;
  app.api.switchLevel('transformer-demo');const before=JSON.stringify(app.api.getState());

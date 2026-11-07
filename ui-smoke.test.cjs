@@ -846,6 +846,47 @@ test('completion reset leaves in-memory and saved badges intact when storage fai
  assert.equal(app.eval("progress.completed('wire')&&progress.completed('workshop')"),true);assert.deepEqual(app.storage,before);
  assert.match(app.document.querySelector('#progress-reset-status').textContent,/保存失败/);
 });
+test('starting over resets every board and completion while preserving settings and an undoable prior run',()=>{
+ const app=boot(),doc=app.document,storage=app.storage,M=app.c.NeuralPrologue;
+ for(const id of Object.keys(M.levels))app.eval(`switchLevel('${id}');state=M.solutions(stageId);save();progress.complete(stageId,state)`);
+ app.eval("switchLevel('residual');state=M.solutions(stageId);state.nodes[0].x+=.4;save();setPlaybackSpeed(.5)");
+ doc.querySelector('#progress-reset').onclick();doc.querySelector('#progress-reset-apply').onclick();
+ assert.ok(app.eval('state.nodes.some(n=>n.links.some(Boolean))'),'badge-only clear deliberately retains wiring');
+ storage.set('neural-atelier-audio-v1',JSON.stringify({enabled:false,volume:.2}));
+ const board=app.eval('JSON.stringify(state)'),before=new Map(storage);
+ doc.querySelector('#progress-restart').onclick();assert.match(doc.querySelector('#progress-reset-description').textContent,/连线会重置/);
+ doc.querySelector('#progress-reset-cancel').onclick();assert.deepEqual(storage,before);
+ app.eval('busy=true;refresh()');assert.equal(doc.querySelector('#progress-restart').disabled,true);doc.querySelector('#progress-reset-apply').onclick();assert.deepEqual(storage,before);app.eval('busy=false;refresh()');
+ doc.querySelector('#progress-restart').onclick();doc.querySelector('#progress-reset-apply').onclick();
+ assert.equal(app.eval('state.sink'),null);assert.equal(app.eval('state.nodes.length'),3,'fixed tutorial modules remain');assert.ok(app.eval('state.nodes.every(n=>n.links.every(x=>x===null))'));assert.equal(app.eval('history.length'),0);
+ assert.equal(doc.querySelector('#restore-layout').hidden,true,'a reset board does not offer the old completed answer');
+ assert.equal(doc.querySelector('#progress-restart-undo').hidden,false);assert.match(doc.querySelector('#progress-reset-status').textContent,/全部关卡已恢复/);
+ for(const [key,value]of before)if(key!=='neural-atelier-chapters-v1')assert.equal(storage.get(key),value,'old save and preference retained: '+key);
+ const reopened=boot(storage,'#residual');
+ for(const id of Object.keys(M.levels)){
+  reopened.eval(`switchLevel('${id}')`);assert.equal(reopened.eval('progress.completed(stageId)'),false,id);
+  assert.equal(reopened.eval('JSON.stringify([state.sink,state.nodes.map(n=>[n.id,n.links]),state.settings])'),reopened.eval('(()=>{const s=M.initial(stageId);return JSON.stringify([s.sink,s.nodes.map(n=>[n.id,n.links]),s.settings])})()'),id+' starts with its authored components and connections');
+ }
+ reopened.eval("switchLevel('residual')");reopened.document.querySelector('#progress-restart-undo').onclick();assert.equal(reopened.eval('JSON.stringify(state)'),board);assert.equal(reopened.document.querySelector('#progress-restart-undo').hidden,true);
+ assert.equal(reopened.eval('playbackSpeed'),.5);assert.equal(storage.get('neural-atelier-audio-v1'),before.get('neural-atelier-audio-v1'));
+ app.c.I18n.setPreference('en');doc.querySelector('#progress-restart').onclick();for(const selector of ['.progress-setting','#progress-reset-confirm','#progress-restart-undo'])assert.doesNotMatch(doc.querySelector(selector).textContent,/[\u3400-\u9fff]/);
+});
+test('full restart undo restores badges and the live board, and subsequent resets never reuse discarded wiring',()=>{
+ const app=boot(),doc=app.document;
+ app.eval("switchLevel('residual');state=M.solutions(stageId);save();progress.complete(stageId,state)");const board=app.eval('JSON.stringify(state)');
+ const restart=()=>{doc.querySelector('#progress-restart').onclick();doc.querySelector('#progress-reset-apply').onclick();};
+ restart();app.eval('state.sink="R";save()');doc.querySelector('#progress-restart-undo').onclick();assert.equal(app.eval('JSON.stringify(state)'),board);assert.equal(app.eval('progress.completed(stageId)'),true);
+ restart();assert.equal(app.eval('state.sink'),null);assert.equal(app.eval('progress.completed(stageId)'),false);
+ const reloaded=boot(app.storage,'#residual');assert.equal(reloaded.eval('state.sink'),null);assert.equal(reloaded.document.querySelector('#progress-restart-undo').hidden,false);
+});
+test('failed full reset or undo does not switch the active saved run',()=>{
+ const app=boot(),doc=app.document;app.eval("state.sink='R';save();progress.complete(stageId,state)");
+ let before=new Map(app.storage),board=app.eval('JSON.stringify(state)'),write=app.c.localStorage.setItem;
+ app.c.localStorage.setItem=()=>{throw new Error('Storage unavailable');};doc.querySelector('#progress-restart').onclick();doc.querySelector('#progress-reset-apply').onclick();
+ assert.deepEqual(app.storage,before);assert.equal(app.eval('JSON.stringify(state)'),board);assert.equal(app.eval('progress.completed(stageId)'),true);assert.match(doc.querySelector('#progress-reset-status').textContent,/保存失败/);
+ app.c.localStorage.setItem=write;doc.querySelector('#progress-reset-apply').onclick();before=new Map(app.storage);board=app.eval('JSON.stringify(state)');
+ app.c.localStorage.setItem=()=>{throw new Error('Storage unavailable');};doc.querySelector('#progress-restart-undo').onclick();assert.deepEqual(app.storage,before);assert.equal(app.eval('JSON.stringify(state)'),board);assert.equal(app.eval('progress.completed(stageId)'),false);assert.match(doc.querySelector('#progress-reset-status').textContent,/保存失败/);
+});
 test('causal and every later learning shelf group packages without losing old parts or saved circuits',()=>{
  const app=boot(),M=app.c.NeuralPrologue,doc=app.document;
  const ids=[...M.routes.main.ids.slice(M.routes.main.ids.indexOf('causal')),...M.routes.modern.ids];

@@ -1,5 +1,5 @@
 import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=slow-demo-1';
-import {createProgress} from './level-progress.js?v=slow-demo-1';
+import {createProgress} from './level-progress.js?v=full-restart-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -355,7 +355,7 @@ function renderGeneration(){
  $('#demo-transcript').replaceChildren(...[...seed,...generated].map((id,i)=>{const el=document.createElement('span');el.className=i<seed.length?'seed-token':'generated-token';el.textContent=M.math.vocab[id];return el;}));
  $('#demo-transcript').setAttribute('aria-label',I18n.t('完整文字'));
 }
-function refresh(){renderGeneration();refreshPauseControl();$('#progress-reset').disabled=busy;$('#progress-reset-apply').disabled=busy;document.body.classList.toggle('network-running',busy);renderShelf();const t=samples()[sample];const won=levelPassed();$('.route strong').textContent=stage().concept+(won?I18n.t(" · 已通过"):'');$('#next-level').hidden=!(won||progress.completed(stageId))||!stage().next;$('#levels-open').disabled=busy;$('#engine-controls').querySelectorAll('input,select,button').forEach(e=>e.disabled=busy);$('#device-docks').querySelectorAll('button').forEach(e=>e.disabled=busy);$('#sample-name').textContent=t.word;$('#sample-value').textContent=stage().generationRounds?I18n.t('目标输入 · 最近三个词'):stage().sequence?(stage().sourceDim===3?'Token ID '+vector(t.v):I18n.t(stage().sourceDim===12?"3 个位置 × 4 个特征":"3 个位置 × 2 个特征")):vector(t.v);$('#pass-count').textContent=results.filter(r=>r.pass).length+' / '+stage().sampleCount;$('#test-results').innerHTML=results.map((r,i)=>`<div class="test-row ${r.pass?'pass':'fail'}"><span>${r.pass?'✓':'×'} ${samples()[i].word}</span><span>${stage().tokenOutput&&r.actual?M.readTokens(r.actual):stage().sequence?(r.actual?I18n.t("矩阵 ")+shape(r.actual.length):I18n.t("等待输入")):vector(r.actual)}</span></div>`).join('');$('#run').disabled=!world;$('#run').innerHTML=busy?I18n.t("<span>■</span> 停止"):I18n.t("<span>▶</span> 试跑我的网络");$('#undo').disabled=busy||!history.length;$('#reset').disabled=busy;$('#reset').hidden=!!stage().demonstration;$('#undo').hidden=!!stage().demonstration;$('#hint').hidden=!!stage().demonstration;$('#restore-layout').hidden=!progress.canRestore(stageId,state);$('#restore-layout').disabled=busy;$('#hint').disabled=busy;}
+function refresh(){renderGeneration();refreshPauseControl();$('#progress-reset').disabled=busy;$('#progress-reset-apply').disabled=busy;$('#progress-restart').disabled=busy;$('#progress-restart-undo').disabled=busy;$('#progress-restart-undo').hidden=!progress.canUndoRestart();document.body.classList.toggle('network-running',busy);renderShelf();const t=samples()[sample];const won=levelPassed();$('.route strong').textContent=stage().concept+(won?I18n.t(" · 已通过"):'');$('#next-level').hidden=!(won||progress.completed(stageId))||!stage().next;$('#levels-open').disabled=busy;$('#engine-controls').querySelectorAll('input,select,button').forEach(e=>e.disabled=busy);$('#device-docks').querySelectorAll('button').forEach(e=>e.disabled=busy);$('#sample-name').textContent=t.word;$('#sample-value').textContent=stage().generationRounds?I18n.t('目标输入 · 最近三个词'):stage().sequence?(stage().sourceDim===3?'Token ID '+vector(t.v):I18n.t(stage().sourceDim===12?"3 个位置 × 4 个特征":"3 个位置 × 2 个特征")):vector(t.v);$('#pass-count').textContent=results.filter(r=>r.pass).length+' / '+stage().sampleCount;$('#test-results').innerHTML=results.map((r,i)=>`<div class="test-row ${r.pass?'pass':'fail'}"><span>${r.pass?'✓':'×'} ${samples()[i].word}</span><span>${stage().tokenOutput&&r.actual?M.readTokens(r.actual):stage().sequence?(r.actual?I18n.t("矩阵 ")+shape(r.actual.length):I18n.t("等待输入")):vector(r.actual)}</span></div>`).join('');$('#run').disabled=!world;$('#run').innerHTML=busy?I18n.t("<span>■</span> 停止"):I18n.t("<span>▶</span> 试跑我的网络");$('#undo').disabled=busy||!history.length;$('#reset').disabled=busy;$('#reset').hidden=!!stage().demonstration;$('#undo').hidden=!!stage().demonstration;$('#hint').hidden=!!stage().demonstration;$('#restore-layout').hidden=!progress.canRestore(stageId,state);$('#restore-layout').disabled=busy;$('#hint').disabled=busy;}
 async function run(){
  closeHint();closeCompletion();world?.clearConnectionError?.();
  if(busy){busy=paused=false;runId++;say(I18n.t("已停止。"));world.clearPackets();world.labels();refresh();return;}
@@ -388,20 +388,40 @@ async function run(){
  busy=paused=false;world.labels();refresh();renderReport();say(stage().engine?(engineReport.pass?I18n.t("数值与性能约束全部通过。"):I18n.t("数值通过；性能验收未通过，查看运行报告。")):`${I18n.t("通过：")}${stage().sampleCount} / ${stage().sampleCount}。`,stage().engine&&!engineReport.pass?'error':'success');showCompletion();
 }
 $('#run').onclick=run;$('#undo').onclick=()=>{state=history.pop();pending=null;changed();say(I18n.t("已撤销。"));};$('#reset').onclick=()=>{checkpoint();state=M.initial(stageId);selected=pending=placing=null;world?.clearPlacement?.();changed();say(I18n.t("已恢复本关起点。"));};
-let progressResetMessage='';
+let progressResetMessage='',progressResetMode='badges';
 function progressResetStatus(message){progressResetMessage=message;$('#progress-reset-status').textContent=I18n.t(message);$('#progress-reset-status').hidden=false;}
-I18n.onChange(()=>{if(progressResetMessage)$('#progress-reset-status').textContent=I18n.t(progressResetMessage);});
+function renderProgressReset(){
+ const all=progressResetMode==='all';
+ $('#progress-reset-description').textContent=I18n.t(all?'所有关卡回到初始状态，并清除通关标记？教学预设组件会保留，自己添加的组件和连线会重置。语言、音乐和速度不变；之后可撤销这次重置。':'把所有关卡标为未通过？已搭好的组件和连线会保留，通关标记与完成计数会清零。此操作无法撤销。');
+ $('#progress-reset-apply').textContent=I18n.t(all?'确认重新开始':'确认清除');
+}
+I18n.onChange(()=>{renderProgressReset();if(progressResetMessage)$('#progress-reset-status').textContent=I18n.t(progressResetMessage);});
 function clearProgressResetUI(){
- $('#progress-reset-confirm').hidden=true;$('#progress-reset').setAttribute('aria-expanded','false');$('#progress-reset-status').hidden=true;
+ $('#progress-reset-confirm').hidden=true;for(const id of ['progress-reset','progress-restart'])$('#'+id).setAttribute('aria-expanded','false');$('#progress-reset-status').hidden=true;
 }
 globalThis.AtelierProgressResetUI={clear:clearProgressResetUI};
-$('#progress-reset').onclick=()=>{if(busy)return;$('#progress-reset-confirm').hidden=false;$('#progress-reset').setAttribute('aria-expanded','true');$('#progress-reset-status').hidden=true;$('#progress-reset-cancel').focus();};
-$('#progress-reset-cancel').onclick=()=>{clearProgressResetUI();$('#progress-reset').focus();};
+const resetTrigger=()=>$(progressResetMode==='all'?'#progress-restart':'#progress-reset');
+function confirmProgressReset(mode){if(busy)return;clearProgressResetUI();progressResetMode=mode;renderProgressReset();$('#progress-reset-confirm').hidden=false;resetTrigger().setAttribute('aria-expanded','true');$('#progress-reset-cancel').focus();}
+$('#progress-reset').onclick=()=>confirmProgressReset('badges');$('#progress-restart').onclick=()=>confirmProgressReset('all');
+$('#progress-reset-cancel').onclick=()=>{clearProgressResetUI();resetTrigger().focus();};
+function reloadResetBoard(resume=false){
+ world?.beforeStage();state=progress.load(stageId,{resume});history=[];selected=pending=placing=null;hints=0;
+ changed();world?.setStage();
+}
 $('#progress-reset-apply').onclick=()=>{
  if(busy)return;
+ if(progressResetMode==='all'){
+  if(!progress.save(state)||!progress.restartAll()){progressResetStatus('保存失败，游戏进度未更改。请检查浏览器存储后重试。');return;}
+  reloadResetBoard();renderLevelMenu();clearProgressResetUI();say('');progressResetStatus('全部关卡已恢复初始状态，通关标记已清除。语言、音乐和速度已保留。');resetTrigger().focus();return;
+ }
  if(!progress.resetCompletions()){progressResetStatus('保存失败，通关记录未清除。请检查浏览器存储后重试。');return;}
  changed();renderLevelMenu();clearProgressResetUI();say('');
  progressResetStatus('所有关卡已标为未通过，棋盘和设置已保留。');$('#progress-reset').focus();
+};
+$('#progress-restart-undo').onclick=()=>{
+ if(busy)return;
+ if(!progress.undoRestart()){progressResetStatus('保存失败，游戏进度未更改。请检查浏览器存储后重试。');return;}
+ reloadResetBoard(true);renderLevelMenu();clearProgressResetUI();say('');progressResetStatus('已恢复重置前的棋盘和通关记录。');$('#progress-restart').focus();
 };
 $('#restore-layout').onclick=()=>{if(busy)return;const restored=progress.restore(stageId);if(!restored)return;checkpoint();state=restored;selected=pending=placing=null;world?.clearPlacement?.();changed();say(I18n.t("已恢复上次方案。"));};
 function closeHint(restoreFocus=false){$('#hint-panel').hidden=true;$('#hint').setAttribute('aria-expanded','false');if(restoreFocus)$('#hint').focus({preventScroll:true});}
