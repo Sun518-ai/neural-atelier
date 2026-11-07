@@ -23,7 +23,7 @@ test('the ready-to-run full Transformer renders and completes every basic operat
  app.api.chooseOutput('R');app.api.chooseInput('sink',0);assert.equal(JSON.stringify(app.api.getState()),before);
  await app.api.run();
  assert.equal(app.api.getFault(),null);assert.equal(app.document.querySelector('#level-complete').open,true);
- assert.equal(app.document.querySelectorAll('#test-results .pass').length,1);
+ assert.equal(app.document.querySelectorAll('#test-results .pass').length,3);
  assert.equal(JSON.stringify(app.api.getState()),before);assert.equal(app.document.querySelectorAll('.packet:not([hidden])').length,0);
  app.document.querySelector('#complete-replay').onclick();assert.equal(app.document.querySelector('#level-complete').open,false);
  assert.equal(JSON.stringify(app.api.getState()),before);
@@ -48,7 +48,7 @@ test('floating demonstration supports full orbit, pan and cursor zoom without ed
  const anchor=ray.ray.intersectPlane(new T.Plane().setFromNormalAndCoplanarPoint(direction(),new T.Vector3()),new T.Vector3());
  fire(host,'wheel',{clientX:(cursor.x+1)*700,clientY:(1-cursor.y)*380,deltaY:-800});
  const projected=anchor.clone().project(app.camera());assert.ok(Math.abs(projected.x-cursor.x)<1e-9&&Math.abs(projected.y-cursor.y)<1e-9,'zoom stays anchored under the cursor');
- assert.equal(JSON.stringify(app.api.getState()),saved);app.api.switchLevel('wire');assert.ok(app.camera().isOrthographicCamera);assert.ok(scene.children.find(o=>o.userData.environmentFloor).visible);assert.equal(doc.querySelector('#demo-pan').hidden,true);
+ assert.equal(JSON.stringify(app.api.getState()),saved);app.api.switchLevel('wire');assert.ok(app.camera().isOrthographicCamera);assert.ok(scene.children.find(o=>o.userData.environmentFloor).visible);assert.equal(doc.querySelector('#demo-pan').hidden,true);assert.equal(doc.querySelector('#demo-follow-view').hidden,true);
 });
 test('floating demonstration completes near one minute, keeps all operators and allows paused navigation',async()=>{
  let app,pausedOnce=false,initialCamera;const processed=new Set();
@@ -57,8 +57,22 @@ test('floating demonstration completes near one minute, keeps all operators and 
   if(!pausedOnce&&processed.size>8){pausedOnce=true;assert.ok(app.camera().position.distanceTo(initialCamera)>5,'the camera follows work without user input');app.api.togglePause();const camera=app.camera().position.clone();document.querySelector('[data-demo-view="cross"]').click();assert.ok(app.camera().position.distanceTo(camera)>1);assert.equal(document.querySelector('#demo-follow').getAttribute('aria-pressed'),'false','choosing a region takes manual control');document.querySelector('#demo-follow').onclick();assert.equal(document.querySelector('#demo-follow').getAttribute('aria-pressed'),'true');app.api.togglePause();}
  }});
  app.api.switchLevel('transformer-demo');initialCamera=app.camera().position.clone();const saved=JSON.stringify(app.api.getState()),start=app.time();await app.api.run();const elapsed=app.time()-start;
- assert.ok(elapsed>=60000&&elapsed<61500,'one complete pass takes about 60 seconds at 0.25x');assert.equal(processed.size,67);assert.ok(pausedOnce);
- assert.equal(app.document.querySelectorAll('#test-results .pass').length,1);assert.equal(JSON.stringify(app.api.getState()),saved);assert.equal(app.document.querySelectorAll('.packet').length,0);
+ assert.ok(elapsed>=66000&&elapsed<68000,'three rounds plus feedback take about 67 seconds at 0.25x');assert.equal(processed.size,67);assert.ok(pausedOnce);assert.ok(app.camera().position.distanceTo(initialCamera)<1e-8,'follow returns to the model center before completion');assert.equal(app.document.querySelectorAll('#demo-transcript .generated-token').length,3);
+ assert.equal(app.document.querySelectorAll('#test-results .pass').length,3);assert.equal(JSON.stringify(app.api.getState()),saved);assert.equal(app.document.querySelectorAll('.packet').length,0);
+});
+test('generation feedback can pause, change follow distance and stop without starting another round',async()=>{
+ let app,feedbackFrames=0,position,stopped=false;
+ app=await boot({frameMs:40,onFrame:({document})=>{
+  if(!app||!document.querySelector('.feedback-packet'))return;
+  const packet=app.scenes.at(-1).children.find(o=>o.isMesh&&o.geometry?.type==='SphereGeometry');
+  feedbackFrames++;
+  if(feedbackFrames===1){app.api.togglePause();position=packet.position.clone();}
+  if(feedbackFrames===3){assert.ok(packet.position.distanceTo(position)<1e-10);const select=document.querySelector('#demo-follow-view');select.value='close';select.onchange({target:select});assert.equal(document.querySelector('#demo-follow').getAttribute('aria-pressed'),'true');app.api.togglePause();}
+  if(feedbackFrames===5){stopped=true;app.api.run();}
+ }});
+ app.api.switchLevel('transformer-demo');const graph=JSON.stringify(app.api.getState());
+ await app.api.run();assert.ok(stopped);assert.equal(app.document.querySelector('#level-complete').open,undefined);assert.equal(app.document.querySelectorAll('.packet').length,0);assert.equal(app.document.querySelectorAll('#demo-transcript .generated-token').length,1);assert.equal(JSON.stringify(app.api.getState()),graph);
+ app.api.switchLevel('wire');assert.equal(app.document.querySelector('#demo-generation').hidden,true);
 });
 test('demonstration cards show the selected instance and return to observation controls',async()=>{
  const app=await boot(),M=app.c.NeuralPrologue,doc=app.document;

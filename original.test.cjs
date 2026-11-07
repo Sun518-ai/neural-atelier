@@ -7,7 +7,7 @@ const plain=x=>JSON.parse(JSON.stringify(x));
 const close=(a,b,tol=1e-9)=>a?.length===b.length&&a.every((x,i)=>Number.isFinite(x)&&Math.abs(x-b[i])<tol);
 test('the prepared Transformer expands every operator and matches the packed encoder-decoder',()=>{
  const id='transformer-demo',l=M.levels[id],s=M.initial(id),d=M.demo;
- assert.equal(l.demonstration,true);assert.equal(l.sampleCount,1);assert.equal(l.buildable,false);
+ assert.equal(l.demonstration,true);assert.equal(l.sampleCount,3);assert.equal(l.buildable,false);
  assert.equal(M.routes.main.ids.at(-1),id);assert.equal(M.levels.autoregressive.next,id);
  assert.equal(s.nodes.length,67);assert.ok(s.nodes.every(n=>!M.packages[n.kind]),'no hidden packaged heads, FFNs, embedding/position pairs or layers');
  assert.ok(s.nodes.every(n=>n.links.every(Boolean)));assert.equal(s.sink,d.picked);
@@ -25,6 +25,16 @@ test('the prepared Transformer expands every operator and matches the packed enc
  }
  const ev=M.evaluate(s,M.samplesFor(id)[0].v);
  for(const n of s.nodes){const ex=M.extraExample(n.kind,id,n.id);assert.deepEqual(plain(ex.output[1]),plain(ev.values[n.id]),n.id+' card uses this instance');}
+});
+test('demonstration rounds feed the last prediction into a rolling three-token window',()=>{
+ const rounds=M.samplesFor('transformer-demo'),s=M.initial('transformer-demo');
+ assert.equal(rounds.length,3);
+ for(let i=0;i<rounds.length;i++){
+  const e=M.evaluate(s,rounds[i].v);assert.equal(e.error,null);
+  assert.deepEqual(plain(M.sourceValues(s,rounds[i].v).Z),plain(O.sourceIds),'source sentence stays unchanged');
+  if(i+1<rounds.length)assert.deepEqual(plain(rounds[i+1].v),[...rounds[i].v.slice(1),e.output.at(-1)]);
+ }
+ assert.deepEqual(plain(M.demo.nextInput([0,1,2],[4,5,3])),[1,2,3],'only the last position is a new token');
 });
 test('QKV accepts only V at the outlet and ignores optional Q/K branches',()=>{
  const state=M.initial('qkv');assert.ok(M.addNode(state,'v',0,0));assert.equal(M.connect(state,'R','v',0),null);assert.equal(M.connect(state,'v','sink',0),null);

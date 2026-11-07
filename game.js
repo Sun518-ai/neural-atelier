@@ -1,5 +1,5 @@
-import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=floating-demo-1';
-import {createProgress} from './level-progress.js?v=floating-demo-1';
+import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=generation-demo-1';
+import {createProgress} from './level-progress.js?v=generation-demo-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -14,7 +14,8 @@ function writeLevelHash(id,replace=false){
 }
 let stageId=levelFromHash()||progress.current(),state=progress.load(stageId),history=[],selected=null,pending=null,current=null,results=[],sample=0,busy=false,paused=false,pauseStarted=0,pausedDuration=0,runId=0,level=99,hints=0,world=null,fault=null;
 let selectedWire=null,actionNode=null,placing=null,lastFusionKind=null,menuTrack=M.levels[stageId].track;
-const stage=()=>M.levels[stageId],samples=()=>M.samplesFor?.(stageId)||M.samples,save=()=>progress.save(state);
+let demoSamples=null;
+const stage=()=>M.levels[stageId],samples=()=>demoSamples||(M.samplesFor?.(stageId)||M.samples),save=()=>progress.save(state);
 const kindOf=id=>M.kindOf(state,id),definition=id=>M.definitionFor(state,id),weightsFor=id=>M.weights[kindOf(id)],nodeName=id=>M.nodeName(state,id);
 let suppressPaletteClick=false,suppressNodeClick=false;
 const shelfSizeKey='neural-atelier-shelf-size-v1';
@@ -70,7 +71,7 @@ const levelPassed=()=>results.length===stage().sampleCount&&results.every(r=>r.p
 function closeCompletion(){if($('#level-complete').open)$('#level-complete').close();}
 function renderCompletion(){
  $('#complete-level').textContent=stage().chapter+' · '+stage().title;
- $('#complete-detail').textContent=stage().demonstration?I18n.t("完整模型已运行完毕。"):stage().engine?I18n.t("数值与性能约束全部通过。"):I18n.t("全部输入验证通过。");
+ $('#complete-detail').textContent=stage().generationRounds?I18n.t('完整模型已连续运行三轮。')+' '+I18n.t('新生成：')+results.map(r=>M.math.vocab[r.actual.at(-1)]).join(' '):stage().demonstration?I18n.t("完整模型已运行完毕。"):stage().engine?I18n.t("数值与性能约束全部通过。"):I18n.t("全部输入验证通过。");
  $('#complete-next').textContent=stage().next?I18n.t("下一关 →"):I18n.t("选择关卡");
  const reward=M.fusions[stageId];$('#complete-reward').hidden=!reward;
  if(reward){$('#complete-reward>small').textContent=stage().buildable?M.fusionCopy.collected:M.fusionCopy.storedLater;$('#complete-reward>strong').textContent=M.definitions[reward.kind].name;}
@@ -135,7 +136,7 @@ function stageChrome(){
  closeHint();
  const c=stage();document.body.classList.toggle('demo-level',!!c.demonstration);
  $('#scene').setAttribute('aria-label',I18n.t(c.floating?'拖动旋转 · Shift / 右键拖动平移 · 滚轮缩放':c.demonstration?'拖动转动视角 · 双击查看基础组件':'拖动空白转动视角，拖动模块重新摆放'));
- $('#demo-follow').hidden=!c.floating;$('#demo-pan').hidden=!c.floating;$('#demo-views').hidden=!c.demonstration;$('#demo-views').innerHTML=(c.demoViews||[]).map(view=>`<button type="button" data-demo-view="${view.key}">${view.label}</button>`).join('');
+ $('#demo-follow').hidden=!c.floating;$('#demo-follow-view').hidden=!c.floating;$('#demo-pan').hidden=!c.floating;$('#demo-views').hidden=!c.demonstration;$('#demo-views').innerHTML=(c.demoViews||[]).map(view=>`<button type="button" data-demo-view="${view.key}">${view.label}</button>`).join('');
  document.body.dataset.stageColor=stageColor(c);renderStructureMap();document.body.classList.toggle('engine-level',!!c.engine);$('#device-docks').hidden=!c.engine;resetReport();$('#engine-controls').hidden=!c.engine;engineControls();$('.scene-legend').hidden=c.nodes.length===0;$('.scene-identity .chip').textContent=c.demonstration?I18n.t('完整演示'):I18n.t('自由接线');$('#scene-help').textContent=c.floating?I18n.t('拖动旋转 · Shift / 右键拖动平移 · 滚轮缩放'):c.demonstration?I18n.t('拖动转动视角 · 双击查看基础组件'):c.nodes.length?I18n.t("拖模块摆放 · 点连线删除 · 双击查看模块卡"):I18n.t("圆口出，方口进 · 拖动空白转动视角");$('#pass-count').textContent='0 / '+c.sampleCount;document.title=I18n.t("神经工坊 · ")+c.title;$('.chapter span').textContent=c.chapter;$('.chapter strong').textContent=c.title;
  $('.mission h2').textContent=c.mission;$('.mission p').textContent=c.description;$('#mission-limits').innerHTML=c.engine?Object.entries(c.limits).map(([key,value])=>{const [name,unit]=M.metricLabels[key];return `<span>${name} ${key==='tps'||key==='aneMin'?'≥':'≤'} ${value} ${unit}</span>`;}).join(''):'';
  const reason=c.rationale;$('#mission-reason').hidden=!reason;
@@ -193,7 +194,7 @@ function levelMenu(){
 function switchLevel(id,fromHash=false){
  if(busy||!M.levels[id])return;closeCompletion();if(id===stageId){$('#level-menu').close();return;}
  save();world?.beforeStage();stageId=id;state=progress.load(id);progress.select(id);
- history=[];selected=pending=current=fault=selectedWire=placing=actionNode=lastFusionKind=null;engineReport=null;results=[];sample=0;level=99;hints=0;
+ demoSamples=null;history=[];selected=pending=current=fault=selectedWire=placing=actionNode=lastFusionKind=null;engineReport=null;results=[];sample=0;level=99;hints=0;
  stageChrome();world?.setStage();save();refresh();$('#level-menu').close();say('');if(!fromHash)writeLevelHash(id);
 }
 stageChrome();progress.select(stageId);save();writeLevelHash(stageId,true);
@@ -233,7 +234,7 @@ $('#level-tracks').onclick=e=>{const b=e.target.closest('[data-track]');if(b){me
 $('#next-level').onclick=()=>switchLevel(stage().next);
 function say(text,tone=''){$('#feedback').textContent=text;$('#feedback').className='feedback '+tone;}
 function checkpoint(){history.push(clone(state));if(history.length>40)history.shift();}
-function changed(){closeCompletion();resetReport();engineReport=null;fault=null;current=null;selectedWire=actionNode=lastFusionKind=null;results=[];sample=0;level=99;world?.clearConnectionError?.();world?.clearPreview?.();save();world?.rebuild();refresh();}
+function changed(){demoSamples=null;closeCompletion();resetReport();engineReport=null;fault=null;current=null;selectedWire=actionNode=lastFusionKind=null;results=[];sample=0;level=99;world?.clearConnectionError?.();world?.clearPreview?.();save();world?.rebuild();refresh();}
 function select(id){if(world?.focused())return;selected=id;selectedWire=null;actionNode=stage().buildable?id:null;world?.labels();renderShelf();}
 function outputName(id){if(stage().sourceNames?.[id])return stage().sourceNames[id];return id==='R'?(stageId==='ffn'?I18n.t("原始输入 R"):I18n.t("输入 X")):id==='Z'?I18n.t("归一化输入 Z"):nodeName(id);}
 function chooseOutput(id){if(busy||stage().demonstration)return;placing=selectedWire=actionNode=null;world?.clearConnectionError?.();world?.clearPlacement?.();world?.clearPreview?.();pending=pending===id?null:id;world?.labels();say(pending?`${I18n.t("已拿起「")}${outputName(id)}${I18n.t("」的线，点一个方形输入口。")}`:I18n.t("已放下连线。"));}
@@ -308,11 +309,18 @@ $('#module-palette').onclick=e=>{if(suppressPaletteClick||world?.focused())retur
 $('#module-palette').ondblclick=e=>{const b=e.target.closest('[data-add-module]');if(!b||busy||suppressPaletteClick)return;e.preventDefault();world?.focusShelf?.(b.dataset.addModule);};
 $('#module-palette').addEventListener('keydown',e=>{if(e.key!=='Enter'&&e.key!==' ')return;const b=e.target.closest('[data-add-module]');if(!b||busy)return;e.preventDefault();if(e.key==='Enter')world?.focusShelf?.(b.dataset.addModule);else if(b.dataset.addDisabled!=='true')chooseModule(b.dataset.addModule);});
 function removeModule(id=selected){if(busy)return;const next=clone(state);if(!M.removeNode(next,id))return;checkpoint();state=next;if(selected===id)selected=null;pending=placing=actionNode=null;world?.clearPlacement?.();changed();say(I18n.t("组件已收回，相关连线已移除。"));}
-function refresh(){refreshPauseControl();$('#progress-reset').disabled=busy;$('#progress-reset-apply').disabled=busy;document.body.classList.toggle('network-running',busy);renderShelf();const t=samples()[sample];const won=levelPassed();$('.route strong').textContent=stage().concept+(won?I18n.t(" · 已通过"):'');$('#next-level').hidden=!(won||progress.completed(stageId))||!stage().next;$('#levels-open').disabled=busy;$('#engine-controls').querySelectorAll('input,select,button').forEach(e=>e.disabled=busy);$('#device-docks').querySelectorAll('button').forEach(e=>e.disabled=busy);$('#sample-name').textContent=t.word;$('#sample-value').textContent=stage().sequence?(stage().sourceDim===3?'Token ID '+vector(t.v):I18n.t(stage().sourceDim===12?"3 个位置 × 4 个特征":"3 个位置 × 2 个特征")):vector(t.v);$('#pass-count').textContent=results.filter(r=>r.pass).length+' / '+stage().sampleCount;$('#test-results').innerHTML=results.map((r,i)=>`<div class="test-row ${r.pass?'pass':'fail'}"><span>${r.pass?'✓':'×'} ${samples()[i].word}</span><span>${stage().tokenOutput&&r.actual?M.readTokens(r.actual):stage().sequence?(r.actual?I18n.t("矩阵 ")+shape(r.actual.length):I18n.t("等待输入")):vector(r.actual)}</span></div>`).join('');$('#run').disabled=!world;$('#run').innerHTML=busy?I18n.t("<span>■</span> 停止"):I18n.t("<span>▶</span> 试跑我的网络");$('#undo').disabled=busy||!history.length;$('#reset').disabled=busy;$('#reset').hidden=!!stage().demonstration;$('#undo').hidden=!!stage().demonstration;$('#hint').hidden=!!stage().demonstration;$('#restore-layout').hidden=!progress.canRestore(stageId,state);$('#restore-layout').disabled=busy;$('#hint').disabled=busy;}
+function renderGeneration(){
+ const area=$('#demo-generation');area.hidden=!stage().generationRounds;if(area.hidden)return;
+ const seed=M.samplesFor(stageId)[0].v,generated=results.filter(r=>r.pass).map(r=>r.actual.at(-1));
+ $('#demo-generation-count').textContent=I18n.t(busy&&generated.length<=sample?'正在生成':'已生成')+' '+(busy&&generated.length<=sample?sample+1:generated.length)+' / '+stage().generationRounds;
+ $('#demo-transcript').replaceChildren(...[...seed,...generated].map((id,i)=>{const el=document.createElement('span');el.className=i<seed.length?'seed-token':'generated-token';el.textContent=M.math.vocab[id];return el;}));
+ $('#demo-transcript').setAttribute('aria-label',I18n.t('完整文字'));
+}
+function refresh(){renderGeneration();refreshPauseControl();$('#progress-reset').disabled=busy;$('#progress-reset-apply').disabled=busy;document.body.classList.toggle('network-running',busy);renderShelf();const t=samples()[sample];const won=levelPassed();$('.route strong').textContent=stage().concept+(won?I18n.t(" · 已通过"):'');$('#next-level').hidden=!(won||progress.completed(stageId))||!stage().next;$('#levels-open').disabled=busy;$('#engine-controls').querySelectorAll('input,select,button').forEach(e=>e.disabled=busy);$('#device-docks').querySelectorAll('button').forEach(e=>e.disabled=busy);$('#sample-name').textContent=t.word;$('#sample-value').textContent=stage().generationRounds?I18n.t('目标输入 · 最近三个词'):stage().sequence?(stage().sourceDim===3?'Token ID '+vector(t.v):I18n.t(stage().sourceDim===12?"3 个位置 × 4 个特征":"3 个位置 × 2 个特征")):vector(t.v);$('#pass-count').textContent=results.filter(r=>r.pass).length+' / '+stage().sampleCount;$('#test-results').innerHTML=results.map((r,i)=>`<div class="test-row ${r.pass?'pass':'fail'}"><span>${r.pass?'✓':'×'} ${samples()[i].word}</span><span>${stage().tokenOutput&&r.actual?M.readTokens(r.actual):stage().sequence?(r.actual?I18n.t("矩阵 ")+shape(r.actual.length):I18n.t("等待输入")):vector(r.actual)}</span></div>`).join('');$('#run').disabled=!world;$('#run').innerHTML=busy?I18n.t("<span>■</span> 停止"):I18n.t("<span>▶</span> 试跑我的网络");$('#undo').disabled=busy||!history.length;$('#reset').disabled=busy;$('#reset').hidden=!!stage().demonstration;$('#undo').hidden=!!stage().demonstration;$('#hint').hidden=!!stage().demonstration;$('#restore-layout').hidden=!progress.canRestore(stageId,state);$('#restore-layout').disabled=busy;$('#hint').disabled=busy;}
 async function run(){
  closeHint();closeCompletion();world?.clearConnectionError?.();
  if(busy){busy=paused=false;runId++;say(I18n.t("已停止。"));world.clearPackets();world.labels();refresh();return;}
- busy=true;paused=false;pausedDuration=0;pending=selectedWire=placing=actionNode=lastFusionKind=null;world.clearPreview?.();world.clearPlacement?.();fault=null;engineReport=null;results=[];resetReport();const id=++runId;
+ busy=true;paused=false;pausedDuration=0;pending=selectedWire=placing=actionNode=lastFusionKind=null;world.clearPreview?.();world.clearPlacement?.();fault=null;engineReport=null;results=[];demoSamples=stage().generationRounds?M.samplesFor(stageId).map(t=>M.demo.sampleFor(t.v)):null;sample=0;current=null;resetReport();if(demoSamples)world.relocalize();const id=++runId;
  for(let i=0;i<stage().sampleCount;i++){
   sample=i;current=M.evaluate(state,samples()[i].v);level=0;
   const expected=M.reference(samples()[i].v,stageId),actual=current.output;
@@ -322,7 +330,13 @@ async function run(){
   const pass=!current.error&&!!actual&&actual.length===expected.length&&actual.every((x,j)=>Number.isFinite(x)&&Math.abs(x-expected[j])<(stage().engine?(stage().limits?.error||.06):1e-9));results.push({pass,actual,expected});
   if(!pass){fault={id:'sink',actual,expected};level=99;busy=paused=false;if(stage().engine)engineReport=M.engineReport(state);world.labels();refresh();renderReport();say(`「${samples()[i].word}${I18n.t("」未通过。")}`,'error');return;}
   level=99;world.labels();refresh();
+  if(stage().generationRounds&&i+1<stage().sampleCount){
+   demoSamples[i+1]=M.demo.sampleFor(M.demo.nextInput(samples()[i].v,actual));
+   await world.feedback?.(actual.at(-1),id);
+   if(id!==runId||!busy)return;
+  }
  }
+ if(stage().floating){await world.finishDemo?.(id);if(id!==runId||!busy)return;}
  if(stage().engine)engineReport=M.engineReport(state);
  if(levelPassed()){
   progress.complete(stageId,state);const reward=M.fusions[stageId];
@@ -365,14 +379,15 @@ $('#about-open').onclick=()=>$('#about').showModal();$('#about-close').onclick=(
 try{
  const T=await import('./vendor/three.module.js');
  const host=$('#scene'),overlay=$('#labels'),scene=new T.Scene(),orthoCamera=new T.OrthographicCamera(-11.5,11.5,7,-7,.1,100),spaceCamera=new T.PerspectiveCamera(32,1,.1,2000),renderer=new T.WebGLRenderer({antialias:true,alpha:true});
- let camera=orthoCamera,cameraPan=false,followData=true;
+ let camera=orthoCamera,cameraPan=false,followData=true,followView='medium';
+ const followProfiles={wide:{padding:34,min:3,yaw:.3,pitch:.9},medium:{padding:21,min:1.5,yaw:.15,pitch:.65},close:{padding:12,min:.9,yaw:.3,pitch:.42}};
  renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setClearColor(0,0);renderer.shadowMap.enabled=true;renderer.shadowMap.type=T.PCFSoftShadowMap;host.appendChild(renderer.domElement);
  scene.add(new T.HemisphereLight(0xfffdf2,0xa0b4a6,1.9));const sun=new T.DirectionalLight(0xfffcf2,1.9);sun.position.set(-4,14,8);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);Object.assign(sun.shadow.camera,{left:-15,right:15,top:12,bottom:-12});sun.shadow.bias=-.001;scene.add(sun);
  const colors={...M.extraColors,project:0x5eaa9c,gate:0xa894bf,silu:0xc6a574,multiply:0x669b91,down:0x90a79a,add:0xc3a26f,R:0x6e9fb5,Z:0x90b2bb,sink:0x438f7e};
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=floating-demo-1');
+ const {createSceneArt}=await import('./scene-art.js?v=generation-demo-1');
  function scenePalette(){
   if(typeof getComputedStyle!=='function')return {};
   const css=getComputedStyle(document.body),read=name=>css.getPropertyValue(name).trim();
@@ -544,7 +559,7 @@ try{
   // Measure overlays together before moving them, avoiding layout per port.
   const layouts=elements.map(({el,pos})=>({el,xyz:pos(),xy:project(pos()),width:el.offsetWidth,height:el.offsetHeight}));
   layouts.forEach(({el,xyz,xy:[x,y],width,height})=>{
-   const depth=stage().floating?-xyz.clone().applyMatrix4(camera.matrixWorldInverse).z:1,localScale=labelScale*(stage().floating?Math.min(3,camera.position.distanceTo(cameraTarget)/Math.max(.1,depth)):1);
+   const depth=stage().floating?-xyz.clone().applyMatrix4(camera.matrixWorldInverse).z:1,localScale=stage().floating?Math.min(1.25,labelScale*Math.min(3,camera.position.distanceTo(cameraTarget)/Math.max(.1,depth))):labelScale;
    el.hidden=!!focusId&&(el.dataset.owner!==focusId||el.classList.contains('node-label')||el.classList.contains('local-fault')||el.classList.contains('fault-pin'))||el.classList.contains('node-label')&&calculating.has(el.dataset.owner);
    if(el.classList.contains('node-label')||el.classList.contains('source-label')||el.classList.contains('port'))el.style.transform=`translate(-50%,-50%) scale(${localScale})`;
    if(el.classList.contains('node-label')||el.classList.contains('source-label')){el.style.opacity=String(titleOpacity);el.hidden=el.hidden||titleOpacity===0;}
@@ -557,7 +572,7 @@ try{
   packets.forEach(p=>{
    const [x,y]=project(p.p.clone().add(new T.Vector3(0,.7,0)));p.el.style.left=x+'px';p.el.style.top=y+'px';
    if(p.calculation){
-    const scale=w/width/60;
+    const scale=stage().floating?Math.min(w/width/60,w*.68/(p.calculation.offsetWidth||800)):w/width/60;
     p.equationVisible=art.detailsVisible();
     p.calculation.dataset.detail=p.equationVisible?'full':'abstract';p.calculation.style.setProperty('--calculation-scale',String(scale));
     const anchor=p.selection?art.selectionAnchor(p.node.id,p.selectionRow,p.progress??0):p.tokenOperation?art.tokenAnchor(p.node.id,p.tokenRow,p.input,p.progress??0):p.centering?art.layerNormAnchor(p.node.id,p.rmsRow,p.progress??0):p.normalizing?art.rmsAnchor(p.node.id,p.rmsRow):art.projectionOutlet(p.node.id,p.column);
@@ -736,6 +751,34 @@ try{
   });
  }
  function clearPackets(){finishFusion(false);tokenPreview=null;packets.forEach(p=>{p.el.remove();p.calculation?.remove();p.outputLabels?.forEach(({el})=>el.remove());for(const mesh of [p.mesh,p.otherMesh,p.outputMesh].filter(Boolean)){scene.remove(mesh);mesh.traverse(o=>{o.geometry?.dispose();o.material?.map?.dispose();o.material?.dispose();});}});packets=[];art.clearProcessing();render();}
+ function finishDemo(id){
+  if(!followData)return Promise.resolve();
+  const from=cameraTarget.clone(),startZoom=zoom,startYaw=yaw,startPitch=pitch;let previous=animationTime(),elapsed=0;
+  return new Promise(resolve=>{function tick(now){
+   if(id!==runId||!busy||!followData){resolve();return;}
+   const clock=animationTime(now);if(paused){previous=clock;requestAnimationFrame(tick);return;}
+   elapsed+=Math.max(0,clock-previous);previous=clock;const t=Math.min(1,elapsed/800),ease=t*t*(3-2*t);
+   cameraTarget.copy(from).multiplyScalar(1-ease);zoom=startZoom+(stage().zoom-startZoom)*ease;yaw=startYaw+(.05-startYaw)*ease;pitch=startPitch+(.8-startPitch)*ease;
+   render();if(t===1)resolve();else requestAnimationFrame(tick);
+  }requestAnimationFrame(tick);});
+ }
+ // Token feedback belongs to the generation loop, outside the Transformer.
+ function feedback(token,id){
+  clearPackets();
+  const mesh=new T.Mesh(new T.SphereGeometry(.32,20,16),material(0xe2b64d,{emissive:0x9c6a20,emissiveIntensity:.6}));scene.add(mesh);
+  const el=document.createElement('span');el.className='packet feedback-packet';el.dataset.motion='feedback';el.dataset.from='sink';el.innerHTML='<b class="packet-title"></b> <span class="packet-values"></span>';el.querySelector('b').textContent=I18n.t('接回输入');el.querySelector('span').textContent=M.math.vocab[token];overlay.appendChild(el);
+  const p={mesh,el,p:point('sink'),motion:'feedback',values:[token],cells:el.querySelector('.packet-values')};packets.push(p);
+  const a=point('sink'),b=point('R'),path=new T.CatmullRomCurve3([a,new T.Vector3(15,8,6),new T.Vector3(-18,8,6),b]);
+  const reduced=matchMedia('(prefers-reduced-motion:reduce)').matches,duration=(reduced?.4:2.8)*250;let elapsed=0,previous=animationTime();
+  return new Promise(resolve=>{function tick(now){
+   if(id!==runId){resolve();return;}if(!busy){clearPackets();resolve();return;}
+   const clock=animationTime(now);if(paused){previous=clock;requestAnimationFrame(tick);return;}
+   const delta=Math.max(0,clock-previous);previous=clock;elapsed+=delta*playbackSpeed;
+   const t=Math.min(1,elapsed/duration);p.p=path.getPoint(t*t*(3-2*t));mesh.position.copy(p.p);
+   if(followData&&!focusId){const ease=1-Math.exp(-Math.min(delta,100)/350);const profile=followProfiles[followView];cameraTarget.lerp(p.p,ease);zoom+=(Math.max(profile.min,followView==='close'?.9:1.6)-zoom)*ease;yaw+=(profile.yaw-yaw)*ease;pitch+=(profile.pitch-pitch)*ease;}
+   render();if(t===1){clearPackets();resolve();}else requestAnimationFrame(tick);
+  }requestAnimationFrame(tick);});
+ }
  const normalizationFrame=(time,centering)=>art[centering?'layerNormFrame':'rmsFrame'](time,stage().sequence?3:1);
  function animate(ev,ms,id){
   clearPackets();lastDepth=-1;const reduced=matchMedia('(prefers-reduced-motion:reduce)').matches;if(reduced)ms=70;
@@ -1037,10 +1080,10 @@ try{
     const active=packets.filter(p=>p.wasActive),work=active.filter(p=>p.motion==='process'),candidates=work.length?work:active;
     const sectionOf=p=>M.demo.sections[p.node?.id||p.edge?.to],section=['encoder','masked','cross','readout'].find(section=>candidates.some(p=>sectionOf(p)===section)),tracking=candidates.filter(p=>!section||sectionOf(p)===section);
     if(tracking.length){
-     const bounds=new T.Box3().setFromPoints(tracking.map(p=>p.p)),target=bounds.getCenter(new T.Vector3()),right=new T.Vector3().setFromMatrixColumn(camera.matrixWorld,0),up=new T.Vector3().setFromMatrixColumn(camera.matrixWorld,1);
+     const bounds=new T.Box3().setFromPoints(tracking.map(p=>p.motion==='process'?new T.Vector3(p.node.x,(p.node.y||0)+.7,p.node.z):p.p)),target=bounds.getCenter(new T.Vector3()),right=new T.Vector3().setFromMatrixColumn(camera.matrixWorld,0),up=new T.Vector3().setFromMatrixColumn(camera.matrixWorld,1);
      const offsets=tracking.map(p=>p.p.clone().sub(target)),xs=offsets.map(p=>p.dot(right)),ys=offsets.map(p=>p.dot(up));
-     const span=Math.max(Math.max(...xs)-Math.min(...xs)+15,(Math.max(...ys)-Math.min(...ys)+10)*host.clientWidth/host.clientHeight),framing=Math.max(.9,Math.min(stage().zoom,span*1.1/23)),ease=1-Math.exp(-Math.min(delta,100)/850);
-     cameraTarget.lerp(target,ease);zoom+=(framing-zoom)*ease;yaw+=(.15-yaw)*ease;pitch+=(.65-pitch)*ease;
+     const profile=followProfiles[followView],span=Math.max(Math.max(...xs)-Math.min(...xs)+profile.padding,(Math.max(...ys)-Math.min(...ys)+profile.padding*.67)*host.clientWidth/host.clientHeight),framing=Math.max(profile.min,Math.min(stage().zoom,span*1.1/23)),ease=1-Math.exp(-Math.min(delta,100)/300);
+     cameraTarget.lerp(target,ease);zoom+=(framing-zoom)*ease;yaw+=(profile.yaw-yaw)*ease;pitch+=(profile.pitch-pitch)*ease;
     }
    }
    render();requestAnimationFrame(tick);
@@ -1070,6 +1113,7 @@ try{
  }
  for(const target of [host,overlay])target.addEventListener('contextmenu',e=>{if(stage().floating)e.preventDefault();});
  $('#demo-follow').onclick=()=>setFollow(!followData);
+ $('#demo-follow-view').onchange=e=>{if(!followProfiles[e.target.value])return;followView=e.target.value;setFollow(true);};
  $('#demo-pan').onclick=()=>{setFollow(false);cameraPan=!cameraPan;$('#demo-pan').setAttribute('aria-pressed',String(cameraPan));};
  overlay.addEventListener('pointerdown',e=>{if(transitioning)return;if(busy){dragCamera(e);return;}const b=e.target.closest('button');if(!b)return;if(stage().demonstration){dragCamera(e);if(!drag.pan)drag.inspect=b.dataset.node;return;}if(b.dataset.assign){selected=b.dataset.assign;drag={kind:'device',id:b.dataset.assign,x:e.clientX,y:e.clientY,moved:false};return;}if(b.dataset.output){clearConnectionError();drag={kind:'wire',id:b.dataset.output,el:b,x:e.clientX,y:e.clientY,moved:false};}if(b.dataset.node){if(focusId){drag={kind:'camera',x:e.clientX,y:e.clientY,yaw,pitch,moved:false};return;}const n=state.nodes.find(n=>n.id===b.dataset.node),p=worldPoint(e.clientX,e.clientY);selected=n.id;actionNode=null;drag={kind:'node',id:n.id,x:e.clientX,y:e.clientY,moved:false,old:clone(state),offset:p?[n.x-p.x,n.z-p.z]:[0,0]};renderShelf();}});
  host.addEventListener('pointerdown',e=>{if(transitioning)return;if(busy){dragCamera(e);return;}if(stage().floating&&!focusId){dragCamera(e);ray.setFromCamera(new T.Vector2((e.clientX-host.getBoundingClientRect().left)/host.clientWidth*2-1,-((e.clientY-host.getBoundingClientRect().top)/host.clientHeight)*2+1),camera);let hit=ray.intersectObjects(assembly.children,true)[0]?.object;while(hit&&!hit.userData.node)hit=hit.parent;if(!drag.pan)drag.inspect=hit?.userData.node;return;}if(placing){const p=worldPoint(e.clientX,e.clientY);if(p)placeModule(p.x,p.z);return;}if(selectedWire||actionNode){selectedWire=actionNode=null;labels();}if(focusId){drag={kind:'camera',x:e.clientX,y:e.clientY,yaw,pitch,moved:false};return;}const p=worldPoint(e.clientX,e.clientY),hit=ray.intersectObjects(assembly.children,true)[0];if(hit){let object=hit.object;while(object&&!object.userData.node)object=object.parent;if(object?.userData.node){if(stage().demonstration){dragCamera(e);drag.inspect=object.userData.node;return;}const n=state.nodes.find(n=>n.id===object.userData.node);selected=n.id;actionNode=null;drag={kind:'node',id:n.id,x:e.clientX,y:e.clientY,moved:false,old:clone(state),offset:p?[n.x-p.x,n.z-p.z]:[0,0]};renderShelf();return;}}drag={kind:'camera',x:e.clientX,y:e.clientY,yaw,pitch,moved:false};if(pending){pending=null;clearConnectionError();labels();clearPreview();say(I18n.t("已取消连线。"));}});
@@ -1092,6 +1136,6 @@ try{
  $('#camera-reset').onclick=()=>{if(stage().floating&&!focusId)setFollow(false);if(focusId){const n=shelfFocus?{x:0,z:0}:state.nodes.find(n=>n.id===focusId);transition(new T.Vector3(n.x,(n.y||0)+.72,n.z),Math.max(4.1,3.5*host.clientWidth/host.clientHeight)/23,.32,.92);}else{yaw=.05;pitch=.8;zoom=stage().zoom;cameraTarget.set(0,0,0);render();}};
  function beforeStage(){clearConnectionError();if(focusId)leaveFocus();cancelAnimationFrame(cameraFrame);transitioning=false;host.setAttribute('aria-busy','false');drag=lastTap=null;clearPreview();clearPlacement();clearPackets();elements=[];overlay.replaceChildren();}
  function setStage(){setFollow(!!stage().floating);cameraPan=false;$('#demo-pan').setAttribute('aria-pressed','false');art.surroundings(samples(),stage(),scenePalette());yaw=.05;pitch=.8;zoom=stage().zoom;cameraTarget.set(0,0,0);rebuild();}
- function relocalize(){clearConnectionError();art.surroundings(samples(),stage(),scenePalette());rebuild();packets.forEach(p=>{p.el.querySelector('.packet-title').textContent=packetIdentity(p.el.dataset.from);if(p.sequenceProjection)p.updateEquation(p.column,p.projectionRow);if(p.motion==='wire'&&(definition(p.el.dataset.from)?.type==='pick'||kindOf(p.el.dataset.from)==='feedback'))p.cells.textContent=M.readTokens(p.values);if(p.appending){p.cells.textContent=M.readTokens(p.input);p.after.textContent=M.readTokens(p.output);}if(p.selection&&p.progress!=null){p.after.textContent=M.readTokens(p.output);p.updateSelection(art.selectionFrame(p.progress,p.input.length/p.output.length,p.output.length));p.outputLabels.forEach(({el},j)=>el.textContent=M.math.vocab[p.output[j]]);}if(p.normalizing&&p.progress!=null)p.updateRMS(normalizationFrame(p.progress,p.centering));if(p.tokenOperation&&p.progress!=null)p.updateToken(art.tokenFrame(p.progress,p.tokenOperation));if(p.motion==='process'&&p.progress!=null)art.processing(p.node.id,p.progress,p.input,p.output,p.color,{sequence:!!stage().sequence,detailed:p.detailed,paired:p.paired,other:p.other,words:p.words?.(),valueWords:p.valueWords?.()});});render();}
- new ResizeObserver(render).observe(host);world={relocalize,labels,rebuild,animate,fuse,skipFusion:()=>finishFusion(true),clearPackets,showConnectionError,clearConnectionError,clearPreview,clearPlacement,previewAt,previewPlacement,focus,focusShelf,focused:()=>focusId,beforeStage,setStage,syncShelf:()=>syncPlacementGuide(host.clientWidth,host.clientHeight)};$('#loading').hidden=true;rebuild();refresh();
+ function relocalize(){clearConnectionError();art.surroundings(samples(),stage(),scenePalette());rebuild();packets.forEach(p=>{p.el.querySelector('.packet-title').textContent=p.motion==='feedback'?I18n.t('接回输入'):packetIdentity(p.el.dataset.from);if(p.sequenceProjection)p.updateEquation(p.column,p.projectionRow);if(p.motion==='wire'&&(definition(p.el.dataset.from)?.type==='pick'||kindOf(p.el.dataset.from)==='feedback'))p.cells.textContent=M.readTokens(p.values);if(p.appending){p.cells.textContent=M.readTokens(p.input);p.after.textContent=M.readTokens(p.output);}if(p.selection&&p.progress!=null){p.after.textContent=M.readTokens(p.output);p.updateSelection(art.selectionFrame(p.progress,p.input.length/p.output.length,p.output.length));p.outputLabels.forEach(({el},j)=>el.textContent=M.math.vocab[p.output[j]]);}if(p.normalizing&&p.progress!=null)p.updateRMS(normalizationFrame(p.progress,p.centering));if(p.tokenOperation&&p.progress!=null)p.updateToken(art.tokenFrame(p.progress,p.tokenOperation));if(p.motion==='process'&&p.progress!=null)art.processing(p.node.id,p.progress,p.input,p.output,p.color,{sequence:!!stage().sequence,detailed:p.detailed,paired:p.paired,other:p.other,words:p.words?.(),valueWords:p.valueWords?.()});});render();}
+ new ResizeObserver(render).observe(host);world={relocalize,labels,rebuild,animate,feedback,finishDemo,fuse,skipFusion:()=>finishFusion(true),clearPackets,showConnectionError,clearConnectionError,clearPreview,clearPlacement,previewAt,previewPlacement,focus,focusShelf,focused:()=>focusId,beforeStage,setStage,syncShelf:()=>syncPlacementGuide(host.clientWidth,host.clientHeight)};$('#loading').hidden=true;rebuild();refresh();
 }catch(e){$('#loading').innerHTML=I18n.t("<strong>3D 台面没有加载成功，请刷新重试。</strong>");say(I18n.t("页面尚未开始运行。"),'error');console.error(e);}

@@ -26,6 +26,14 @@ test('the full-model demonstration runs immediately, replays without running and
  app.eval("switchLevel('transformer-demo')");assert.equal(app.eval('JSON.stringify(state)'),graph);assert.equal(storage.get('neural-atelier-level-projection-v1'),puzzle);
  app.c.I18n.setPreference('en');assert.doesNotMatch(doc.querySelector('.mission').textContent+doc.querySelector('#demo-views').textContent,/[\u3400-\u9fff]/);assert.deepEqual(Array.from(app.c.I18n.missing),[]);
 });
+test('demo generation uses actual outputs, retains text, and clears it on replay',async()=>{
+ const app=boot(new Map(),'#transformer-demo'),doc=app.document,inputs=[],feedback=[];
+ app.c.capture={animate(){inputs.push(JSON.parse(app.eval('JSON.stringify(samples()[sample].v)')));},feedback(token){feedback.push(token);}};
+ app.eval(`world.animate=capture.animate;world.feedback=capture.feedback;const ev0=M.evaluate,ref0=M.reference;M.evaluate=(s,v)=>{const e=ev0(s,v);if(s.levelId==='transformer-demo'&&v.join(',')==='0,1,2')e.output[2]=3;return e;};M.reference=(v,id)=>{const e=ref0(v,id);if(id==='transformer-demo'&&v.join(',')==='0,1,2')e[2]=3;return e;};`);
+ await app.eval('run()');assert.deepEqual(inputs[0],[0,1,2]);assert.deepEqual(inputs[1],[1,2,3],'next input comes from the actual previous output');assert.equal(feedback[0],3);assert.equal(feedback.length,2);
+ assert.equal(doc.querySelectorAll('#demo-transcript .seed-token').length,3);assert.equal(doc.querySelectorAll('#demo-transcript .generated-token').length,3);assert.equal(app.eval('levelPassed()'),true);
+ doc.querySelector('#complete-replay').onclick();assert.equal(app.eval('busy'),false);assert.equal(doc.querySelectorAll('#demo-transcript .generated-token').length,0);
+});
 test('QKV passes with only V placed or with Q/K left disconnected, while wrong outlet values fail',async()=>{
  const app=boot();app.eval("switchLevel('qkv');state=M.initial('qkv');M.addNode(state,'v',0,0);M.connect(state,'R','v',0);M.connect(state,'v','sink',0)");
  let played=0;app.c.worldForTest={async animate(){played++;assert.equal(app.eval('fault'),null);assert.ok(app.document.querySelector('#run-report').hidden);}};

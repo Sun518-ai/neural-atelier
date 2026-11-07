@@ -50,19 +50,19 @@ const decoded=ffn(crossed,15,15,'cross');
 const logits=put('original-head',[decoded],23,0,'readout'),prob=put('demo-probabilities',[logits],27,0,'readout'),picked=put('pick',[prob],31,0,'readout');
 for(const n of nodes)n.y=({encoder:6,masked:0,cross:-6,readout:0})[sections[n.id]];
 const title=L('运行完整的原版 Transformer','Run the complete original Transformer');
-const demo=M.levels[id]={id,title,chapter:L('原版基础 / 21','Original / 21'),boardText:'ORIGINAL / 21',track:'main',original:true,demonstration:true,floating:true,demoSeconds:60,
- nodes:nodes.map(n=>n.kind),inventory:counts,buildable:false,sequence:true,wide:true,sources:['R','Z'],sourceDim:3,sinkDim:3,sampleCount:1,
+const demo=M.levels[id]={id,title,chapter:L('原版基础 / 21','Original / 21'),boardText:'ORIGINAL / 21',track:'main',original:true,demonstration:true,floating:true,demoSeconds:20,generationRounds:3,
+ nodes:nodes.map(n=>n.kind),inventory:counts,buildable:false,sequence:true,wide:true,sources:['R','Z'],sourceDim:3,sinkDim:3,sampleCount:3,
  dualSource:true,sourceOffsets:{Z:-15,R:0},sourceHeights:{Z:6,R:0},secondaryTokenIds:[...O.sourceIds],sourceX:-38,sinkX:37,boardWidth:83,boardDepth:45,zoom:4.3,labelZoom:1.5,
  sourcePorts:{R:'D ID',Z:'S ID'},sourceNames:{R:L('目标前缀 ID','Target prefix IDs'),Z:L('源序列 ID','Source sequence IDs')},
  sourceTitle:L('目标前缀 ID','Target prefix IDs'),sourceNote:L('解码器读取已生成的词','The decoder reads the existing prefix'),secondaryTitle:L('编码器读取完整源句','The encoder reads the complete source'),
  outputTitle:L('各目标位置的预测词','Predictions at target positions'),outputNote:L('最后一个位置预测下一词','The final position predicts the next token'),tokenOutput:true,shapes:{24:'3 × 8'},shape:L('四维 · 双头 · 编码器、解码器各一层','4 features · 2 heads · one encoder and decoder layer'),next:null,
  mission:L('点一次试跑，看完整模型流动','Press Run to watch the complete model'),
- description:L('所有基础组件已在空中连好，直接试跑即可。上层是编码器，中层是因果自注意力，下层是交叉注意力与 FFN，右侧完成选词。默认约一分钟，镜头跟随数据。拖动或缩放即可接管，也可暂停、调速或重新开启跟随。','Every basic module is connected in space. Just press Run: encoder above, masked attention in the middle, cross-attention and FFN below, then selection on the right. About one minute at default speed, with a camera following the data. Drag or zoom to take control; pause, adjust speed or re-enable following anytime.'),
- summary:L('只需运行。将原版编码器—解码器全部展开成基础组件，观察一次完整前向计算。','Just run. Unfold the original encoder–decoder into basic modules and watch a complete forward pass.'),concept:title,hints:[],
+ description:L('点一次试跑，模型会连续生成三个新词。每轮只把最后一个位置选出的词接到文字末尾，送回目标输入，继续下一轮。默认全程约一分钟，镜头跟随数据；拖动或缩放即可接管，也可暂停。','Press Run once to generate three new tokens. Each round appends only the prediction at the last position, feeds it back into the target input, then runs again. About one minute at default speed, with a camera following the data. Drag or zoom to take control, or pause anytime.'),
+ summary:L('只需运行。展开完整模型，连续观察三轮生成与回送。','Just run. Unfold the complete model and watch three rounds of generation and feedback.'),concept:title,hints:[],
  rationale:{title:L('之前的组件，怎样组成一个模型？','How do the familiar modules form a model?'),
  text:L('编码器先整理源句。解码器先读自己的目标前缀，再通过交叉注意力读取编码器输出；两边的 FFN 分别加工各词的特征。每个子层后都接残差相加和 LayerNorm。','The encoder processes the source. The decoder first reads its own target prefix, then reads the encoder output through cross-attention. Each side’s FFN processes token features. Every sublayer is followed by residual addition and LayerNorm.'),
  takeaway:L('每个注意力头的 Q、K、V、缩放打分、Softmax 和 A × V 都单独摆出；两个头拼接后经过 Wo。词表投影与词表 Softmax 在模型末端；取最高分是额外的选词步骤。','Each head’s Q, K, V, scaled scores, Softmax and A × V are separate modules. Concatenate both heads and apply Wo. Vocabulary projection and vocabulary Softmax end the model; taking the maximum is an additional selection step.'),
- scope:L('按 2017 年原版的推理结构缩尺：编码器、解码器各一层，模型四维、两个头，FFN 为 4 → 8 → 4。固定教学权重没有训练过，不是可翻译的语言模型；推理不使用 dropout。本关只跑一组输入的一次前向计算。','A scaled 2017 inference structure: one encoder layer, one decoder layer, four model features, two heads and 4 → 8 → 4 FFNs. Fixed teaching weights are untrained, not a translation model. Dropout is off for inference. This runs one forward pass of one input pair.')},
+ scope:L('按 2017 年原版推理结构缩尺：编码器、解码器各一层，四维、双头，FFN 为 4 → 8 → 4，关闭 dropout。为保持矩阵大小，本演示每轮读取最近三个目标词，完整文字保留在上方；这是演示窗口，不是原版模型的上下文限制。源句保持不变，每轮重算，没有 KV Cache。教学权重未训练，可能反复生成同一个词。','A scaled 2017 inference structure: one encoder and decoder layer, four features, two heads, 4 → 8 → 4 FFNs, dropout off. To keep matrix sizes fixed, each round reads the latest three target tokens; the full text remains above. This is a display window, not the original model’s context limit. The source stays unchanged and is recomputed each round, without a KV cache. Untrained teaching weights may repeatedly select the same token.')},
  menu:{kind:'connect',label:L('完整演示 · 只需运行','Full demonstration · just run'),description:L('全部基础组件已摆好、连好。把之前学过的运算放回完整编码器—解码器，看它们一起工作。','All basic modules are placed and wired. See the familiar operators working together in the full encoder–decoder.')},
  demoViews:[{key:'all',label:L('全景','Overview'),x:0,z:0,zoom:4.3},{key:'encoder',label:L('编码器','Encoder'),x:-1,y:6,z:-15,zoom:3.3},{key:'masked',label:L('因果自注意力','Masked self-attention'),x:-10,z:0,zoom:2.5},{key:'cross',label:L('交叉注意力 + FFN','Cross-attention + FFN'),x:0,y:-6,z:15,zoom:3.3},{key:'readout',label:L('词表与选词','Vocabulary & selection'),x:29,z:0,zoom:1.05}],
  demoSections:[{label:L('编码器 · 自注意力 → 残差与归一化 → FFN','ENCODER · Self-attention → Add & Norm → FFN'),x:-4,y:6,z:-20.8,color:'#4e8877'},
@@ -76,11 +76,18 @@ const group=M.routes.main.groups.at(-1);group.description=L('17 关学习词表�
 const initial=M.initial,solutions=M.solutions,samples=M.samplesFor,sources=M.sourceValues,reference=M.reference,example=M.extraExample,card=M.extraCard,moduleShape=M.moduleShape;
 M.initial=(levelId,options)=>levelId===id?{version:1,levelId:id,palette:[],nodes:copy(nodes),sink:picked}:initial(levelId,options);
 M.solutions=levelId=>levelId===id?M.initial(id):solutions(levelId);
-M.samplesFor=levelId=>levelId===id?samples('embedding').slice(0,1):samples(levelId);
+const sampleFor=v=>({word:v.map(i=>M.math.vocab[i]).join(' / '),v:[...v]});
+const nextInput=(v,output)=>[...v.slice(1),output.at(-1)];
+M.samplesFor=levelId=>{
+ if(levelId!==id)return samples(levelId);
+ const rounds=[];let v=samples('embedding')[0].v;
+ for(let i=0;i<demo.generationRounds;i++){rounds.push(sampleFor(v));v=nextInput(v,M.operations.pick([M.operations['original-transformer']([v,O.sourceIds])]));}
+ return rounds;
+};
 M.sourceValues=(state,v)=>state.levelId===id?{R:[...v],Z:[...O.sourceIds]}:sources(state,v);
 M.reference=(v,levelId)=>levelId===id?M.operations.pick([M.operations['original-transformer']([v,O.sourceIds])]):reference(v,levelId);
 M.moduleShape=(kind,dim)=>dim===24?'3 × 8':moduleShape(kind,dim);
-M.demo={id,sections,sourceNodes:[...sourceNodes],encoder:enc,masked,crossed,decoded,logits,prob,picked};
+M.demo={id,sections,sourceNodes:[...sourceNodes],encoder:enc,masked,crossed,decoded,logits,prob,picked,nextInput,sampleFor};
 M.extraCard=(kind,levelId)=>{
  if(!definitions[kind])return card(kind,levelId);
  const d=definitions[kind],w=M.weights[kind];
@@ -97,5 +104,7 @@ L(' 模块，双击查看',' module, double-click to inspect');L('收起卡片�
 L('拖动旋转 · Shift / 右键拖动平移 · 滚轮缩放','Drag to orbit · Shift / right-drag to pan · scroll to zoom');L('平移视角','Pan view');L('跟随数据','Follow data');L('运行时跟随数据，拖动或缩放后退出跟随','Follow data during a run; drag or zoom to take manual control');L('切换平移模式，也可按住 Shift 或右键拖动','Toggle pan mode, or hold Shift or the right mouse button while dragging');
 L('模型区域','Model regions');L('完整演示','Full demonstration');L('拖动转动视角 · 双击查看基础组件','Drag to orbit · double-click a basic module');
 L('完整模型已运行完毕。','The complete model has finished running.');
+L('跟随距离','Follow distance');L('远景','Wide');L('中景','Medium');L('近景','Close');
+L('完整模型已连续运行三轮。','The complete model has run for three rounds.');L('新生成：','New tokens: ');L('正在生成','Generating');L('已生成','Generated');L('接回输入','Feed back');L('完整文字','Full text');L('目标输入 · 最近三个词','Target input · latest three tokens');
 I18n.prepare({definitions,demo,group});
 })(window.NeuralPrologue);
