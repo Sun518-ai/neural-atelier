@@ -900,6 +900,32 @@ test('every playable lesson has a bilingual structure location, valid focus and 
  assert.deepEqual(Array.from(map.flows.modernLayer,n=>n.id),['norm1','attention','add1','norm2','ffn','add2']);
 });
 
+test('wiring map identifies a general operation instead of locating it inside encoder and decoder',()=>{
+ const app=boot(),M=app.c.NeuralPrologue;
+ for(const lang of ['zh','en']){
+  app.c.I18n.setPreference(lang);app.eval("switchLevel('wire')");
+  const saved=app.eval('JSON.stringify(state)'),progress=app.storage.get('neural-atelier-chapters-v1');
+  app.document.querySelector('[data-open-structure]').click();
+  const compact=app.document.querySelector('#structure-map'),full=app.document.querySelector('#structure-dialog-content');
+  assert.deepEqual([...compact.querySelectorAll('.map-region-active')].map(n=>n.dataset.mapRegion),['wire']);
+  assert.equal(full.querySelectorAll('.architecture-focus').length,0,'generic wiring has no dedicated architecture layer');
+  assert.ok(full.querySelector('.wiring-reference .architecture-detail'));
+  assert.equal(full.querySelector('.wiring-reference').hasAttribute('open'),false,'complete model is optional context');
+  assert.match(full.textContent,/\[1, 0\].*\[1, 0\]/);
+  assert.doesNotMatch(full.textContent,/着色部分是本关所在位置|Color marks this lesson’s location/);
+  assert.equal(full.querySelector('.map-step-focus').dataset.mapStep,'wire');
+  assert.equal(full.querySelector('.map-step-exit').dataset.mapStep,'result');
+  assert.equal(app.eval('JSON.stringify(state)'),saved);assert.equal(app.storage.get('neural-atelier-chapters-v1'),progress);
+  app.document.querySelector('#structure-close').onclick();
+  for(const id of ['encoder-decoder','transformer-demo','autoregressive']){
+   app.eval(`switchLevel('${id}')`);app.document.querySelector('[data-open-structure]').click();
+   const architecture=app.document.querySelector('.architecture-detail');
+   for(const key of ['encoder-input','decoder-input','readout'])assert.ok(architecture.querySelector(`[data-architecture-node="${key}"].architecture-focus`),id+' includes '+key);
+   app.document.querySelector('#structure-close').onclick();
+  }
+ }
+});
+
 test('generation map names the actual modules, distinguishes predictions from context and preserves the circuit',()=>{
  const app=boot(new Map(),'#autoregressive'),M=app.c.NeuralPrologue;
  app.eval("state=M.solutions('autoregressive')");const saved=app.eval('JSON.stringify(state)');
