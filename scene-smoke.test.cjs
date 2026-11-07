@@ -11,7 +11,7 @@ async function boot({reduced=true,frameMs=1000,onFrame=()=>{},languages=['zh-CN'
  for(const f of ['locales/en.js','i18n.js','music.js','shell.js','model.js','campaign.js','engine-model.js','original-curriculum.js','transformer-demo.js','cloud-curriculum.js','structure-map.js'])vm.runInContext(fs.readFileSync(__dirname+'/'+f,'utf8'),c,{filename:f});
  for(const f of ['module-cards.js','level-progress.js','scene-art.js'])vm.runInContext(fs.readFileSync(__dirname+'/'+f,'utf8').replaceAll('export ',''),c,{filename:f});
  let src=fs.readFileSync(__dirname+'/game.js','utf8').replace(/^import .*\n/gm,'').replace("const T=await import('./vendor/three.module.js');",'const T=window.T;').replace(/const \{createSceneArt\}=await import\('\.\/scene-art\.js\?v=[^']+'\);/,'');
- src=src.replace('world={relocalize','world={inspectFollow:()=>({packet:followedPacket,target:cameraTarget.clone(),active:activeFollowPackets(),seed:followSeed}),relocalize');
+ src=src.replace('world={relocalize','world={inspectFollow:()=>({packet:followedPacket,target:cameraTarget.clone(),active:activeFollowPackets(),seed:followSeed,zoom,followZoom,gliding:!!followFlight}),relocalize');
  src+='\nwindow.testAPI={switchLevel,run,togglePause,refresh,select,assignDevice,chooseOutput,chooseInput,chooseModule,placeModule,getState:()=>state,setState:s=>state=s,getWorld:()=>world,getFault:()=>fault};';
  await vm.runInContext('(async()=>{'+src+'})()',c);
  assert.ok(c.testAPI.getWorld(),'3D boot failed');return {c,document,window,api:c.testAPI,scenes,time:()=>now,setFrameMs:value=>{frameMs=value;},view:()=>view,camera:()=>renderedCamera};
@@ -53,7 +53,7 @@ test('floating demonstration supports full orbit, pan and cursor zoom without ed
  assert.equal(JSON.stringify(app.api.getState()),saved);app.api.switchLevel('wire');assert.ok(app.camera().isOrthographicCamera);assert.ok(scene.children.find(o=>o.userData.environmentFloor).visible);assert.equal(doc.querySelector('#demo-pan').hidden,true);assert.equal(doc.querySelector('#demo-follow-view').hidden,true);
 });
 test('follow switch cycles live data while paused and follows the selected branch through handoffs',async()=>{
- let app,phase=0,frozen=null,pausedFrames=0;const selectedNode='masked-a-q-2',targets=new Set();
+ let app,phase=0,frozen=null;const selectedNode='masked-a-q-2',targets=new Set();
  app=await boot({reduced:false,frameMs:150,onFrame:()=>{
   if(!app||phase===3)return;
   const world=app.api.getWorld(),control=app.document.querySelector('#demo-follow-next'),view=world.inspectFollow();
@@ -64,10 +64,10 @@ test('follow switch cycles live data while paused and follows the selected branc
    assert.equal(targets.size,count,'every active flow can be selected without a name or number');
    for(let i=0;i<count&&world.inspectFollow().packet.node?.id!==selectedNode;i++)control.onclick();
    assert.equal(world.inspectFollow().packet.node.id,selectedNode);
-   frozen={packet:world.inspectFollow().packet,position:world.inspectFollow().packet.mesh.position.clone()};phase=1;
+   frozen={packet:world.inspectFollow().packet,position:world.inspectFollow().packet.mesh.position.clone(),target:world.inspectFollow().target.clone(),time:app.time()};phase=1;
   }else if(phase===1){
    assert.equal(view.packet,frozen.packet);assert.ok(view.packet.mesh.position.distanceTo(frozen.position)<1e-9,'switching the camera does not advance paused data');
-   if(++pausedFrames===2){app.api.togglePause();phase=2;}
+   if(app.time()-frozen.time>=800){assert.ok(view.target.distanceTo(frozen.target)>.1,'camera glides to the selection while data stays paused');app.api.togglePause();phase=2;}
   }else if(phase===2&&view.packet?.node?.id==='mask'){
    assert.ok(targets.has(frozen.packet));phase=3;app.api.run();
   }
@@ -75,12 +75,59 @@ test('follow switch cycles live data while paused and follows the selected branc
  app.api.switchLevel('transformer-demo');const doc=app.document,world=app.api.getWorld(),control=doc.querySelector('#demo-follow-next');
  assert.equal(control.hidden,false);assert.equal(control.disabled,false);const saved=JSON.stringify(app.api.getState());
  control.onclick();const first=world.inspectFollow();control.onclick();const second=world.inspectFollow();
- assert.notEqual(first.seed,second.seed);assert.ok(first.target.distanceTo(second.target)>1,'before running, clicks preview the available inputs');
+ assert.notEqual(first.seed,second.seed);assert.equal(first.target.distanceTo(second.target),0,'rapid clicks retarget without an immediate camera jump');
  const speed=doc.querySelector('#playback-speed');speed.value='1';speed.dispatchEvent(new app.window.Event('input'));
  await app.api.run();assert.equal(phase,3,'selected decoder Q continues through its score to its causal mask');assert.equal(JSON.stringify(app.api.getState()),saved);
  assert.equal(control.disabled,false);assert.equal(world.inspectFollow().packet,null,'stopping removes the old follow target');
  app.c.I18n.setPreference('en');assert.equal(control.textContent,'Switch flow');assert.deepEqual([...app.c.I18n.missing],[]);
  app.api.switchLevel('wire');assert.equal(control.hidden,true);
+});
+
+test('switching follows a smooth camera flight and consecutive clicks retarget from the current view',async()=>{
+ const app=await boot({reduced:false,frameMs:50});app.api.switchLevel('transformer-demo');
+ const world=app.api.getWorld(),button=app.document.querySelector('#demo-follow-next'),before=world.inspectFollow().target.clone(),saved=JSON.stringify(app.api.getState());
+ const nextFrame=()=>new Promise(resolve=>setImmediate(resolve));
+ button.onclick();assert.equal(world.inspectFollow().target.distanceTo(before),0);assert.equal(button.disabled,false);
+ for(let i=0;i<3;i++)await nextFrame();
+ const midway=world.inspectFollow().target.clone();assert.ok(midway.distanceTo(before)>0);assert.ok(world.inspectFollow().gliding);
+ button.onclick();assert.equal(world.inspectFollow().target.distanceTo(midway),0,'a second click starts from the currently rendered position');
+ for(let i=0;i<30&&world.inspectFollow().gliding;i++)await nextFrame();
+ assert.equal(world.inspectFollow().gliding,false);assert.ok(world.inspectFollow().target.distanceTo(midway)>1);
+ button.onclick();app.document.querySelector('#demo-follow').onclick();const stopped=world.inspectFollow().target.clone();await nextFrame();assert.equal(world.inspectFollow().gliding,false);assert.equal(world.inspectFollow().target.distanceTo(stopped),0);
+ assert.equal(JSON.stringify(app.api.getState()),saved);
+});
+
+test('playback and zoom sliders keep the selected flow and viewing distance while paused and running',async()=>{
+ let app,phase=0,frames=0,frozen,chosenZoom,heldTarget;
+ const change=(selector,value)=>{const el=app.document.querySelector(selector);el.value=String(value);el.dispatchEvent(new app.window.Event('input'));};
+ app=await boot({reduced:false,frameMs:100,onFrame:()=>{
+  if(!app||phase===4)return;
+  const doc=app.document,world=app.api.getWorld(),view=world.inspectFollow();
+  if(phase===0&&view.active.length){
+   doc.querySelector('#demo-follow-next').onclick();app.api.togglePause();
+   const selected=world.inspectFollow();frozen={packet:selected.packet,p:selected.packet.p.clone()};heldTarget=selected.target.clone();
+   change('#playback-speed',1);change('#camera-zoom',5);chosenZoom=world.inspectFollow().zoom;
+   assert.equal(world.inspectFollow().packet,frozen.packet);assert.equal(world.inspectFollow().target.distanceTo(heldTarget),0);phase=1;
+  }else if(phase===1){
+   assert.ok(view.packet.p.distanceTo(frozen.p)<1e-10);assert.equal(view.zoom,chosenZoom);
+   if(++frames===2){app.api.togglePause();phase=2;frames=0;}
+  }else if(phase===2){
+   assert.equal(view.zoom,chosenZoom,'automatic framing must not undo the chosen zoom');
+   if(++frames===8){
+    assert.ok(view.target.distanceTo(heldTarget)>.01,'camera still tracks the moving data');
+    const selected=view.packet;change('#playback-speed',2);change('#camera-zoom',9);chosenZoom=world.inspectFollow().zoom;
+    assert.equal(world.inspectFollow().packet,selected);phase=3;frames=0;
+   }
+  }else if(phase===3){
+   assert.equal(view.zoom,chosenZoom);
+   if(++frames===8){phase=4;app.api.run();}
+  }
+  assert.equal(doc.querySelector('#demo-follow').getAttribute('aria-pressed'),'true');
+ }});
+ app.api.switchLevel('transformer-demo');const saved=JSON.stringify(app.api.getState());await app.api.run();
+ assert.equal(phase,4);assert.equal(JSON.stringify(app.api.getState()),saved);
+ const profile=app.document.querySelector('#demo-follow-view');profile.value='close';profile.onchange({target:profile});assert.equal(app.api.getWorld().inspectFollow().followZoom,null,'explicit distance preset replaces the custom distance');
+ app.api.switchLevel('wire');app.api.switchLevel('transformer-demo');assert.equal(app.api.getWorld().inspectFollow().followZoom,null);
 });
 
 test('demo Softmax hands off while the independent masked branch still runs, and joins wait for their inputs',async()=>{

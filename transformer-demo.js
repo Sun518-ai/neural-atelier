@@ -63,7 +63,7 @@ const demo=M.levels[id]={id,title,chapter:L('原版基础 / 21','Original / 21')
  sourceTitle:L('目标前缀 ID','Target prefix IDs'),sourceNote:L('解码器读取已生成的词','The decoder reads the existing prefix'),secondaryTitle:L('编码器读取完整源句','The encoder reads the complete source'),
  outputTitle:L('各目标位置的预测词','Predictions at target positions'),outputNote:L('最后一个位置预测下一词','The final position predicts the next token'),tokenOutput:true,shapes:{24:'3 × 8'},shape:L('四维 · 双头 · 编码器、解码器各一层','4 features · 2 heads · one encoder and decoder layer'),next:null,
  mission:L('点一次试跑，看完整模型流动','Press Run to watch the complete model'),
- description:L('点一次试跑，模型会连续生成三个新词。每轮只把最后一个位置选出的词接到文字末尾，送回目标输入，继续下一轮。最慢档按普通关卡的节奏逐列计算，镜头跟随数据；可随时调速、暂停，拖动或缩放接管视角。','Press Run once to generate three new tokens. Each round appends only the prediction at the last position, feeds it back into the target input, then runs again. The slowest setting uses the same per-column pace as the other lessons. Adjust speed or pause anytime; drag or zoom to take control of the following camera.'),
+ description:L('点一次试跑，模型会连续生成三个新词。每轮只把最后一个位置选出的词接到文字末尾，送回目标输入，继续下一轮。最慢档按普通关卡的节奏逐列计算，镜头跟随数据；可随时调速、暂停，拖动场景或滚轮缩放接管视角。','Press Run once to generate three new tokens. Each round appends only the prediction at the last position, feeds it back into the target input, then runs again. The slowest setting uses the same per-column pace as the other lessons. Adjust speed or pause anytime; drag the scene or scroll to take manual control of the following camera.'),
  summary:L('只需运行。展开完整模型，连续观察三轮生成与回送。','Just run. Unfold the complete model and watch three rounds of generation and feedback.'),concept:title,hints:[],
  rationale:{title:L('之前的组件，怎样组成一个模型？','How do the familiar modules form a model?'),
  text:L('编码器先整理源句。解码器先读自己的目标前缀，再通过交叉注意力读取编码器输出；两边的 FFN 分别加工各词的特征。每个子层后都接残差相加和 LayerNorm。','The encoder processes the source. The decoder first reads its own target prefix, then reads the encoder output through cross-attention. Each side’s FFN processes token features. Every sublayer is followed by residual addition and LayerNorm.'),
@@ -71,10 +71,10 @@ const demo=M.levels[id]={id,title,chapter:L('原版基础 / 21','Original / 21')
  scope:L('按 2017 年原版推理结构缩尺：编码器、解码器各一层，四维、双头，FFN 为 4 → 8 → 4，关闭 dropout。为保持矩阵大小，本演示每轮读取最近三个目标词，完整文字保留在上方；这是演示窗口，不是原版模型的上下文限制。源句保持不变，每轮重算，没有 KV Cache。词表投影使用本关专用的固定教学权重，让三轮选出不同词；未经过语言训练，不代表翻译能力。','A scaled 2017 inference structure: one encoder and decoder layer, four features, two heads, 4 → 8 → 4 FFNs, dropout off. To keep matrix sizes fixed, each round reads the latest three target tokens; the full text remains above. This is a display window, not the original model’s context limit. The source stays unchanged and is recomputed each round, without a KV cache. The vocabulary projection uses fixed weights chosen for this lesson so the three rounds select different tokens. It is not language-trained and does not demonstrate translation ability.')},
  menu:{kind:'connect',label:L('完整演示 · 只需运行','Full demonstration · just run'),description:L('全部基础组件已摆好、连好。把之前学过的运算放回完整编码器—解码器，看它们一起工作。','All basic modules are placed and wired. See the familiar operators working together in the full encoder–decoder.')},
  demoViews:[{key:'all',label:L('全景','Overview'),x:0,z:0,zoom:4.3},{key:'encoder',label:L('编码器','Encoder'),x:-1,y:6,z:-15,zoom:3.3},{key:'masked',label:L('因果自注意力','Masked self-attention'),x:-10,z:0,zoom:2.5},{key:'cross',label:L('交叉注意力 + FFN','Cross-attention + FFN'),x:0,y:-6,z:15,zoom:3.3},{key:'readout',label:L('词表与选词','Vocabulary & selection'),x:29,z:0,zoom:1.05}],
- demoSections:[{label:L('编码器 · 自注意力 → 残差与归一化 → FFN','ENCODER · Self-attention → Add & Norm → FFN'),x:-4,y:6,z:-20.8,color:'#8fd6c5'},
- {label:L('解码器 ① · 因果自注意力 → 残差与归一化','DECODER 1 · Masked attention → Add & Norm'),x:-10,z:-5.8,color:'#c4afe9'},
- {label:L('解码器 ② · 读取编码器 → 残差与归一化 → FFN','DECODER 2 · Read encoder → Add & Norm → FFN'),x:-4,y:-6,z:9.2,color:'#c4afe9'},
- {label:L('模型末端 · 词表分数 → 概率 → 选词','OUTPUT · Vocabulary scores → probabilities → selection'),x:28,z:-4.5,color:'#e2c684'}]
+ demoSections:[{label:L('编码器 · 自注意力 → 残差与归一化 → FFN','ENCODER · Self-attention → Add & Norm → FFN'),x:-4,y:6,z:-20.8,color:'#4e8877'},
+ {label:L('解码器 ① · 因果自注意力 → 残差与归一化','DECODER 1 · Masked attention → Add & Norm'),x:-10,z:-5.8,color:'#8d779e'},
+ {label:L('解码器 ② · 读取编码器 → 残差与归一化 → FFN','DECODER 2 · Read encoder → Add & Norm → FFN'),x:-4,y:-6,z:9.2,color:'#8d779e'},
+ {label:L('模型末端 · 词表分数 → 概率 → 选词','OUTPUT · Vocabulary scores → probabilities → selection'),x:28,z:-4.5,color:'#a18743'}]
 };
 demo.summary=demo.menu.description;demo.menu.summary=demo.menu.description;
 M.routes.main.ids.push(id);M.routes.main.groups.at(-1).ids.push(id);M.levels.autoregressive.next=id;
@@ -108,7 +108,7 @@ M.extraExample=(kind,levelId,nodeId)=>{
  return {sampleIndex:0,queryWords,keyWords,cross:sections[n.id]==='cross',masked:sections[n.id]==='masked',exampleSource:['D ID',v],inputs:n.links.map(from=>[from==='Z'?'S ID':from==='R'?'D ID':M.definitions[s.nodes.find(x=>x.id===from).kind].name,ev.values[from]]),output:[M.definitions[n.kind].name,ev.values[n.id]]};
 };
 L(' 模块，双击查看',' module, double-click to inspect');L('收起卡片，继续查看 ↗','Close card and continue exploring ↗');L('收起卡片，继续搭建 ↗','Close card and continue building ↗');
-L('拖动旋转 · Shift / 右键拖动平移 · 滚轮缩放','Drag to orbit · Shift / right-drag to pan · scroll to zoom');L('平移视角','Pan view');L('跟随数据','Follow data');L('运行时跟随数据，拖动或缩放后退出跟随','Follow data during a run; drag or zoom to take manual control');L('切换平移模式，也可按住 Shift 或右键拖动','Toggle pan mode, or hold Shift or the right mouse button while dragging');
+L('拖动旋转 · Shift / 右键拖动平移 · 滚轮缩放','Drag to orbit · Shift / right-drag to pan · scroll to zoom');L('平移视角','Pan view');L('跟随数据','Follow data');L('运行时跟随数据；拖动场景或滚轮缩放可接管视角','Follow data during a run; drag the scene or scroll to take manual control');L('切换平移模式，也可按住 Shift 或右键拖动','Toggle pan mode, or hold Shift or the right mouse button while dragging');
 L('模型区域','Model regions');L('完整演示','Full demonstration');L('拖动转动视角 · 双击查看基础组件','Drag to orbit · double-click a basic module');
 L('完整模型已运行完毕。','The complete model has finished running.');
 L('跟随距离','Follow distance');L('远景','Wide');L('中景','Medium');L('近景','Close');
