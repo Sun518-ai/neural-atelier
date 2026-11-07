@@ -16,7 +16,7 @@ async function boot({reduced=true,frameMs=1000,onFrame=()=>{},languages=['zh-CN'
  assert.ok(c.testAPI.getWorld(),'3D boot failed');return {c,document,window,api:c.testAPI,scenes,time:()=>now,view:()=>view,camera:()=>renderedCamera};
 }
 test('the ready-to-run full Transformer renders and completes every basic operator without editing',async()=>{
- const app=await boot({frameMs:1000}),M=app.c.NeuralPrologue;
+ const app=await boot({frameMs:5000}),M=app.c.NeuralPrologue;
  app.api.switchLevel('transformer-demo');const before=JSON.stringify(app.api.getState());
  assert.equal(app.document.querySelectorAll('.node-label').length,67);
  assert.equal(app.document.querySelectorAll('.demo-section-label').length,4);
@@ -50,19 +50,19 @@ test('floating demonstration supports full orbit, pan and cursor zoom without ed
  const projected=anchor.clone().project(app.camera());assert.ok(Math.abs(projected.x-cursor.x)<1e-9&&Math.abs(projected.y-cursor.y)<1e-9,'zoom stays anchored under the cursor');
  assert.equal(JSON.stringify(app.api.getState()),saved);app.api.switchLevel('wire');assert.ok(app.camera().isOrthographicCamera);assert.ok(scene.children.find(o=>o.userData.environmentFloor).visible);assert.equal(doc.querySelector('#demo-pan').hidden,true);assert.equal(doc.querySelector('#demo-follow-view').hidden,true);
 });
-test('floating demonstration completes near one minute, keeps all operators and allows paused navigation',async()=>{
+test('floating demonstration preserves the operator clock, all operators and paused navigation',async()=>{
  let app,pausedOnce=false,initialCamera;const processed=new Set();
- app=await boot({reduced:false,frameMs:40,onFrame:({document})=>{
-  if(!app)return;for(const p of document.querySelectorAll('.processing-packet'))if(!p.hidden)processed.add(p.dataset.node);
+ app=await boot({reduced:false,frameMs:1500,onFrame:({document})=>{
+  if(!app)return;for(const scene of [app.scenes.at(-1)])for(const group of scene.children)for(const n of group.children)if(n.userData.node&&n.userData.processing)processed.add(n.userData.node);
   if(!pausedOnce&&processed.size>8){pausedOnce=true;assert.ok(app.camera().position.distanceTo(initialCamera)>5,'the camera follows work without user input');app.api.togglePause();const camera=app.camera().position.clone();document.querySelector('[data-demo-view="cross"]').click();assert.ok(app.camera().position.distanceTo(camera)>1);assert.equal(document.querySelector('#demo-follow').getAttribute('aria-pressed'),'false','choosing a region takes manual control');document.querySelector('#demo-follow').onclick();assert.equal(document.querySelector('#demo-follow').getAttribute('aria-pressed'),'true');app.api.togglePause();}
  }});
  app.api.switchLevel('transformer-demo');initialCamera=app.camera().position.clone();const saved=JSON.stringify(app.api.getState()),start=app.time();await app.api.run();const elapsed=app.time()-start;
- assert.ok(elapsed>=66000&&elapsed<68000,'three rounds plus feedback take about 67 seconds at 0.25x');assert.equal(processed.size,67);assert.ok(pausedOnce);assert.ok(app.camera().position.distanceTo(initialCamera)<1e-8,'follow returns to the model center before completion');assert.equal(app.document.querySelectorAll('#demo-transcript .generated-token').length,3);
+ assert.ok(elapsed>600000,'slow playback is never squeezed into a fixed one-minute runtime');assert.equal(processed.size,67);assert.ok(pausedOnce);assert.ok(app.camera().position.distanceTo(initialCamera)<1e-8,'follow returns to the model center before completion');assert.equal(app.document.querySelectorAll('#demo-transcript .generated-token').length,3);
  assert.equal(app.document.querySelectorAll('#test-results .pass').length,3);assert.equal(JSON.stringify(app.api.getState()),saved);assert.equal(app.document.querySelectorAll('.packet').length,0);
 });
 test('generation feedback can pause, change follow distance and stop without starting another round',async()=>{
  let app,feedbackFrames=0,position,stopped=false;
- app=await boot({frameMs:40,onFrame:({document})=>{
+ app=await boot({frameMs:500,onFrame:({document})=>{
   if(!app||!document.querySelector('.feedback-packet'))return;
   const packet=app.scenes.at(-1).children.find(o=>o.isMesh&&o.geometry?.type==='SphereGeometry');
   feedbackFrames++;
@@ -73,6 +73,25 @@ test('generation feedback can pause, change follow distance and stop without sta
  app.api.switchLevel('transformer-demo');const graph=JSON.stringify(app.api.getState());
  await app.api.run();assert.ok(stopped);assert.equal(app.document.querySelector('#level-complete').open,undefined);assert.equal(app.document.querySelectorAll('.packet').length,0);assert.equal(app.document.querySelectorAll('#demo-transcript .generated-token').length,1);assert.equal(JSON.stringify(app.api.getState()),graph);
  app.api.switchLevel('wire');assert.equal(app.document.querySelector('#demo-generation').hidden,true);
+});
+test('demo slow playback exposes each column for one second, respects speed changes and reduced motion',async()=>{
+ for(const reduced of [false,true]){
+  let app,previousColumn=null,lastColumnAt=0,slowSpan=0,fastSpan=0,spedUp=false;
+  app=await boot({reduced,frameMs:80,onFrame:({now,document})=>{
+   if(!app)return;
+   const active=app.scenes.at(-1).children.flatMap(g=>g.children).find(g=>g.userData.node==='masked-a-q');
+   const col=active?.userData.activeColumn;
+   if(col==null)return;
+   if(previousColumn!==col){
+    if(!spedUp&&previousColumn===0&&col===1){slowSpan=now-lastColumnAt;const input=document.querySelector('#playback-speed');input.value='1';input.dispatchEvent(new app.window.Event('input'));spedUp=true;}
+    else if(spedUp&&previousColumn===0&&col===1){fastSpan=now-lastColumnAt;app.api.run();}
+    previousColumn=col;lastColumnAt=now;
+   }
+  }});
+  app.api.switchLevel('transformer-demo');await app.api.run();
+  assert.ok(slowSpan>=960&&slowSpan<=1120,'0.25x gives one second per column even with reduced motion: '+slowSpan);
+  assert.ok(fastSpan>=180&&fastSpan<=340,'1x gives about 260 ms per column: '+fastSpan);
+ }
 });
 test('demonstration cards show the selected instance and return to observation controls',async()=>{
  const app=await boot(),M=app.c.NeuralPrologue,doc=app.document;

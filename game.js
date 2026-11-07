@@ -1,5 +1,5 @@
-import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=generation-demo-1';
-import {createProgress} from './level-progress.js?v=generation-demo-1';
+import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=slow-demo-1';
+import {createProgress} from './level-progress.js?v=slow-demo-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -387,7 +387,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=generation-demo-1');
+ const {createSceneArt}=await import('./scene-art.js?v=slow-demo-1');
  function scenePalette(){
   if(typeof getComputedStyle!=='function')return {};
   const css=getComputedStyle(document.body),read=name=>css.getPropertyValue(name).trim();
@@ -769,7 +769,7 @@ try{
   const el=document.createElement('span');el.className='packet feedback-packet';el.dataset.motion='feedback';el.dataset.from='sink';el.innerHTML='<b class="packet-title"></b> <span class="packet-values"></span>';el.querySelector('b').textContent=I18n.t('接回输入');el.querySelector('span').textContent=M.math.vocab[token];overlay.appendChild(el);
   const p={mesh,el,p:point('sink'),motion:'feedback',values:[token],cells:el.querySelector('.packet-values')};packets.push(p);
   const a=point('sink'),b=point('R'),path=new T.CatmullRomCurve3([a,new T.Vector3(15,8,6),new T.Vector3(-18,8,6),b]);
-  const reduced=matchMedia('(prefers-reduced-motion:reduce)').matches,duration=(reduced?.4:2.8)*250;let elapsed=0,previous=animationTime();
+  const duration=700;let elapsed=0,previous=animationTime();
   return new Promise(resolve=>{function tick(now){
    if(id!==runId){resolve();return;}if(!busy){clearPackets();resolve();return;}
    const clock=animationTime(now);if(paused){previous=clock;requestAnimationFrame(tick);return;}
@@ -781,7 +781,7 @@ try{
  }
  const normalizationFrame=(time,centering)=>art[centering?'layerNormFrame':'rmsFrame'](time,stage().sequence?3:1);
  function animate(ev,ms,id){
-  clearPackets();lastDepth=-1;const reduced=matchMedia('(prefers-reduced-motion:reduce)').matches;if(reduced)ms=70;
+  clearPackets();lastDepth=-1;const reduced=matchMedia('(prefers-reduced-motion:reduce)').matches;if(reduced&&!stage().demonstration)ms=70;
   let previous=animationTime(),elapsed=0;
   const seq=!!stage().sequence,readyNodes=state.nodes.filter(n=>ev.values[n.id]);
   // Follow the actual outlet producer: selected predictions and an appended
@@ -808,7 +808,8 @@ try{
    starts[depth]=ends[depth-1]+travelDuration;ends[depth]=starts[depth]+Math.max(1,...durations);
   }
   const max=ends[lastWave]+travelDuration;
-  if(stage().demoSeconds)ms=(reduced?Math.min(5,stage().demoSeconds):stage().demoSeconds)*1000*.25/max;
+  // The complete model uses the same operation clock as every teaching level.
+  // Never compress it to a total runtime: slow playback must keep each column readable.
   const clamp=x=>Math.max(0,Math.min(1,x)),ramp=(x,a,b)=>{const v=clamp((x-a)/(b-a));return v*v*(3-2*v);};
   function fadeMaterials(mesh){const materials=[];mesh.traverse(o=>{if(o.material){o.material.transparent=true;o.material.depthWrite=false;o.castShadow=false;materials.push(o.material);}});return materials;}
   function movingPacket(values,from,to,motion){

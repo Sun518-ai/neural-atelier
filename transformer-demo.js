@@ -50,14 +50,14 @@ const decoded=ffn(crossed,15,15,'cross');
 const logits=put('original-head',[decoded],23,0,'readout'),prob=put('demo-probabilities',[logits],27,0,'readout'),picked=put('pick',[prob],31,0,'readout');
 for(const n of nodes)n.y=({encoder:6,masked:0,cross:-6,readout:0})[sections[n.id]];
 const title=L('运行完整的原版 Transformer','Run the complete original Transformer');
-const demo=M.levels[id]={id,title,chapter:L('原版基础 / 21','Original / 21'),boardText:'ORIGINAL / 21',track:'main',original:true,demonstration:true,floating:true,demoSeconds:20,generationRounds:3,
+const demo=M.levels[id]={id,title,chapter:L('原版基础 / 21','Original / 21'),boardText:'ORIGINAL / 21',track:'main',original:true,demonstration:true,floating:true,generationRounds:3,
  nodes:nodes.map(n=>n.kind),inventory:counts,buildable:false,sequence:true,wide:true,sources:['R','Z'],sourceDim:3,sinkDim:3,sampleCount:3,
  dualSource:true,sourceOffsets:{Z:-15,R:0},sourceHeights:{Z:6,R:0},secondaryTokenIds:[...O.sourceIds],sourceX:-38,sinkX:37,boardWidth:83,boardDepth:45,zoom:4.3,labelZoom:1.5,
  sourcePorts:{R:'D ID',Z:'S ID'},sourceNames:{R:L('目标前缀 ID','Target prefix IDs'),Z:L('源序列 ID','Source sequence IDs')},
  sourceTitle:L('目标前缀 ID','Target prefix IDs'),sourceNote:L('解码器读取已生成的词','The decoder reads the existing prefix'),secondaryTitle:L('编码器读取完整源句','The encoder reads the complete source'),
  outputTitle:L('各目标位置的预测词','Predictions at target positions'),outputNote:L('最后一个位置预测下一词','The final position predicts the next token'),tokenOutput:true,shapes:{24:'3 × 8'},shape:L('四维 · 双头 · 编码器、解码器各一层','4 features · 2 heads · one encoder and decoder layer'),next:null,
  mission:L('点一次试跑，看完整模型流动','Press Run to watch the complete model'),
- description:L('点一次试跑，模型会连续生成三个新词。每轮只把最后一个位置选出的词接到文字末尾，送回目标输入，继续下一轮。默认全程约一分钟，镜头跟随数据；拖动或缩放即可接管，也可暂停。','Press Run once to generate three new tokens. Each round appends only the prediction at the last position, feeds it back into the target input, then runs again. About one minute at default speed, with a camera following the data. Drag or zoom to take control, or pause anytime.'),
+ description:L('点一次试跑，模型会连续生成三个新词。每轮只把最后一个位置选出的词接到文字末尾，送回目标输入，继续下一轮。最慢档按普通关卡的节奏逐列计算，镜头跟随数据；可随时调速、暂停，拖动或缩放接管视角。','Press Run once to generate three new tokens. Each round appends only the prediction at the last position, feeds it back into the target input, then runs again. The slowest setting uses the same per-column pace as the other lessons. Adjust speed or pause anytime; drag or zoom to take control of the following camera.'),
  summary:L('只需运行。展开完整模型，连续观察三轮生成与回送。','Just run. Unfold the complete model and watch three rounds of generation and feedback.'),concept:title,hints:[],
  rationale:{title:L('之前的组件，怎样组成一个模型？','How do the familiar modules form a model?'),
  text:L('编码器先整理源句。解码器先读自己的目标前缀，再通过交叉注意力读取编码器输出；两边的 FFN 分别加工各词的特征。每个子层后都接残差相加和 LayerNorm。','The encoder processes the source. The decoder first reads its own target prefix, then reads the encoder output through cross-attention. Each side’s FFN processes token features. Every sublayer is followed by residual addition and LayerNorm.'),
