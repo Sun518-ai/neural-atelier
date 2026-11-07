@@ -26,7 +26,7 @@ function writeLevelHash(id,replace=false){
  nav[replace?'replaceState':'pushState'](null,'',loc.pathname+loc.search+'#'+id);
 }
 let stageId=levelFromHash()||progress.current(),state=progress.load(stageId),history=[],selected=null,pending=null,current=null,results=[],sample=0,busy=false,paused=false,pauseStarted=0,pausedDuration=0,runId=0,level=99,hints=0,world=null,fault=null;
-let selectedWire=null,actionNode=null,placing=null,lastFusionKind=null,menuTrack=M.levels[stageId].track;
+let selectedWire=null,actionNode=null,placing=null,lastFusionKind=null,menuTrack=M.levels[stageId].track,levelMenuFromHome=false;
 let demoSamples=null;
 const stage=()=>M.levels[stageId],samples=()=>demoSamples||(M.samplesFor?.(stageId)||M.samples),save=()=>progress.save(state);
 const kindOf=id=>M.kindOf(state,id),definition=id=>M.definitionFor(state,id),weightsFor=id=>M.weights[kindOf(id)],nodeName=id=>M.nodeName(state,id);
@@ -216,7 +216,7 @@ function renderLevelMenu(){
  list.setAttribute('aria-labelledby','level-track-'+menuTrack);list.classList.toggle('grouped-levels',!!route.groups);
  const card=id=>{
   const c=M.levels[id],menu=c.menu;
-  return `<button type="button" class="level-choice ${id===stageId?'current':''} ${id===route.ids.at(-1)?'track-finale':''} ${menu?'lesson-kind-'+menu.kind:''}" data-level="${id}"><span class="level-choice-top"><span>${c.chapter}</span><span>${progress.completed(id)?I18n.t("✓ 已通过"):id===stageId?I18n.t("当前关卡"):''}</span></span>${menu?`<span class="level-purpose">${menu.label}</span>`:''}<strong>${c.title}</strong><span>${menu?.summary||c.summary}</span>${menu?.connection?`<span class="lesson-connection">${menu.connection}</span>`:''}<small>${c.buildable?I18n.t('最多 ')+M.moduleLimit(c):c.nodes.length}${I18n.t(" 个计算模块 · ")}${c.engine?I18n.t("正确性 + 性能验收"):c.buildable?I18n.t("自行放置组件"):c.sampleCount+I18n.t(" 组输入")}</small></button>`;
+  return `<button type="button" class="level-choice ${id===stageId?'current':''} ${id===route.ids.at(-1)?'track-finale':''} ${menu?'lesson-kind-'+menu.kind:''}" data-level="${id}" ${id===stageId?'aria-current="step"':''}><span class="level-choice-top"><span>${c.chapter}</span><span>${progress.completed(id)?I18n.t("✓ 已通过"):id===stageId?I18n.t("当前关卡"):''}</span></span>${menu?`<span class="level-purpose">${menu.label}</span>`:''}<strong>${c.title}</strong><span>${menu?.summary||c.summary}</span>${menu?.connection?`<span class="lesson-connection">${menu.connection}</span>`:''}<small>${c.buildable?I18n.t('最多 ')+M.moduleLimit(c):c.nodes.length}${I18n.t(" 个计算模块 · ")}${c.engine?I18n.t("正确性 + 性能验收"):c.buildable?I18n.t("自行放置组件"):c.sampleCount+I18n.t(" 组输入")}</small></button>`;
  };
  if(!route.groups){list.innerHTML=route.ids.map(card).join('');return;}
  const groupId=group=>'level-group-'+menuTrack+'-'+group.id;
@@ -225,18 +225,19 @@ function renderLevelMenu(){
  navigation.innerHTML=route.groups.map(group=>`<button type="button" data-level-group-target="${groupId(group)}" data-stage-color="${group.id}" ${group.ids.includes(stageId)?'aria-current="step"':''}>${group.label}</button>`).join('');
  list.innerHTML=route.groups.map(group=>`<section class="level-group" id="${groupId(group)}" data-level-group="${group.id}" aria-labelledby="${groupId(group)}-title"><header class="level-group-heading"><div><h3 id="${groupId(group)}-title">${group.title}</h3><small>${group.ids.filter(id=>progress.completed(id)).length} / ${group.ids.length} ${M.levelMenuCopy.progress}</small></div><p>${group.description}</p></header>${group.connections?connections(group.connections):''}<div class="level-group-cards">${groupCards(group)}</div></section>`).join('');
 }
-function levelMenu(){
- closeHint();
- menuTrack=stage().track;renderLevelMenu();$('#level-menu').showModal();const current=$('#level-list .current');current?.closest('.level-group')?.scrollIntoView({block:'start'});current?.scrollIntoView({block:'nearest'});
+function levelMenu(fromHome=false){
+ closeHint();levelMenuFromHome=fromHome===true;document.body.dataset.screen='levels';
+ menuTrack=stage().track;renderLevelMenu();$('#level-menu').showModal();const current=$('#level-list .current');current?.focus?.({preventScroll:true});current?.closest('.level-group')?.scrollIntoView({block:'start'});current?.scrollIntoView({block:'nearest'});
 }
+function enterSelectedLevel(){document.body.dataset.screen='game';$('#level-menu').close();$('#run').focus?.({preventScroll:true});}
 function switchLevel(id,fromHash=false){
- if(busy||!M.levels[id])return;closeCompletion();if(id===stageId){$('#level-menu').close();return;}
+ if(busy||!M.levels[id])return;closeCompletion();if(id===stageId){enterSelectedLevel();return;}
  save();world?.beforeStage();stageId=id;state=progress.load(id);progress.select(id);
  demoSamples=null;history=[];selected=pending=current=fault=selectedWire=placing=actionNode=lastFusionKind=null;engineReport=null;results=[];sample=0;level=99;hints=0;
- stageChrome();world?.setStage();save();refresh();$('#level-menu').close();say('');if(!fromHash)writeLevelHash(id);
+ stageChrome();world?.setStage();save();refresh();enterSelectedLevel();say('');if(!fromHash)writeLevelHash(id);
 }
 stageChrome();progress.select(stageId);save();writeLevelHash(stageId,true);
-window.AtelierShell?.init({beforeLanguageChange:save});
+const shell=window.AtelierShell?.init({beforeLanguageChange:save,onEnter:()=>levelMenu(true),beforeHome:()=>{if(busy)run();save();closeHint();$('#level-menu').close();}});
 I18n.onChange(()=>{
  const reportWasOpen=!$('#run-report').hidden;
  if(current&&(stage().cloudSingle||current.componentIssue))current=M.evaluate(state,samples()[sample].v);
@@ -253,7 +254,7 @@ window.addEventListener?.('hashchange',()=>{
  switchLevel(target,true);writeLevelHash(stageId,true);
 });
 const levelDialog=$('#level-menu');let levelBackdropStart=null;
-function closeLevelMenu(){levelBackdropStart=null;levelDialog.close();$('#levels-open').focus?.({preventScroll:true});}
+function closeLevelMenu(){levelBackdropStart=null;levelDialog.close();if(levelMenuFromHome)shell?.home();else{document.body.dataset.screen='game';$('#levels-open').focus?.({preventScroll:true});}}
 function outsideLevelDialog(e){const r=levelDialog.getBoundingClientRect();return e.target===levelDialog&&(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom);}
 $('#levels-open').onclick=levelMenu;$('#levels-close').onclick=closeLevelMenu;
 levelDialog.addEventListener('pointerdown',e=>{levelBackdropStart=e.button===0&&e.isPrimary!==false&&outsideLevelDialog(e)?{id:e.pointerId,x:e.clientX,y:e.clientY}:null;});

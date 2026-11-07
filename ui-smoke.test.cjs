@@ -404,6 +404,35 @@ test('opening settings from the intro and skipping it never changes the saved ci
  app.document.querySelector('#enter-workshop').onclick();let prevented=false;const hash=app.location.hash;app.document.querySelector('#home-open').onclick({preventDefault(){prevented=true;}});assert.ok(prevented);assert.equal(welcome.open,true);assert.equal(app.eval('JSON.stringify(state)'),state);assert.equal(app.location.hash,hash);
 });
 
+test('entering the workshop opens a neutral level picker at the current saved level until a card is chosen',()=>{
+ const first=boot();first.eval("switchLevel('qkv');state=M.solutions(stageId);state.nodes[0].x+=.2;save();progress.complete('wire');setPlaybackSpeed(.5)");
+ const app=boot(first.storage),doc=app.document;app.c.setTimeout=fn=>fn();
+ const before=new Map(app.storage),circuit=app.eval('JSON.stringify(state)'),hash=app.location.hash;
+ assert.equal(doc.body.dataset.screen,'home');assert.equal(app.eval('stageId'),'qkv');
+ doc.querySelector('#enter-workshop').onclick();
+ assert.equal(doc.querySelector('#welcome').open,false);assert.equal(doc.querySelector('#level-menu').open,true);assert.equal(doc.body.dataset.screen,'levels');
+ assert.equal(doc.querySelector('#level-list .current').dataset.level,'qkv');assert.equal(doc.querySelector('#level-list [aria-current="step"]').dataset.level,'qkv');
+ assert.equal(doc.querySelector('#level-tracks [aria-selected=true]').dataset.track,'main');
+ doc.querySelector('[data-track="modern"]').click();assert.equal(doc.body.dataset.screen,'levels');assert.equal(app.location.hash,hash);assert.equal(app.eval('JSON.stringify(state)'),circuit);
+ doc.querySelector('#levels-close').onclick();assert.equal(doc.body.dataset.screen,'home');assert.equal(doc.querySelector('#welcome').open,true);
+ doc.querySelector('#enter-workshop').onclick();assert.equal(doc.querySelector('#level-list .current').dataset.level,'qkv');
+ doc.querySelector('[data-level="qkv"]').click();assert.equal(doc.body.dataset.screen,'game');assert.equal(doc.querySelector('#level-menu').open,false);assert.equal(app.eval('JSON.stringify(state)'),circuit);assert.deepEqual(app.storage,before);
+ doc.querySelector('#levels-open').onclick();assert.equal(doc.body.dataset.screen,'levels');doc.querySelector('#levels-close').onclick();assert.equal(doc.body.dataset.screen,'game');assert.equal(doc.querySelector('#welcome').open,false);
+ app.eval('busy=true;paused=true');doc.querySelector('#home-open').onclick();assert.equal(app.eval('busy||paused'),false,'returning home ends playback so the picker can enter any level');doc.querySelector('#enter-workshop').onclick();
+ doc.querySelector('[data-level="scores"]').click();assert.equal(doc.body.dataset.screen,'game');assert.equal(app.eval('stageId'),'scores');assert.equal(app.location.hash,'#scores');assert.equal(app.storage.get('neural-atelier-level-qkv-v1'),before.get('neural-atelier-level-qkv-v1'));
+});
+
+test('deep links preselect their level and dismissing the entry picker returns home by Escape or backdrop',()=>{
+ const app=boot(new Map(),'#kv-cache',['en-US']),doc=app.document,dialog=doc.querySelector('#level-menu');app.c.setTimeout=fn=>fn();
+ const enter=()=>doc.querySelector('#enter-workshop').onclick(),saved=app.eval('JSON.stringify(state)');
+ enter();assert.equal(doc.querySelector('#level-tracks [aria-selected=true]').dataset.track,'engine');assert.equal(doc.querySelector('#level-list .current').dataset.level,'kv-cache');
+ assert.doesNotMatch(dialog.textContent,/[\u3400-\u9fff]/);
+ dialog.dispatchEvent(new app.window.Event('cancel',{cancelable:true}));assert.equal(doc.body.dataset.screen,'home');assert.equal(doc.querySelector('#welcome').open,true);
+ enter();dialog.getBoundingClientRect=()=>({left:100,right:900,top:60,bottom:700});
+ const fire=type=>{const e=new app.window.Event(type,{bubbles:true,cancelable:true});Object.assign(e,{button:0,pointerId:1,clientX:20,clientY:200});dialog.dispatchEvent(e);};
+ fire('pointerdown');fire('click');assert.equal(dialog.open,false);assert.equal(doc.body.dataset.screen,'home');assert.equal(doc.querySelector('#welcome').open,true);assert.equal(app.eval('JSON.stringify(state)'),saved);assert.equal(app.location.hash,'#kv-cache');
+});
+
 test('pause is bilingual and a hash change cancels it without carrying pause into another level',async()=>{
  const app=boot();app.c.performance={now:()=>100};
  const control=app.document.querySelector('#pause');assert.equal(control.disabled,true);assert.equal(control.parentElement.className,'run-toolbar');
