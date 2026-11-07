@@ -876,6 +876,28 @@ test('every playable lesson has a bilingual structure location, valid focus and 
  assert.deepEqual(Array.from(map.flows.modernLayer,n=>n.id),['norm1','attention','add1','norm2','ffn','add2']);
 });
 
+test('generation map names the actual modules, distinguishes predictions from context and preserves the circuit',()=>{
+ const app=boot(new Map(),'#autoregressive'),M=app.c.NeuralPrologue;
+ app.eval("state=M.solutions('autoregressive')");const saved=app.eval('JSON.stringify(state)');
+ for(const lang of ['zh','en']){
+  app.c.I18n.setPreference(lang);
+  app.document.querySelector('[data-open-structure]').dispatchEvent(new app.window.Event('click',{bubbles:true}));
+  const map=app.document.querySelector('#structure-dialog-content');
+  for(const kind of ['step','pick','feedback'])assert.equal(map.querySelector(`[data-generation-module="${kind}"] strong`).textContent,M.definitions[kind].name);
+  assert.equal(map.querySelector('.generation-reference').hasAttribute('open'),false,'full network is secondary to the generation loop');
+  assert.equal(map.querySelectorAll('.generation-predictions .generation-chosen').length,1);
+  assert.equal(map.querySelector('.generation-predictions .generation-chosen').dataset.predictionIndex,'2');
+  const rendered=[...map.querySelectorAll('[data-generation-window]>div:last-child [data-token-id]')].map(el=>Number(el.dataset.tokenId));
+  assert.deepEqual(rendered,Array.from(M.evaluate(M.solutions('autoregressive'),[0,1,2]).output));
+  assert.equal(app.eval('JSON.stringify(state)'),saved);
+  if(lang==='en')assert.doesNotMatch(map.textContent,/[\u3400-\u9fff]/);
+  app.document.querySelector('#structure-close').onclick();
+ }
+ assert.match(M.extraCard('feedback','autoregressive').meaning,/remembers.*original context/i);
+ assert.match(M.extraCard('step','autoregressive').purpose,/replaces that scoring stage/);
+ assert.deepEqual(Array.from(M.definitions.feedback.glyphs),['…','→','+1']);
+});
+
 test('expanded modern and execution maps distinguish architecture, device count and cached data',()=>{
  const app=boot(new Map(),'#block',['en-US']),map=app.c.NeuralPrologue.structureMap;
  const tree=id=>parseHTML('<main>'+map.render(id,true)+'</main>').document;

@@ -1,5 +1,5 @@
-import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=token-reveal-1';
-import {createProgress} from './level-progress.js?v=token-reveal-1';
+import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=generation-map-1';
+import {createProgress} from './level-progress.js?v=generation-map-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -365,7 +365,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=token-reveal-1');
+ const {createSceneArt}=await import('./scene-art.js?v=generation-map-1');
  function scenePalette(){
   if(typeof getComputedStyle!=='function')return {};
   const css=getComputedStyle(document.body),read=name=>css.getPropertyValue(name).trim();
@@ -424,7 +424,7 @@ try{
   if(removable&&!busy&&!focusId&&!pending&&!placing&&!selectedWire)addLabel('div','wire-actions node-actions',`<button type="button" data-delete-node="${removable.id}">${I18n.t("删除组件")}</button><button type="button" data-close-node aria-label="${I18n.t("关闭")}">×</button>`,{'data-owner':removable.id},()=>new T.Vector3(removable.x,.7,removable.z+1.1));
   addLabel('span','source-label',`<b>${stage().sourceTitle}</b>${stage().sourceNote?'<br>'+stage().sourceNote:''}`,{'data-source-label':'R'},()=>new T.Vector3(stage().sourceX,stage().dualSource?.95:1.6,art.sourceOffset(stage(),'R')-2.05));
   if(stage().dualSource)addLabel('span','source-label',`<b>${stage().sourceNames.Z}</b><br>${stage().secondaryTitle}`,{'data-source-label':'Z'},()=>new T.Vector3(stage().sourceX,.95,art.sourceOffset(stage(),'Z')-2.05));
-  addLabel('span','source-label',`<b>${stage().outputTitle}</b><br>${stage().tokenOutput?I18n.t("词表选择后的文字"):shape(stage().sinkDim)+(stage().outputNote?' · '+stage().outputNote:stage().attentionReadout&&stage().sinkDim===9?' · '+M.causalGuide.weightsNote:I18n.t(" · 各位置的特征"))}`,{},()=>new T.Vector3(stage().sinkX,1.6,-2.05));
+  addLabel('span','source-label',`<b>${stage().outputTitle}</b><br>${stage().tokenOutput?(stage().outputNote||I18n.t("词表选择后的文字")):shape(stage().sinkDim)+(stage().outputNote?' · '+stage().outputNote:stage().attentionReadout&&stage().sinkDim===9?' · '+M.causalGuide.weightsNote:I18n.t(" · 各位置的特征"))}`,{},()=>new T.Vector3(stage().sinkX,1.6,-2.05));
   if(busy&&!stage().sequence){const marker=addLabel('span','row-marker',flowIdentity(),{'data-owner':'R','data-row':sample<3?String(sample):'validation'},()=>sample<3?new T.Vector3(stage().sourceX-1,.99,art.rowZ(sample)):new T.Vector3(stage().sourceX,1.4,2));marker.style.setProperty('--row-color',colorHex(art.rowColor(sample)));}
   stage().sources.forEach(id=>addLabel('button','port '+(pending===id?'pending':''),(stage().sourcePorts?.[id]||(id==='R'&&stageId!=='ffn'?'X':id))+' · '+shape(stage().sourceDim||2),{'type':'button','data-output':id,'aria-label':`${outputName(id)}${I18n.t(" 输出口，")}${shape(stage().sourceDim||2)}`},()=>point(id)));
   if(stageId==='ffn')addLabel('span','source-label','Z = RMSNorm(R)',{},()=>new T.Vector3(stage().sourceX,.65,2.55));
@@ -586,6 +586,7 @@ try{
   $('#card-attention-flow').hidden=d.type!=='mix'&&!outputProjection;$('#card-attention-flow').replaceChildren();
   $('.card-example>small').textContent=d.type==='mix'?M.aggregateGuide.rounding:I18n.t('按正确计算路径演算 · 显示数值已四舍五入');
   card.style.setProperty('--card-accent',c.color);$('.card-example-title').firstChild.textContent=cardStage.sequence?I18n.t("用三个输入位置看一次"):I18n.t("用“猫”的向量看一次");
+  $('#card-purpose-title').textContent=I18n.t(cardStageId==='autoregressive'?'它在生成循环中的作用':'它在这一层的作用');
   const origin=M.packageOrigin(kind);
   for(const [field,value]of Object.entries({name,seal:c.seal,english:c.english,family:c.family,number:origin?I18n.t('来源：')+origin.chapter:stage().chapter,ability:c.ability,meaning:c.meaning,formula:c.formula,purpose:M.componentUse(kind)||c.purpose}))$('#card-'+field).textContent=value;
   if(origin)$('#card-number').dataset.originLevel=origin.id;else delete $('#card-number').dataset.originLevel;
@@ -598,7 +599,12 @@ try{
   const ex=M.extraExample?.(kind,cardStageId)||exampleFor(M,kind,cardStageId),vectorRow=([name,values],output=false,focus=-1,label=names[name]||name)=>`<div class="card-vector ${output?'result':''}" data-symbol="${name}"><b>${name} · ${label}</b><span ${(cardStage.original||ex.rms)&&cardStage.sequence?'style="display:grid;grid-template-columns:repeat('+Math.ceil(values.length/3)+',minmax(0,1fr))"':''}>${values.map((v,i)=>`<i class="${v<0?'negative':''} ${i===focus?'example-focus':''}">${fmt(v)}</i>`).join('')}</span></div>`;
   const formulaNumber=v=>Number(v.toFixed(4)).toString();
   if(ex.sampleIndex===0&&!cardStage.sequence){$('.card-example-title').firstChild.textContent=I18n.t("用“我”的向量看一次");$('#card-example-input').textContent=ex.exampleSource[0]+' = '+vector(ex.exampleSource[1]);}
-  if(outputProjection){
+  if(['step','feedback'].includes(kind)||kind==='pick'&&cardStageId==='autoregressive'){
+   $('.card-example-title').firstChild.textContent=I18n.t('用“我 / 爱 / 猫”看一次更新');
+   $('#card-example-input').textContent=I18n.t('词与预测的对应关系');
+   $('.card-example>small').textContent=I18n.t('固定查表的教学例子，不代表语言模型的真实预测。');
+   $('#card-example-values').innerHTML=M.structureMap.generationExample(kind);
+  }else if(outputProjection){
    const copy=M.outputProjectionGuide,w=M.weights[kind],width=w.length,columns=w[0].length,source=c.inputSymbol,words=M.samplesFor(cardStageId)[ex.sampleIndex||0].word.split(' / ');
    const input=ex.inputs[0][1],output=ex.output[1],values=input.slice(0,width),result=output.slice(0,columns),inputName=source==='C'?copy.concatInput:copy.input;
    const factor=v=>v<0?'('+fmt(v)+')':fmt(v);

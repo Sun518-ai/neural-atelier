@@ -1778,3 +1778,25 @@ test('masked bridge animates both expanded heads and packages the whole board be
  assert.equal(app.document.querySelectorAll('#test-results .pass').length,3);assert.equal(app.api.getState().nodes.length,16);
  assert.equal(app.document.querySelectorAll('.token-calculation,.projection-calculation,.packet').length,0);
 });
+
+test('generation module cards show computed words and the retained context in both languages',async()=>{
+ const app=await boot(),doc=app.document,M=app.c.NeuralPrologue;doc.querySelector('#welcome').close();app.api.switchLevel('autoregressive');
+ const saved=JSON.stringify(app.api.getState());
+ for(const lang of ['zh','en']){
+  app.c.I18n.setPreference(lang);
+  for(const kind of ['step','pick','feedback']){
+   app.api.getWorld().focusShelf(kind);
+   assert.ok(doc.querySelector('#module-card').open);
+   assert.equal(doc.querySelector('#card-name').textContent,M.definitions[kind].name);
+   assert.ok(doc.querySelector('#card-example-values .generation-example'));
+   if(kind==='step')assert.deepEqual([...doc.querySelectorAll('#card-example-values td')].map(el=>Number(el.textContent)),Array.from(M.autoregressiveExample().scores.slice(-6)));
+   if(kind==='pick'&&lang==='en')assert.match(doc.querySelector('#card-meaning').textContent,/not three newly generated tokens/);
+   if(kind==='feedback'){
+    assert.equal(doc.querySelectorAll('#card-example-values .generation-new').length,2);
+    assert.equal(doc.querySelector('#card-example-values .generation-dropped').dataset.tokenId,'0');
+   }
+   if(lang==='en')assert.doesNotMatch(doc.querySelector('#module-card').textContent,/[\u3400-\u9fff]/);
+   doc.querySelector('#card-close').onclick();assert.equal(JSON.stringify(app.api.getState()),saved);
+  }
+ }
+});

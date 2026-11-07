@@ -648,9 +648,33 @@ M.levels.ffn.rationale.text=L('这一现代实现先归一化输入，再算 Swi
 M.levels.block.title=L('现代解码器的一层','A modern decoder layer');
 M.levels.block.rationale.scope=L('这里展示 Pre-LN、RMSNorm、SwiGLU 与 RoPE 组成的现代解码器块，没有编码器交叉注意力。它不是 2017 年原版编码器—解码器。','This modern decoder block combines Pre-LN, RMSNorm, SwiGLU and RoPE without encoder cross-attention. It is not the original 2017 encoder–decoder.');
 M.levels.vocabulary.rationale.scope=L('取最大分与取 Softmax 后的最大概率等价，本关直接按分数选词。概率采样会有不同的选择方式。','Selecting the largest logit is equivalent to selecting the largest Softmax probability, so this lesson selects directly from scores. Probability sampling can make different choices.');
-M.definitions.step.name=L('教学下一词表','Teaching next-token table');
-M.levels.autoregressive.description=L('用固定转移表为下一词算分，再选词、追加到上下文。这里单独练生成循环，不把它当作前面完整 Transformer 的真实预测。','Use a fixed transition table to score the next token, select it and append it to context. This practices the generation loop separately; these are not predictions from the preceding complete Transformer.');
-M.levels.autoregressive.rationale.scope=L('本关的固定转移表用于隔离控制流程，不是训练好的语言模型。前面的编码器—解码器关验证原版结构和候选分数。','The fixed transition table isolates control flow; it is not a trained language model. The preceding encoder–decoder lesson validates the original structure and candidate scores.');
+L('用“我 / 爱 / 猫”看一次更新','One update of I / Love / Cat');
+L('词与预测的对应关系','Tokens and their predictions');
+L('它在生成循环中的作用','Its role in the generation loop');
+L('固定查表的教学例子，不代表语言模型的真实预测。','A fixed-lookup teaching example, not predictions from a trained language model.');
+M.definitions.step.name=L('教学预测器（查表）','Teaching predictor (lookup)');
+M.definitions.step.hint=L('代替完整模型的打分工作：按输入词查固定表，为六个候选词给分。它不含 Attention 或 FFN，也不用接在完整模型后面。','Stands in for the full model’s scoring: look up each input token to score six candidates. It contains no Attention or FFN and does not follow the full model.');
+M.definitions.feedback.hint=L('记住本次试跑的原上下文，只取入口三个预测中的最后一个词，追加后保留最近三个词。入口传的是预测词，不是原上下文。','Remembers this trial’s original context. Append only the last of the three incoming predictions, then keep the latest three tokens. The port receives predictions, not the old context.');
+// This is a text-window update, not a KV cache. Avoid the cache glyphs K / V.
+M.definitions.feedback.glyphs=['…','→','+1'];
+Object.assign(M.levels.autoregressive,{
+ sourceTitle:L('本次上下文','Current context'),sourceNote:L('已有的三个词，尚未追加新词','Three existing tokens, before appending'),
+ outputNote:L('保留旧词，再追加一个新词','Keep old tokens and append one new token'),
+ mission:L('让已有文本多出一个新词','Extend the existing text by one token'),
+ description:L('上一关从分数里选词；这一关要把最后位置预测的新词接到已有文本后面。出口检查更新后的上下文，不是三个位置各自选出的词。','The previous lesson selected tokens from scores. Now extend the existing text with the last position’s prediction. The outlet checks the updated context, not all three selected predictions.'),
+});
+M.levels.autoregressive.summary=M.levels.autoregressive.description;
+Object.assign(M.levels.autoregressive.rationale,{
+ title:L('为什么只追加最后一个预测？','Why append only the last prediction?'),
+ text:L('在因果模型中，“我”的位置预测它后面的词，“爱”的位置预测它后面的词，只有最后的“猫”预测的是整段“我爱猫”之后的新词。前面两个位置的后续词已经在上下文里，不应再追加一次。','In a causal model, I predicts the token after I, Love predicts the token after Love, and only the final Cat predicts a new token beyond the whole prefix. The tokens after earlier positions are already in the context; do not append them again.'),
+ takeaway:L('新词变成下一次预测的已知条件，这就是自回归。棋盘只搭一次更新；通关后会用同一电路连续更新六次。循环发生在两次计算之间，不需要把出口连回入口。','The new token becomes a known condition for the next prediction: this is autoregression. Build one update on the board; after success, the same circuit repeats it six times. The loop is between evaluations, so no wire from outlet to inlet is needed.'),
+ scope:L('为看清文本怎样更新，本关用固定查表代替完整模型打分。三词窗口也是教学限制；真实模型不会每生成一个词就固定删掉最早的一个词。','To isolate the text update, this lesson replaces model scoring with a fixed lookup. The three-token window is also a teaching limit; real models do not always drop the oldest token after each generation step.'),
+});
+// Derive the explanatory example from the same operators as the playable board.
+M.autoregressiveExample=(input=[0,1,2])=>{
+ const context=[...input],scores=M.operations.step([context]),predictions=M.operations.pick([scores]);
+ return {context,scores,predictions,next:M.operations.feedback([predictions],{input:context})};
+};
 const previousSamples=M.samplesFor,previousSources=M.sourceValues,previousReference=M.reference,previousSolutions=M.solutions,previousExample=M.extraExample,previousCard=M.extraCard;
 M.samplesFor=id=>{
  if(['vocabulary-scores','vocabulary'].includes(id))return previousSamples('embedding').map(s=>({...s,v:decoder(position(embed(s.v,4)),memory())}));
@@ -795,6 +819,7 @@ I18n.prepare(cards);
 M.original={relu,ln,position,embed,wide,project,vocabulary,classicFFN,sequenceFFN,head,concat,multi,singleAttention,encoder,decoderSelf,decoder,sourceIds,
  exampleLabels(levelId){return {Oa:L('自注意力更新','Self-attention update'),Om:L('因果注意力更新','Masked attention update'),Oc:L('交叉注意力更新','Cross-attention update'),A:['relu','original-ffn'].includes(levelId)?L('ReLU 输出','ReLU output'):I18n.t('注意力'),E:L('编码器输出','Encoder output'),D:L('目标特征','Target features'),Xs:L('源词向量与位置','Source embeddings and positions'),Xt:L('目标词向量与位置','Target embeddings and positions'),Xp:L('含位置的特征','Position-enriched features'),H_A:L('头 A 的结果','Head A output'),H_B:L('头 B 的结果','Head B output'),C:L('拼接结果','Concatenated features'),X1:levelId==='encoder-layer'?L('交流后的特征','Features after exchange'):L('第一次归一化','First normalized state'),X2:L('交叉注意力后的特征','Features after cross-attention'),R1:L('Attention 残差结果','Attention residual result'),R2:L('FFN 残差结果','FFN residual result'),Rc:L('交叉注意力残差结果','Cross-attention residual result')};},
  card(id,levelId){
+  const generation=generationCard(id,levelId);if(generation)return generation;
   if(cards[id]){
    const c={...cards[id]},decoderLevel=levelId==='decoder-layer';
    if(['output','original-output'].includes(id)&&M.levels[levelId]?.nodes.includes('concat')){
@@ -834,6 +859,17 @@ M.original={relu,ln,position,embed,wide,project,vocabulary,classicFFN,sequenceFF
   return null;
  }
 };
+function generationCard(id,levelId){
+ if(['step','feedback'].includes(id)||id==='pick'&&levelId==='autoregressive'){
+  const c=previousCard(id,levelId);
+  c.family=L('逐词生成 · 模型外的循环','Token generation · loop around the model');
+  if(id==='step')Object.assign(c,{english:'TEACHING PREDICTOR',formula:L('输入词 → 查表 → 六个候选词分数','Input token → lookup → six candidate scores'),meaning:M.definitions.step.hint,purpose:L('前面第 18 关用编码器—解码器和词表投影算分；这里用固定表代替整段打分，只练“选词后怎样继续”。例如表规定“猫”后面的“我”得 4 分，其他候选都得 −1 分。这不是语言规律，也不是前面模型的预测。','Level 18 scored candidates with the encoder–decoder and vocabulary projection. This lookup replaces that scoring stage to isolate what happens after selection. For example, after Cat, the table gives I a score of 4 and every other candidate −1. This is neither a language rule nor a prediction from the previous model.'),weight:L('固定分数表','Fixed score table'),trait:L('查表打分','Lookup scoring')});
+  if(id==='pick')Object.assign(c,{meaning:L('每个位置的六个候选分数中选一个最高分，得到三个预测词。三个预测分别回答“对应输入词后面是什么”，不是一次生成三个新词。','Select the highest of six candidate scores at each position, producing three predictions. Each predicts what follows its corresponding input token; they are not three newly generated tokens.'),purpose:L('继续写已有文本时，只采用最后一个位置的预测。前两个预测仍然显示，便于比较；“追加新词”负责取出最后一个。','To continue the existing text, use only the final position’s prediction. Earlier predictions stay visible for comparison; Append a word takes the last one.')});
+  if(id==='feedback')Object.assign(c,{english:'APPEND ONE TOKEN',formula:L('新上下文 = 最近三词（原上下文 + 最后一个预测）','New context = last three (old context + final prediction)'),meaning:M.definitions.feedback.hint,purpose:L('例如原文是“我 / 爱 / 猫”，三个预测是“爱 / 猫 / 我”。只采用最后的“我”，先得到“我 / 爱 / 猫 / 我”，本关窗口只留三词，出口因此是“爱 / 猫 / 我”。组件自动记住本次原输入，不需要另接一条线；它不是 KV 缓存。','For context I / Love / Cat, the predictions are Love / Cat / I. Take only the final I, giving I / Love / Cat / I. This exercise retains three tokens, so the outlet is Love / Cat / I. The module remembers the trial input automatically; no second wire is needed. This is not a KV cache.'),weight:L('无','None'),trait:L('更新文本窗口','Update text window')});
+  return c;
+ }
+ return null;
+}
 M.extraCard=(id,levelId)=>{
  const own=M.original.card(id,levelId);if(own)return own;
  const c=previousCard(id,levelId);if(!M.levels[levelId]?.original)return c;

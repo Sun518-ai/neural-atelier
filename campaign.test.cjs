@@ -37,6 +37,17 @@ test('RoPE preserves each vector norm and position zero',()=>{const x=[2,3,4,5,-
 test('same dimensions but wrong activation branch fails',()=>{const s=M.solutions('gating');s.nodes.find(n=>n.id==='silu').links=['project'];s.nodes.find(n=>n.id==='multiply').links=['silu','gate'];assert.ok(M.samples.some(t=>!close(M.evaluate(s,t.v).output,M.reference(t.v,'gating'))));});
 test('wrong features produce computed words, not canned failure text',()=>{const wrong=M.solutions('vocabulary');wrong.nodes.find(n=>n.id==='original-head').links=['wide-invert'];const initial=M.evaluate(wrong,M.samplesFor('vocabulary')[0].v);assert.equal(M.readTokens(initial.output),'你恨你');const correct=M.evaluate(M.solutions('vocabulary'),M.samplesFor('vocabulary')[0].v);assert.equal(M.readTokens(correct.output),'我爱我');});
 test('autoregression appends only the last position prediction',()=>{const s=M.solutions('autoregressive');let input=[0,1,2];input=M.evaluate(s,input).output;assert.deepEqual(Array.from(input),[1,2,0]);input=M.evaluate(s,input).output;assert.deepEqual(Array.from(input),[2,0,1]);});
+test('generation examples preserve the old context and match playable updates, including repeated tokens',()=>{
+ const s=M.solutions('autoregressive');
+ for(const [input,expected]of [[[0,1,2],[1,2,0]],[[3,4,5],[4,5,3]],[[0,0,3],[0,3,4]]]){
+  const before=[...input],example=M.autoregressiveExample(input),ev=M.evaluate(s,input);
+  assert.deepEqual(input,before);assert.deepEqual(Array.from(example.next),expected);
+  assert.deepEqual(Array.from(example.next),Array.from(ev.output));assert.deepEqual(Array.from(example.predictions),Array.from(ev.values.pick));
+  assert.deepEqual(Array.from(example.scores),Array.from(ev.values.step));
+ }
+ const trace=M.rollout(s,[0,1,2]).trace;assert.equal(trace.length,6);
+ for(let i=1;i<trace.length;i++)assert.deepEqual(Array.from(trace[i].context),Array.from(trace[i-1].next));
+});
 test('cycle fails; disconnected branch still runs for visible animation',()=>{const s=M.solutions('attention');s.nodes.find(n=>n.id==='ropeq').links=['ropeq'];assert.ok(M.evaluate(s,M.samplesFor('attention')[0].v).error);const p=M.solutions('projection');p.sink=null;const e=M.evaluate(p,[1,1]);assert.ok(e.error);assert.ok(close(e.values.project,[1,1,1.5,-.5]));});
 test('quantization changes actual numbers; cache and batches do not',()=>{const s=M.solutions('quantization'),x=M.samplesFor('quantization')[0].v;s.settings.precision=16;const a=M.evaluate(s,x).output;s.settings.precision=2;const b=M.evaluate(s,x).output;assert.ok(!close(a,b));s.settings.precision=16;s.settings.cache=false;s.settings.batch=1;assert.ok(close(M.evaluate(s,x).output,a));});
 // Only vary controls exposed to players, plus dragging tasks to supported devices.
