@@ -107,4 +107,5 @@ L('完整模型已运行完毕。','The complete model has finished running.');
 L('跟随距离','Follow distance');L('远景','Wide');L('中景','Medium');L('近景','Close');
 L('完整模型已连续运行三轮。','The complete model has run for three rounds.');L('新生成：','New tokens: ');L('正在生成','Generating');L('已生成','Generated');L('接回输入','Feed back');L('完整文字','Full text');L('目标输入 · 最近三个词','Target input · latest three tokens');
 I18n.prepare({definitions,demo,group});
+L('切换跟随','Switch flow');L('每点一次，跟随另一股数据；暂停时也可切换','Follow another data flow with each click, including while paused');
 })(window.NeuralPrologue);

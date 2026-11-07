@@ -11,6 +11,7 @@ async function boot({reduced=true,frameMs=1000,onFrame=()=>{},languages=['zh-CN'
  for(const f of ['locales/en.js','i18n.js','music.js','shell.js','model.js','campaign.js','engine-model.js','original-curriculum.js','transformer-demo.js','cloud-curriculum.js','structure-map.js'])vm.runInContext(fs.readFileSync(__dirname+'/'+f,'utf8'),c,{filename:f});
  for(const f of ['module-cards.js','level-progress.js','scene-art.js'])vm.runInContext(fs.readFileSync(__dirname+'/'+f,'utf8').replaceAll('export ',''),c,{filename:f});
  let src=fs.readFileSync(__dirname+'/game.js','utf8').replace(/^import .*\n/gm,'').replace("const T=await import('./vendor/three.module.js');",'const T=window.T;').replace(/const \{createSceneArt\}=await import\('\.\/scene-art\.js\?v=[^']+'\);/,'');
+ src=src.replace('world={relocalize','world={inspectFollow:()=>({packet:followedPacket,target:cameraTarget.clone(),active:activeFollowPackets(),seed:followSeed}),relocalize');
  src+='\nwindow.testAPI={switchLevel,run,togglePause,refresh,select,assignDevice,chooseOutput,chooseInput,chooseModule,placeModule,getState:()=>state,setState:s=>state=s,getWorld:()=>world,getFault:()=>fault};';
  await vm.runInContext('(async()=>{'+src+'})()',c);
  assert.ok(c.testAPI.getWorld(),'3D boot failed');return {c,document,window,api:c.testAPI,scenes,time:()=>now,setFrameMs:value=>{frameMs=value;},view:()=>view,camera:()=>renderedCamera};
@@ -50,6 +51,62 @@ test('floating demonstration supports full orbit, pan and cursor zoom without ed
  const projected=anchor.clone().project(app.camera());assert.ok(Math.abs(projected.x-cursor.x)<1e-9&&Math.abs(projected.y-cursor.y)<1e-9,'zoom stays anchored under the cursor');
  assert.equal(JSON.stringify(app.api.getState()),saved);app.api.switchLevel('wire');assert.ok(app.camera().isOrthographicCamera);assert.ok(scene.children.find(o=>o.userData.environmentFloor).visible);assert.equal(doc.querySelector('#demo-pan').hidden,true);assert.equal(doc.querySelector('#demo-follow-view').hidden,true);
 });
+test('follow switch cycles live data while paused and follows the selected branch through handoffs',async()=>{
+ let app,phase=0,frozen=null,pausedFrames=0;const selectedNode='masked-a-q-2',targets=new Set();
+ app=await boot({reduced:false,frameMs:150,onFrame:()=>{
+  if(!app||phase===3)return;
+  const world=app.api.getWorld(),control=app.document.querySelector('#demo-follow-next'),view=world.inspectFollow();
+  if(!phase&&view.active.some(p=>p.node?.id===selectedNode)){
+   app.api.togglePause();assert.equal(control.disabled,false);
+   const count=view.active.length;assert.ok(count>3);
+   for(let i=0;i<count;i++){control.onclick();const current=world.inspectFollow();targets.add(current.packet);assert.equal(app.document.querySelector('#demo-follow').getAttribute('aria-pressed'),'true');}
+   assert.equal(targets.size,count,'every active flow can be selected without a name or number');
+   for(let i=0;i<count&&world.inspectFollow().packet.node?.id!==selectedNode;i++)control.onclick();
+   assert.equal(world.inspectFollow().packet.node.id,selectedNode);
+   frozen={packet:world.inspectFollow().packet,position:world.inspectFollow().packet.mesh.position.clone()};phase=1;
+  }else if(phase===1){
+   assert.equal(view.packet,frozen.packet);assert.ok(view.packet.mesh.position.distanceTo(frozen.position)<1e-9,'switching the camera does not advance paused data');
+   if(++pausedFrames===2){app.api.togglePause();phase=2;}
+  }else if(phase===2&&view.packet?.node?.id==='mask'){
+   assert.ok(targets.has(frozen.packet));phase=3;app.api.run();
+  }
+ }});
+ app.api.switchLevel('transformer-demo');const doc=app.document,world=app.api.getWorld(),control=doc.querySelector('#demo-follow-next');
+ assert.equal(control.hidden,false);assert.equal(control.disabled,false);const saved=JSON.stringify(app.api.getState());
+ control.onclick();const first=world.inspectFollow();control.onclick();const second=world.inspectFollow();
+ assert.notEqual(first.seed,second.seed);assert.ok(first.target.distanceTo(second.target)>1,'before running, clicks preview the available inputs');
+ const speed=doc.querySelector('#playback-speed');speed.value='1';speed.dispatchEvent(new app.window.Event('input'));
+ await app.api.run();assert.equal(phase,3,'selected decoder Q continues through its score to its causal mask');assert.equal(JSON.stringify(app.api.getState()),saved);
+ assert.equal(control.disabled,false);assert.equal(world.inspectFollow().packet,null,'stopping removes the old follow target');
+ app.c.I18n.setPreference('en');assert.equal(control.textContent,'Switch flow');assert.deepEqual([...app.c.I18n.missing],[]);
+ app.api.switchLevel('wire');assert.equal(control.hidden,true);
+});
+
+test('demo Softmax hands off while the independent masked branch still runs, and joins wait for their inputs',async()=>{
+ let app,stopped=false,overlap=false,softStart=null,softEnd=null;const began=new Map(),finished=new Map(),previous=new Set();
+ app=await boot({reduced:false,frameMs:100,onFrame:({now,document})=>{
+  if(!app||stopped)return;
+  const scene=app.scenes.at(-1),units=scene.children.flatMap(g=>g.children).filter(g=>g.userData.node),active=new Set(units.filter(g=>g.userData.processing).map(g=>g.userData.node));
+  for(const id of previous)if(!active.has(id)&&!finished.has(id))finished.set(id,now);
+  const state=app.api.getState();
+  for(const id of active)if(!began.has(id)){
+   began.set(id,now);const n=state.nodes.find(n=>n.id===id);
+   for(const from of n.links)if(!['R','Z'].includes(from))assert.ok(finished.has(from)&&now>finished.get(from),id+' must receive '+from+' before starting');
+  }
+  if(active.has('softmax-2')&&softStart===null)softStart=now;
+  const outgoing=document.querySelector('.packet[data-motion="wire"][data-from="softmax-2"][data-to="aggregate-2"]:not([hidden])');
+  if(outgoing&&softEnd===null){softEnd=now;overlap=active.has('mask');}
+  previous.clear();for(const id of active)previous.add(id);
+  // Reach the encoder/decoder join as well, then stop this focused timing run.
+  if(active.has('score-5')){stopped=true;app.api.run();}
+ }});
+ app.api.switchLevel('transformer-demo');const speed=app.document.querySelector('#playback-speed');speed.value='1';speed.dispatchEvent(new app.window.Event('input'));const saved=JSON.stringify(app.api.getState());await app.api.run();
+ assert.ok(stopped);assert.ok(overlap,'encoder Softmax leaves while decoder causal masking is still processing');
+ assert.ok(Math.abs(softEnd-softStart-650)<=100,'Softmax uses its own one-step clock, without the depth-wide hold');
+ for(const id of ['aggregate-3','wide-concat','demo-add','score-5'])assert.ok(began.has(id),'join checked: '+id);
+ assert.equal(JSON.stringify(app.api.getState()),saved);assert.equal(app.document.querySelectorAll('.packet,.projection-calculation').length,0);
+});
+
 test('floating demonstration preserves the operator clock, all operators and paused navigation',async()=>{
  let app,pausedOnce=false,initialCamera;const processed=new Set();
  app=await boot({reduced:false,frameMs:1500,onFrame:({document})=>{

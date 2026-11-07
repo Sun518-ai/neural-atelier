@@ -14,6 +14,23 @@ function boot(storage=new Map(),hash='',languages=['zh-CN']){
  vm.runInContext(code+`\nworld={relocalize(){},labels(){},rebuild(){},beforeStage(){},setStage(){},clearPackets(){},focused(){return null},async animate(){}};refresh();`,c);
  return {c,document,window,storage,location,navigation,hashchange,eval:code=>vm.runInContext(code,c)};
 }
+test('independent animation scheduling advances branches separately and waits only for real inputs',()=>{
+ const app=boot();
+ const result=app.eval(`(()=>{
+  const nodes=[{id:'join',links:['av','slow']},{id:'slow',links:['R']},{id:'av',links:['softmax','value']},{id:'softmax',links:['fast']},{id:'value',links:['R']},{id:'fast',links:['R']}];
+  const before=JSON.stringify(nodes),depths={R:0,fast:1,slow:1,value:1,softmax:2,av:3,join:4},durations={fast:1,slow:9,value:2,softmax:1,av:3,join:1};
+  const independent=animationSchedule(nodes,depths,n=>durations[n.id],2/3,true),waves=animationSchedule(nodes,depths,n=>durations[n.id],2/3,false);
+  return {independent:Object.fromEntries(independent.nodes),waves:Object.fromEntries(waves.nodes),end:independent.end,empty:animationSchedule([],{},()=>1,2/3,true).end,preserved:before===JSON.stringify(nodes)};
+ })()`);
+ const t=result.independent;
+ assert.ok(t.softmax.start<t.slow.end,'Softmax does not wait for an unrelated projection');
+ assert.ok(t.av.end<t.slow.end,'a downstream operation can finish while another branch still computes');
+ for(const [id,inputs]of [['softmax',['fast']],['av',['softmax','value']],['join',['av','slow']]])assert.ok(Math.abs(t[id].start-Math.max(...inputs.map(from=>t[from].end))-2/3)<1e-9,id+' waits exactly for its own inputs plus travel');
+ assert.equal(t.softmax.end-t.softmax.start,1,'Softmax keeps its own processing time');
+ assert.ok(Math.abs(result.end-t.join.end-2/3)<1e-9);assert.equal(result.empty,2/3);assert.ok(result.preserved);
+ assert.equal(result.waves.fast.end,result.waves.slow.end,'teaching waves retain their original timing');
+});
+
 test('the full-model demonstration runs immediately, replays without running and keeps puzzle saves untouched',async()=>{
  const storage=new Map(),app=boot(storage,'#transformer-demo'),doc=app.document;
  const graph=app.eval('JSON.stringify(state)');assert.equal(app.eval('state.nodes.length'),67);

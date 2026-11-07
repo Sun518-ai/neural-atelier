@@ -405,9 +405,9 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   }
   return active;
  }
- function sync(values,depths,depth,selected,activeSample,results,busy,layout={},output=null,tokenPreview=null){
+ function sync(values,depths,depth,selected,activeSample,results,busy,layout={},output=null,tokenPreview=null,timeline=null){
   if(!busy)clearProcessing();
-  for(const [id,u]of units){const completed=values?.[id]&&(depths[id]||0)<=depth,active=busy&&depths[id]===depth,sel=id===selected;
+  for(const [id,u]of units){const timing=timeline?.nodes.get(id),completed=values?.[id]&&(timing?timeline.time>=timing.end:(depths[id]||0)<=depth),active=busy&&(timing?timeline.time>=timing.start&&timeline.time<timing.end:depths[id]===depth),sel=id===selected;
    u.glow.material.emissiveIntensity=active?1.6:sel?.9:completed?.45:.12;
    const input=completed&&!layout.sequence?values[u.links[0]]:null;
    u.inputs.forEach((o,i)=>{const v=input?.[i];o.scale.setScalar(v==null?1:Math.abs(v)<1e-9?.55:1+Math.min(2,Math.abs(v))*.3);o.material.emissiveIntensity=active&&Number.isFinite(v)&&Math.abs(v)>1e-9?1.1:.08;});

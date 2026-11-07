@@ -3,6 +3,19 @@ import {createProgress} from './level-progress.js?v=slow-demo-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
+function animationSchedule(nodes,depths,durationFor,travel,independent){
+ const timings=new Map(),depthEnds=[0];
+ for(const n of [...nodes].sort((a,b)=>depths[a.id]-depths[b.id])){
+  const depth=depths[n.id],duration=Math.max(1,durationFor(n));
+  const ready=independent?Math.max(0,...n.links.map(from=>timings.get(from)?.end||0)):depthEnds[depth-1];
+  const start=ready+travel,end=start+duration;
+  timings.set(n.id,{start,end});depthEnds[depth]=Math.max(depthEnds[depth]||0,end);
+ }
+ // Small teaching boards retain their step-by-step waves. The full model
+ // follows data dependencies, without a barrier between unrelated branches.
+ if(!independent)for(const n of nodes)timings.get(n.id).end=depthEnds[depths[n.id]];
+ return {nodes:timings,depthEnds,end:Math.max(...depthEnds)+travel};
+}
 I18n.prepare({definitions:M.definitions,levels:M.levels,routes:M.routes,controls:M.engineControls,metrics:M.metricLabels,vocab:M.math.vocab});
 for(const id of Object.keys(M.levels))I18n.prepare(M.samplesFor(id));
 I18n.activate();
@@ -136,7 +149,7 @@ function stageChrome(){
  closeHint();
  const c=stage();document.body.classList.toggle('demo-level',!!c.demonstration);
  $('#scene').setAttribute('aria-label',I18n.t(c.floating?'拖动旋转 · Shift / 右键拖动平移 · 滚轮缩放':c.demonstration?'拖动转动视角 · 双击查看基础组件':'拖动空白转动视角，拖动模块重新摆放'));
- $('#demo-follow').hidden=!c.floating;$('#demo-follow-view').hidden=!c.floating;$('#demo-pan').hidden=!c.floating;$('#demo-views').hidden=!c.demonstration;$('#demo-views').innerHTML=(c.demoViews||[]).map(view=>`<button type="button" data-demo-view="${view.key}">${view.label}</button>`).join('');
+ $('#demo-follow').hidden=!c.floating;$('#demo-follow-next').hidden=!c.floating;$('#demo-follow-view').hidden=!c.floating;$('#demo-pan').hidden=!c.floating;$('#demo-views').hidden=!c.demonstration;$('#demo-views').innerHTML=(c.demoViews||[]).map(view=>`<button type="button" data-demo-view="${view.key}">${view.label}</button>`).join('');
  document.body.dataset.stageColor=stageColor(c);renderStructureMap();document.body.classList.toggle('engine-level',!!c.engine);$('#device-docks').hidden=!c.engine;resetReport();$('#engine-controls').hidden=!c.engine;engineControls();$('.scene-legend').hidden=c.nodes.length===0;$('.scene-identity .chip').textContent=c.demonstration?I18n.t('完整演示'):I18n.t('自由接线');$('#scene-help').textContent=c.floating?I18n.t('拖动旋转 · Shift / 右键拖动平移 · 滚轮缩放'):c.demonstration?I18n.t('拖动转动视角 · 双击查看基础组件'):c.nodes.length?I18n.t("拖模块摆放 · 点连线删除 · 双击查看模块卡"):I18n.t("圆口出，方口进 · 拖动空白转动视角");$('#pass-count').textContent='0 / '+c.sampleCount;document.title=I18n.t("神经工坊 · ")+c.title;$('.chapter span').textContent=c.chapter;$('.chapter strong').textContent=c.title;
  $('.mission h2').textContent=c.mission;$('.mission p').textContent=c.description;$('#mission-limits').innerHTML=c.engine?Object.entries(c.limits).map(([key,value])=>{const [name,unit]=M.metricLabels[key];return `<span>${name} ${key==='tps'||key==='aneMin'?'≥':'≤'} ${value} ${unit}</span>`;}).join(''):'';
  const reason=c.rationale;$('#mission-reason').hidden=!reason;
@@ -379,7 +392,7 @@ $('#about-open').onclick=()=>$('#about').showModal();$('#about-close').onclick=(
 try{
  const T=await import('./vendor/three.module.js');
  const host=$('#scene'),overlay=$('#labels'),scene=new T.Scene(),orthoCamera=new T.OrthographicCamera(-11.5,11.5,7,-7,.1,100),spaceCamera=new T.PerspectiveCamera(32,1,.1,2000),renderer=new T.WebGLRenderer({antialias:true,alpha:true});
- let camera=orthoCamera,cameraPan=false,followData=true,followView='medium';
+ let camera=orthoCamera,cameraPan=false,followData=true,followView='medium',followedPacket=null,followSeed=null;
  const followProfiles={wide:{padding:34,min:3,yaw:.3,pitch:.9},medium:{padding:21,min:1.5,yaw:.15,pitch:.65},close:{padding:12,min:.9,yaw:.3,pitch:.42}};
  renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setClearColor(0,0);renderer.shadowMap.enabled=true;renderer.shadowMap.type=T.PCFSoftShadowMap;host.appendChild(renderer.domElement);
  scene.add(new T.HemisphereLight(0xfffdf2,0xa0b4a6,1.9));const sun=new T.DirectionalLight(0xfffcf2,1.9);sun.position.set(-4,14,8);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);Object.assign(sun.shadow.camera,{left:-15,right:15,top:12,bottom:-12});sun.shadow.bias=-.001;scene.add(sun);
@@ -387,7 +400,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=slow-demo-1');
+ const {createSceneArt}=await import('./scene-art.js?v=independent-demo-1');
  function scenePalette(){
   if(typeof getComputedStyle!=='function')return {};
   const css=getComputedStyle(document.body),read=name=>css.getPropertyValue(name).trim();
@@ -395,7 +408,7 @@ try{
  }
  const art=createSceneArt(T,scene,colors,{anisotropy:renderer.capabilities.getMaxAnisotropy()});art.surroundings(samples(),stage(),scenePalette());
  let fusionEffect=null,tokenPreview=null;
- const assembly=new T.Group(),wires=new T.Group();scene.add(assembly,wires);const neuronGeo=new T.SphereGeometry(.115,16,12);let elements=[],curves=[],packets=[],drag=null,preview=null,yaw=.05,pitch=.8,zoom=stage().zoom,lastDepth=-1;
+ const assembly=new T.Group(),wires=new T.Group();scene.add(assembly,wires);const neuronGeo=new T.SphereGeometry(.115,16,12);let elements=[],curves=[],packets=[],drag=null,preview=null,yaw=.05,pitch=.8,zoom=stage().zoom,lastDepth=-1,playbackTimeline=null;
  const cameraTarget=new T.Vector3();let focusId=null,shelfFocus=null,shelfModel=null,overview=null,cameraFrame=0,transitioning=false,lastTap=null;
  const ray=new T.Raycaster(),cursor=new T.Vector2(),plane=new T.Plane(new T.Vector3(0,1,0),0);
  function dispose(group){for(const o of [...group.children]){group.remove(o);o.traverse(c=>{if(c.geometry&&!c.geometry.userData?.shared)c.geometry.dispose();c.material?.map?.dispose();c.material?.dispose?.();});}}
@@ -444,7 +457,7 @@ try{
  function neuralModule(n){art.module(assembly,n,definition(n.id),M.weights);}
  function rebuild(){if(focusId)leaveFocus();clearPreview();dispose(assembly);dispose(wires);art.resetUnits();curves=[];state.nodes.forEach(neuralModule);state.nodes.forEach(n=>n.links.forEach((id,i)=>{if(id)wire(id,n.id,i);}));if(state.sink)wire(state.sink,'sink',0);labels();}
  function addLabel(tag,klass,html,attrs,pos){const el=document.createElement(tag);el.className=klass;const owner=attrs['data-owner']||attrs['data-node']||attrs['data-output']||attrs['data-input']?.split(':')[0];el.innerHTML=String(html);for(const [k,v]of Object.entries(attrs))el.setAttribute(k,v);if(owner)el.dataset.owner=owner;overlay.appendChild(el);elements.push({el,pos});return el;}
- function labels(){art.sync(current?.values,current?.depths||{},level,selected,sample,results,busy,stage(),current?.output,tokenPreview);overlay.querySelectorAll('.node-label,.port,.source-label,.node-value,.local-fault,.fault-pin,.device-badge,.row-marker,.wire-actions,.demo-section-label').forEach(el=>el.remove());elements=[];
+ function labels(){art.sync(current?.values,current?.depths||{},level,selected,sample,results,busy,stage(),current?.output,tokenPreview,playbackTimeline);overlay.querySelectorAll('.node-label,.port,.source-label,.node-value,.local-fault,.fault-pin,.device-badge,.row-marker,.wire-actions,.demo-section-label').forEach(el=>el.remove());elements=[];
   for(const section of stage().demoSections||[])addLabel('span','demo-section-label',section.label,{'style':'color:'+section.color},()=>new T.Vector3(section.x,(section.y||0)+.2,section.z));
   const edge=selectedWire&&curves.find(c=>c.to===selectedWire.to&&c.index===selectedWire.index&&c.from===selectedWire.from);
   if(edge&&!busy&&!focusId)addLabel('div','wire-actions',`<span>${outputName(edge.from)} → ${edge.to==='sink'?stage().outputTitle:nodeName(edge.to)}</span><button type="button" data-delete-wire>${I18n.t("删除连线")}</button><button type="button" data-close-wire aria-label="${I18n.t("关闭")}">×</button>`,{},()=>edge.curve.getPoint(.5));
@@ -750,7 +763,7 @@ try{
    effect.frame=requestAnimationFrame(tick);
   });
  }
- function clearPackets(){finishFusion(false);tokenPreview=null;packets.forEach(p=>{p.el.remove();p.calculation?.remove();p.outputLabels?.forEach(({el})=>el.remove());for(const mesh of [p.mesh,p.otherMesh,p.outputMesh].filter(Boolean)){scene.remove(mesh);mesh.traverse(o=>{o.geometry?.dispose();o.material?.map?.dispose();o.material?.dispose();});}});packets=[];art.clearProcessing();render();}
+ function clearPackets(){finishFusion(false);tokenPreview=null;playbackTimeline=null;followedPacket=null;packets.forEach(p=>{p.el.remove();p.calculation?.remove();p.outputLabels?.forEach(({el})=>el.remove());for(const mesh of [p.mesh,p.otherMesh,p.outputMesh].filter(Boolean)){scene.remove(mesh);mesh.traverse(o=>{o.geometry?.dispose();o.material?.map?.dispose();o.material?.dispose();});}});packets=[];art.clearProcessing();render();}
  function finishDemo(id){
   if(!followData)return Promise.resolve();
   const from=cameraTarget.clone(),startZoom=zoom,startYaw=yaw,startPitch=pitch;let previous=animationTime(),elapsed=0;
@@ -797,17 +810,14 @@ try{
    while(from&&!visited.has(from)){visited.add(from);const ids=ev.values[from];if(ids?.length===3&&ids.every(v=>Number.isInteger(v)&&M.math.vocab[v]!=null))return ids.map(i=>M.math.vocab[i]);if(from==='Z'&&stage().secondaryTokenIds)return stage().secondaryTokenIds.map(i=>M.math.vocab[i]);from=state.nodes.find(other=>other.id===from)?.links[0];}
    return samples()[sample].word.split(' / ');
   };
-  const lastWave=Math.max(0,...Object.values(ev.depths)),starts=[0],ends=[0];
   // Travel is 1.5× faster than before; every operator keeps its original clock.
-  const travelDuration=2/3;
-  for(let depth=1;depth<=lastWave;depth++){
-   const durations=readyNodes.filter(n=>ev.depths[n.id]===depth).map(n=>{
-    const d=definition(n.id),tokenOperation=art.tokenOperation(d);
-    return d.type==='pick'?art.selectionFrame(0,d.ins[0]/d.out,d.out).duration:tokenOperation?art.tokenFrame(0,tokenOperation).duration:['norm','layernorm'].includes(d.type)?normalizationFrame(0,d.type==='layernorm').duration:seq&&(projectionNode(n.id)||d.type==='mix')?art.sequenceProjectionFrame(0,d.type==='mix'?d.out/3:weightsFor(n.id)[0].length).duration:!seq&&(projectionNode(n.id)||['multiply','add'].includes(d.type))?art.projectionFrame(0,ev.values[n.id].length).duration:1;
-   });
-   starts[depth]=ends[depth-1]+travelDuration;ends[depth]=starts[depth]+Math.max(1,...durations);
-  }
-  const max=ends[lastWave]+travelDuration;
+  const travelDuration=2/3,independent=!!stage().demonstration;
+  const schedule=animationSchedule(readyNodes,ev.depths,n=>{
+   const d=definition(n.id),tokenOperation=art.tokenOperation(d);
+   return d.type==='pick'?art.selectionFrame(0,d.ins[0]/d.out,d.out).duration:tokenOperation?art.tokenFrame(0,tokenOperation).duration:['norm','layernorm'].includes(d.type)?normalizationFrame(0,d.type==='layernorm').duration:seq&&(projectionNode(n.id)||d.type==='mix')?art.sequenceProjectionFrame(0,d.type==='mix'?d.out/3:weightsFor(n.id)[0].length).duration:!seq&&(projectionNode(n.id)||['multiply','add'].includes(d.type))?art.projectionFrame(0,ev.values[n.id].length).duration:1;
+  },travelDuration,independent);
+  const timings=schedule.nodes,ends=schedule.depthEnds,lastWave=ends.length-1,max=schedule.end;
+  if(independent)playbackTimeline={nodes:timings,time:-1};
   // The complete model uses the same operation clock as every teaching level.
   // Never compress it to a total runtime: slow playback must keep each column readable.
   const clamp=x=>Math.max(0,Math.min(1,x)),ramp=(x,a,b)=>{const v=clamp((x-a)/(b-a));return v*v*(3-2*v);};
@@ -822,13 +832,13 @@ try{
    const mesh=art.packet(values,color,{sequence:seq});Object.assign(mesh.userData,{packet:motion==='wire',row:el.dataset.row,from,to});mesh.visible=false;scene.add(mesh);
    return {values,el,cells,mesh,color,materials:fadeMaterials(mesh),p:new T.Vector3(),motion};
   }
-  // Give every depth enough processing time for all output columns. Shorter
-  // operations hold their result; joins still wait for the final incoming branch.
+  // Each wire departs when its producer finishes. Early inputs wait only at
+  // their actual join, until that component has received every input.
   const processPaths=new Map(readyNodes.map(n=>[n.id,new T.CubicBezierCurve3(point(n.id,'in',0),new T.Vector3(n.x-.7,(n.y||0)+1.15,n.z),new T.Vector3(n.x+.7,(n.y||0)+1.15,n.z),point(n.id))]));
   curves.filter(c=>ev.values[c.from]).forEach(edge=>{
    const p=movingPacket(ev.values[edge.from],edge.from,edge.to,'wire');
    const perRow=!seq&&sample<3,departure=perRow&&['R','Z'].includes(edge.from)?new T.LineCurve3(rowEndpoint('source'),edge.curve.getPoint(0)):null,arrival=perRow&&edge.to==='sink'?new T.LineCurve3(edge.curve.getPoint(1),rowEndpoint('sink')):null;
-   const start=ends[ev.depths[edge.from]||0],processStart=processPaths.has(edge.to)?starts[ev.depths[edge.to]]:null;
+   const start=timings.get(edge.from)?.end||0,processStart=timings.get(edge.to)?.start??null;
    Object.assign(p,{edge,departure,arrival,start,processStart,end:processStart==null?start+travelDuration:processStart+(edge.index>0&&!handledSecondary(edge.to)?.25:0)});
    p.p=departure?.getPoint(0)||edge.curve.getPoint(0);p.mesh.position.copy(p.p);packets.push(p);
   });
@@ -954,7 +964,7 @@ try{
     };
     updateEquation(0);Object.assign(p,{calculation,equation,sum,updateEquation,column:0,projectionRow:0});
    }
-   Object.assign(p,{node:n,input,output,outputMesh,outputMaterials:fadeMaterials(outputMesh),morph,after,beforeWidth,afterWidth,start:starts[ev.depths[n.id]],end:ends[ev.depths[n.id]],path:processPaths.get(n.id)});
+   Object.assign(p,{node:n,input,output,outputMesh,outputMaterials:fadeMaterials(outputMesh),morph,after,beforeWidth,afterWidth,...timings.get(n.id),path:processPaths.get(n.id)});
    p.p=p.path.getPoint(0);p.mesh.position.copy(p.p);p.outputMesh.position.copy(p.p);packets.push(p);
   });
   art.pulseSource(reduced?1:0);
@@ -967,9 +977,11 @@ try{
    const delta=Math.max(0,clock-previous);elapsed+=delta*playbackSpeed;previous=clock;
    const t=Math.min(max,elapsed/ms);level=0;while(level<lastWave&&t>=ends[level+1])level++;
    if(t>=max){clearPackets();labels();renderShelf();resolve();return;}
-   if(level!==lastDepth){lastDepth=level;labels();renderShelf();}
+   if(playbackTimeline)playbackTimeline.time=t;
+   const phase=independent?[...timings.values()].reduce((count,n)=>count+Number(t>=n.start)+Number(t>=n.end),0):level;
+   if(phase!==lastDepth){lastDepth=phase;labels();renderShelf();}
    if(tokenSink){
-    const values=ev.values[tokenSink.id],clock=t-starts[ev.depths[tokenSink.id]];
+    const values=ev.values[tokenSink.id],clock=t-timings.get(tokenSink.id).start;
     let ready=0;
     if(M.nodeKind(tokenSink)==='feedback'){
      // The retained words come from the stored context. Reveal the new final
@@ -1075,18 +1087,7 @@ try{
     }
     if(!p.paired)p.mesh.position.copy(p.p);
    });
-   if(stage().floating&&followData&&!focusId){
-    // Follow one model region at a time, keeping its parallel heads in frame. Smooth both the focus and framing;
-    // manual navigation immediately stops following.
-    const active=packets.filter(p=>p.wasActive),work=active.filter(p=>p.motion==='process'),candidates=work.length?work:active;
-    const sectionOf=p=>M.demo.sections[p.node?.id||p.edge?.to],section=['encoder','masked','cross','readout'].find(section=>candidates.some(p=>sectionOf(p)===section)),tracking=candidates.filter(p=>!section||sectionOf(p)===section);
-    if(tracking.length){
-     const bounds=new T.Box3().setFromPoints(tracking.map(p=>p.motion==='process'?new T.Vector3(p.node.x,(p.node.y||0)+.7,p.node.z):p.p)),target=bounds.getCenter(new T.Vector3()),right=new T.Vector3().setFromMatrixColumn(camera.matrixWorld,0),up=new T.Vector3().setFromMatrixColumn(camera.matrixWorld,1);
-     const offsets=tracking.map(p=>p.p.clone().sub(target)),xs=offsets.map(p=>p.dot(right)),ys=offsets.map(p=>p.dot(up));
-     const profile=followProfiles[followView],span=Math.max(Math.max(...xs)-Math.min(...xs)+profile.padding,(Math.max(...ys)-Math.min(...ys)+profile.padding*.67)*host.clientWidth/host.clientHeight),framing=Math.max(profile.min,Math.min(stage().zoom,span*1.1/23)),ease=1-Math.exp(-Math.min(delta,100)/300);
-     cameraTarget.lerp(target,ease);zoom+=(framing-zoom)*ease;yaw+=(profile.yaw-yaw)*ease;pitch+=(profile.pitch-pitch)*ease;
-    }
-   }
+   if(stage().floating&&followData&&!focusId)frameFollowing(followTracking(),delta);
    render();requestAnimationFrame(tick);
   }requestAnimationFrame(tick);});
  }
@@ -1106,6 +1107,45 @@ try{
  function previewAt(x,y){clearPreview();if(!pending)return;const p=worldPoint(x,y);if(!p)return;p.y=.6;preview=new T.Line(new T.BufferGeometry().setFromPoints(curve(point(pending),p).getPoints(30)),new T.LineDashedMaterial({color:0xbd8e57,dashSize:.2,gapSize:.1}));preview.computeLineDistances();scene.add(preview);render();}
  overlay.addEventListener('click',e=>{const b=e.target.closest('button');if(!b||busy)return;if(b.hasAttribute('data-delete-node')){removeModule(b.dataset.deleteNode);return;}if(b.hasAttribute('data-close-node')){actionNode=null;labels();return;}if(b.hasAttribute('data-delete-wire')){deleteWire();return;}if(b.hasAttribute('data-close-wire')){selectedWire=null;labels();return;}if(b.hasAttribute('data-dismiss-result')){e.stopPropagation();fault=null;$('#run-report').hidden=true;labels();$('#run').focus({preventScroll:true});return;}if(b.dataset.assign){select(b.dataset.assign);say(I18n.t("把芯片标记拖到目标区域，或点击下方 CPU / GPU / ANE。"));return;}if(b.dataset.suppress)return;if(b.dataset.output)chooseOutput(b.dataset.output);if(b.dataset.input){const [to,i]=b.dataset.input.split(':');chooseInput(to,Number(i));}if(b.dataset.node&&!suppressNodeClick)select(b.dataset.node);});
  overlay.addEventListener('keydown',e=>{const b=e.target.closest('[data-node]');if(b&&e.key==='Enter'){e.preventDefault();focus(b.dataset.node);}});
+ function activeFollowPackets(){return packets.filter(p=>p.wasActive||p.motion==='feedback');}
+ function followTracking(active=activeFollowPackets()){
+  if(!active.length)return [];
+  if(!followedPacket&&followSeed)followedPacket=active.find(p=>p.edge?.from===followSeed)||null;
+  if(followedPacket&&!active.includes(followedPacket)){
+   // Stay on the chosen path through wire → operator → output wire. If a
+   // frame skips a short transfer, search its downstream dependencies too.
+   const boundary=followedPacket.node?.id||followedPacket.edge?.to,queue=[boundary],seen=new Set();let next=null;
+   while(queue.length&&!next){
+    const id=queue.shift();if(!id||seen.has(id))continue;seen.add(id);
+    next=active.find(p=>p.node?.id===id)||active.find(p=>p.edge?.from===id);
+    if(!next)for(const n of state.nodes)if(n.links.includes(id))queue.push(n.id);
+   }
+   followedPacket=next||active.find(p=>p.motion==='process')||active[0];
+  }
+  if(followedPacket)return [followedPacket];
+  const work=active.filter(p=>p.motion==='process'),candidates=work.length?work:active;
+  const sectionOf=p=>M.demo.sections[p.node?.id||p.edge?.to],section=['encoder','masked','cross','readout'].find(section=>candidates.some(p=>sectionOf(p)===section));
+  return candidates.filter(p=>!section||sectionOf(p)===section);
+ }
+ function frameFollowing(tracking,delta=100,immediate=false){
+  if(!tracking.length)return;
+  const bounds=new T.Box3().setFromPoints(tracking.map(p=>p.motion==='process'?new T.Vector3(p.node.x,(p.node.y||0)+.7,p.node.z):p.p)),target=bounds.getCenter(new T.Vector3()),right=new T.Vector3().setFromMatrixColumn(camera.matrixWorld,0),up=new T.Vector3().setFromMatrixColumn(camera.matrixWorld,1);
+  const offsets=tracking.map(p=>p.p.clone().sub(target)),xs=offsets.map(p=>p.dot(right)),ys=offsets.map(p=>p.dot(up));
+  const profile=followProfiles[followView],span=Math.max(Math.max(...xs)-Math.min(...xs)+profile.padding,(Math.max(...ys)-Math.min(...ys)+profile.padding*.67)*host.clientWidth/host.clientHeight),framing=Math.max(profile.min,Math.min(stage().zoom,span*1.1/23)),ease=immediate?1:1-Math.exp(-Math.min(delta,100)/300);
+  cameraTarget.lerp(target,ease);zoom+=(framing-zoom)*ease;yaw+=(profile.yaw-yaw)*ease;pitch+=(profile.pitch-pitch)*ease;
+ }
+ function cycleFollow(){
+  if(!stage().floating)return;if(focusId)leaveFocus();setFollow(true);
+  const active=activeFollowPackets();
+  if(active.length){
+   const current=followTracking(active)[0];followedPacket=active[(active.indexOf(current)+1)%active.length];followSeed=null;
+   frameFollowing([followedPacket],100,true);
+  }else{
+   const sources=stage().sources;followSeed=sources[(sources.indexOf(followSeed)+1)%sources.length];
+   frameFollowing([{motion:'wire',p:point(followSeed)}],100,true);
+  }
+  render();
+ }
  function setFollow(enabled){followData=!!enabled;$('#demo-follow').setAttribute('aria-pressed',String(followData));if(followData){cameraPan=false;$('#demo-pan').setAttribute('aria-pressed','false');}}
  function dragCamera(e){
   if(stage().floating&&!focusId)setFollow(false);
@@ -1114,6 +1154,7 @@ try{
  }
  for(const target of [host,overlay])target.addEventListener('contextmenu',e=>{if(stage().floating)e.preventDefault();});
  $('#demo-follow').onclick=()=>setFollow(!followData);
+ $('#demo-follow-next').onclick=cycleFollow;
  $('#demo-follow-view').onchange=e=>{if(!followProfiles[e.target.value])return;followView=e.target.value;setFollow(true);};
  $('#demo-pan').onclick=()=>{setFollow(false);cameraPan=!cameraPan;$('#demo-pan').setAttribute('aria-pressed',String(cameraPan));};
  overlay.addEventListener('pointerdown',e=>{if(transitioning)return;if(busy){dragCamera(e);return;}const b=e.target.closest('button');if(!b)return;if(stage().demonstration){dragCamera(e);if(!drag.pan)drag.inspect=b.dataset.node;return;}if(b.dataset.assign){selected=b.dataset.assign;drag={kind:'device',id:b.dataset.assign,x:e.clientX,y:e.clientY,moved:false};return;}if(b.dataset.output){clearConnectionError();drag={kind:'wire',id:b.dataset.output,el:b,x:e.clientX,y:e.clientY,moved:false};}if(b.dataset.node){if(focusId){drag={kind:'camera',x:e.clientX,y:e.clientY,yaw,pitch,moved:false};return;}const n=state.nodes.find(n=>n.id===b.dataset.node),p=worldPoint(e.clientX,e.clientY);selected=n.id;actionNode=null;drag={kind:'node',id:n.id,x:e.clientX,y:e.clientY,moved:false,old:clone(state),offset:p?[n.x-p.x,n.z-p.z]:[0,0]};renderShelf();}});
@@ -1136,7 +1177,7 @@ try{
  $('#demo-views').onclick=e=>{const view=stage().demoViews?.find(v=>v.key===e.target.closest('[data-demo-view]')?.dataset.demoView);if(!view)return;setFollow(false);if(focusId)leaveFocus();cameraTarget.set(view.x,view.y||0,view.z);zoom=view.zoom;yaw=.05;pitch=.8;render();};
  $('#camera-reset').onclick=()=>{if(stage().floating&&!focusId)setFollow(false);if(focusId){const n=shelfFocus?{x:0,z:0}:state.nodes.find(n=>n.id===focusId);transition(new T.Vector3(n.x,(n.y||0)+.72,n.z),Math.max(4.1,3.5*host.clientWidth/host.clientHeight)/23,.32,.92);}else{yaw=.05;pitch=.8;zoom=stage().zoom;cameraTarget.set(0,0,0);render();}};
  function beforeStage(){clearConnectionError();if(focusId)leaveFocus();cancelAnimationFrame(cameraFrame);transitioning=false;host.setAttribute('aria-busy','false');drag=lastTap=null;clearPreview();clearPlacement();clearPackets();elements=[];overlay.replaceChildren();}
- function setStage(){setFollow(!!stage().floating);cameraPan=false;$('#demo-pan').setAttribute('aria-pressed','false');art.surroundings(samples(),stage(),scenePalette());yaw=.05;pitch=.8;zoom=stage().zoom;cameraTarget.set(0,0,0);rebuild();}
+ function setStage(){followSeed=null;setFollow(!!stage().floating);cameraPan=false;$('#demo-pan').setAttribute('aria-pressed','false');art.surroundings(samples(),stage(),scenePalette());yaw=.05;pitch=.8;zoom=stage().zoom;cameraTarget.set(0,0,0);rebuild();}
  function relocalize(){clearConnectionError();art.surroundings(samples(),stage(),scenePalette());rebuild();packets.forEach(p=>{p.el.querySelector('.packet-title').textContent=p.motion==='feedback'?I18n.t('接回输入'):packetIdentity(p.el.dataset.from);if(p.sequenceProjection)p.updateEquation(p.column,p.projectionRow);if(p.motion==='wire'&&(definition(p.el.dataset.from)?.type==='pick'||kindOf(p.el.dataset.from)==='feedback'))p.cells.textContent=M.readTokens(p.values);if(p.appending){p.cells.textContent=M.readTokens(p.input);p.after.textContent=M.readTokens(p.output);}if(p.selection&&p.progress!=null){p.after.textContent=M.readTokens(p.output);p.updateSelection(art.selectionFrame(p.progress,p.input.length/p.output.length,p.output.length));p.outputLabels.forEach(({el},j)=>el.textContent=M.math.vocab[p.output[j]]);}if(p.normalizing&&p.progress!=null)p.updateRMS(normalizationFrame(p.progress,p.centering));if(p.tokenOperation&&p.progress!=null)p.updateToken(art.tokenFrame(p.progress,p.tokenOperation));if(p.motion==='process'&&p.progress!=null)art.processing(p.node.id,p.progress,p.input,p.output,p.color,{sequence:!!stage().sequence,detailed:p.detailed,paired:p.paired,other:p.other,words:p.words?.(),valueWords:p.valueWords?.()});});render();}
  new ResizeObserver(render).observe(host);world={relocalize,labels,rebuild,animate,feedback,finishDemo,fuse,skipFusion:()=>finishFusion(true),clearPackets,showConnectionError,clearConnectionError,clearPreview,clearPlacement,previewAt,previewPlacement,focus,focusShelf,focused:()=>focusId,beforeStage,setStage,syncShelf:()=>syncPlacementGuide(host.clientWidth,host.clientHeight)};$('#loading').hidden=true;rebuild();refresh();
 }catch(e){$('#loading').innerHTML=I18n.t("<strong>3D 台面没有加载成功，请刷新重试。</strong>");say(I18n.t("页面尚未开始运行。"),'error');console.error(e);}
