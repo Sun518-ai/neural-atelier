@@ -1,5 +1,5 @@
-import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=append-preview-1';
-import {createProgress} from './level-progress.js?v=append-preview-1';
+import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=menu-navigation-1';
+import {createProgress} from './level-progress.js?v=menu-navigation-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -166,10 +166,11 @@ function stageChrome(){
  $('.route').innerHTML=`${I18n.t("<span>输入 token</span><i>→</i>")}${c.id==='ffn'?I18n.t("<span>归一化输入 · 已就绪</span><i>→</i>"):''}<strong>${c.concept}</strong><i>→</i><span>${c.outputTitle}${I18n.t("</span><span class=\"route-tail\">教学缩尺 ")}${c.shape}</span>`;
 }
 function renderLevelMenu(){
- const route=M.routes[menuTrack],list=$('#level-list');
+ const route=M.routes[menuTrack],list=$('#level-list'),navigation=$('#level-stage-nav');
  $('#level-menu').dataset.stageColor=menuTrack;
  $('#level-tracks').innerHTML=Object.entries(M.routes).map(([id,r])=>`<button type="button" role="tab" id="level-track-${id}" data-track="${id}" data-stage-color="${id}" aria-selected="${id===menuTrack}" aria-controls="level-list">${r.name}<span>${r.ids.length}</span></button>`).join('');
  $('.level-menu-intro').textContent=route.description;
+ navigation.hidden=!route.groups;navigation.setAttribute('aria-label',M.levelMenuCopy.stages);navigation.replaceChildren();
  list.setAttribute('aria-labelledby','level-track-'+menuTrack);list.classList.toggle('grouped-levels',!!route.groups);
  const card=id=>{
   const c=M.levels[id],menu=c.menu;
@@ -179,7 +180,8 @@ function renderLevelMenu(){
  const groupId=group=>'level-group-'+menuTrack+'-'+group.id;
  const groupCards=group=>group.id==='decoder'?group.ids.slice(0,2).map(card).join('')+`<div class="decoder-lesson-chain" aria-label="${M.levelMenuCopy.decoderSteps}"><h4>${M.levelMenuCopy.decoderSteps}</h4>${group.ids.slice(2).map(card).join('')}</div>`:group.ids.map(card).join('');
  const connections=flow=>`<div class="level-dependencies" aria-label="${M.levelMenuCopy.connections}"><div class="level-dependency-sources">${flow.sources.map(source=>`<div><small>${source.label}</small><b>${source.text}</b></div>`).join('')}</div><svg viewBox="0 0 32 80" aria-hidden="true"><path d="M2 18 H14 V40 H28 M2 62 H14 V40 M23 35 L28 40 L23 45"/></svg><div class="level-dependency-target"><small>${flow.target.label}</small><b>${flow.target.text}</b></div></div>`;
- list.innerHTML=`<nav class="level-stage-nav" aria-label="${M.levelMenuCopy.stages}">${route.groups.map(group=>`<button type="button" data-level-group-target="${groupId(group)}" data-stage-color="${group.id}" ${group.ids.includes(stageId)?'aria-current="step"':''}>${group.label}</button>`).join('')}</nav>`+route.groups.map(group=>`<section class="level-group" id="${groupId(group)}" data-level-group="${group.id}" aria-labelledby="${groupId(group)}-title"><header class="level-group-heading"><div><h3 id="${groupId(group)}-title">${group.title}</h3><small>${group.ids.filter(id=>progress.completed(id)).length} / ${group.ids.length} ${M.levelMenuCopy.progress}</small></div><p>${group.description}</p></header>${group.connections?connections(group.connections):''}<div class="level-group-cards">${groupCards(group)}</div></section>`).join('');
+ navigation.innerHTML=route.groups.map(group=>`<button type="button" data-level-group-target="${groupId(group)}" data-stage-color="${group.id}" ${group.ids.includes(stageId)?'aria-current="step"':''}>${group.label}</button>`).join('');
+ list.innerHTML=route.groups.map(group=>`<section class="level-group" id="${groupId(group)}" data-level-group="${group.id}" aria-labelledby="${groupId(group)}-title"><header class="level-group-heading"><div><h3 id="${groupId(group)}-title">${group.title}</h3><small>${group.ids.filter(id=>progress.completed(id)).length} / ${group.ids.length} ${M.levelMenuCopy.progress}</small></div><p>${group.description}</p></header>${group.connections?connections(group.connections):''}<div class="level-group-cards">${groupCards(group)}</div></section>`).join('');
 }
 function levelMenu(){
  closeHint();
@@ -222,8 +224,9 @@ levelDialog.addEventListener('click',e=>{
 });
 levelDialog.addEventListener('cancel',e=>{e.preventDefault();closeLevelMenu();});
 levelDialog.addEventListener('close',()=>levelBackdropStart=null);
-$('#level-list').onclick=e=>{const jump=e.target.closest('[data-level-group-target]');if(jump){document.getElementById(jump.dataset.levelGroupTarget)?.scrollIntoView({block:'start'});return;}const b=e.target.closest('[data-level]');if(b)switchLevel(b.dataset.level);};
-$('#level-tracks').onclick=e=>{const b=e.target.closest('[data-track]');if(b){menuTrack=b.dataset.track;renderLevelMenu();}};
+$('#level-stage-nav').onclick=e=>{const jump=e.target.closest('[data-level-group-target]');if(jump)document.getElementById(jump.dataset.levelGroupTarget)?.scrollIntoView({block:'start'});};
+$('#level-list').onclick=e=>{const b=e.target.closest('[data-level]');if(b)switchLevel(b.dataset.level);};
+$('#level-tracks').onclick=e=>{const b=e.target.closest('[data-track]');if(b){menuTrack=b.dataset.track;renderLevelMenu();$('.level-menu-content').scrollTop=0;}};
 $('#next-level').onclick=()=>switchLevel(stage().next);
 function say(text,tone=''){$('#feedback').textContent=text;$('#feedback').className='feedback '+tone;}
 function checkpoint(){history.push(clone(state));if(history.length>40)history.shift();}
@@ -365,7 +368,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=append-preview-1');
+ const {createSceneArt}=await import('./scene-art.js?v=menu-navigation-1');
  function scenePalette(){
   if(typeof getComputedStyle!=='function')return {};
   const css=getComputedStyle(document.body),read=name=>css.getPropertyValue(name).trim();

@@ -118,6 +118,8 @@ test('learning stages preserve level navigation and keep the other tracks separa
  const app=boot(new Map(),'', ['en-US']),doc=app.document,M=app.c.NeuralPrologue;app.eval('levelMenu()');assert.equal(doc.querySelectorAll('#level-list [data-level]').length,30);assert.equal(doc.querySelector('#level-list [data-level="placement"]'),null);
  assert.deepEqual([...doc.querySelectorAll('#level-list [data-level]')].map(e=>e.dataset.level),Array.from(M.routes.main.ids),'grouping keeps every existing level exactly once and in order');
  assert.equal(doc.querySelectorAll('[data-level-group]').length,6);
+ assert.equal(doc.querySelector('#level-tracks').closest('.level-menu-content'),null);
+ assert.equal(doc.querySelector('#level-stage-nav').closest('.level-menu-content'),null);
  for(const [id,group]of [['multihead','attention'],['wider-features','encoder'],['encoder-layer','encoder'],['causal','decoder'],['cross-attention','decoder']])assert.equal(doc.querySelector(`#level-list [data-level="${id}"]`).closest('[data-level-group]').dataset.levelGroup,group);
  assert.equal(doc.querySelector('#level-list [data-level="wider-features"] .level-purpose').textContent,'Prepare input');
  assert.deepEqual([...doc.querySelectorAll('.decoder-lesson-chain [data-level]')].map(e=>e.dataset.level),['decoder-self','cross-attention','decoder-layer']);
@@ -136,8 +138,10 @@ test('learning stages preserve level navigation and keep the other tracks separa
  assert.match(doc.querySelector('#level-group-main-encoder .level-group-heading small').textContent,/1 \/ 2/);
  const state=app.eval('JSON.stringify(state)');
  for(const language of ['zh','en']){app.c.I18n.setPreference(language);assert.equal(doc.querySelectorAll('#level-list [data-level]').length,30);assert.equal(app.eval('JSON.stringify(state)'),state);if(language==='en')assert.doesNotMatch(doc.querySelector('#level-menu').textContent,/[\u3400-\u9fff]/);}
+ doc.querySelector('.level-menu-content').scrollTop=700;
  app.document.querySelector('[data-track="engine"]').dispatchEvent(new app.window.Event('click',{bubbles:true}));assert.equal(app.document.querySelectorAll('#level-list [data-level]').length,9);assert.ok(app.document.querySelector('#level-list [data-level="placement"]'));assert.doesNotMatch(app.document.querySelector('#level-menu').textContent,/[\u3400-\u9fff]/);
  assert.equal(doc.querySelector('[data-level-group]'),null);assert.equal(doc.querySelector('#level-list').classList.contains('grouped-levels'),false);
+ assert.equal(doc.querySelector('#level-stage-nav').hidden,true);assert.equal(doc.querySelector('#level-stage-nav').children.length,0);assert.equal(doc.querySelector('.level-menu-content').scrollTop,0);
  doc.querySelector('[data-track="modern"]').dispatchEvent(new app.window.Event('click',{bubbles:true}));assert.equal(doc.querySelectorAll('#level-list [data-level]').length,13);assert.equal(doc.querySelector('[data-level-group]'),null);
  assert.deepEqual([...app.c.I18n.missing],[]);
  app.eval("switchLevel('autoregressive');progress.complete(stageId);refresh()");assert.equal(app.document.querySelector('#next-level').hidden,true);app.eval("switchLevel('kv-cache');levelMenu()");assert.equal(app.eval('menuTrack'),'engine');

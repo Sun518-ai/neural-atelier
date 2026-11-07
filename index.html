@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>神经工坊</title><link rel="stylesheet" href="style.css?v=append-preview-1"></head>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>神经工坊</title><link rel="stylesheet" href="style.css?v=menu-navigation-1"></head>
 <body><div id="game">
 <header class="topbar"><a class="brand" id="home-open" href="./" aria-label="返回首页" title="返回首页"><span class="brand-mark">N</span><div><h1>神经工坊</h1><span>NEURAL ATELIER</span></div></a><div class="chapter"><span>正式关卡 / 01</span><strong>让一层醒来</strong></div><button id="levels-open">关卡</button><div class="level-help"><button id="hint" type="button" aria-expanded="false" aria-controls="hint-panel">给个提示</button><section id="hint-panel" hidden role="region" aria-labelledby="hint"><button id="hint-close" type="button" aria-label="关闭提示">×</button><p id="hint-text" role="status" aria-live="polite"></p><button id="hint-next" type="button">下一条提示</button></section></div><button id="settings-open" aria-haspopup="dialog"><span aria-hidden="true">⚙</span> 设置</button><button id="about-open">这是什么？</button>
   <a id="game-github" class="repo-link" href="https://github.com/chainhelen/neural-atelier" target="_blank" rel="noopener noreferrer" aria-label="GitHub 源码仓库（新标签页）" title="GitHub · chainhelen/neural-atelier">
@@ -20,7 +20,8 @@
 
 <dialog id="level-menu" aria-labelledby="levels-title">
  <div class="level-menu-header"><div><div class="eyebrow">从简单的开始</div><h2 id="levels-title">选择关卡</h2></div><button id="levels-close" class="close" aria-label="关闭关卡选择">×</button></div>
- <div class="level-menu-content"><p class="level-menu-intro">先学会一件事，再加入一个组件。每关的搭建进度单独保存。</p><div id="level-tracks" role="tablist" aria-label="关卡路线"></div><div id="level-list" role="tabpanel"></div></div>
+ <div class="level-menu-navigation"><p class="level-menu-intro">先学会一件事，再加入一个组件。每关的搭建进度单独保存。</p><div id="level-tracks" role="tablist" aria-label="关卡路线"></div><nav id="level-stage-nav" class="level-stage-nav" hidden></nav></div>
+ <div class="level-menu-content"><div id="level-list" role="tabpanel"></div></div>
 </dialog>
 
 <dialog id="module-card" class="module-card" aria-labelledby="card-name" aria-describedby="card-meaning">
@@ -91,4 +92,4 @@
   <div class="welcome-footer"><span class="welcome-edition">NEURAL ATELIER · 01</span><a id="welcome-github" class="repo-link" href="https://github.com/chainhelen/neural-atelier" target="_blank" rel="noopener noreferrer" aria-label="GitHub 源码仓库（新标签页）"><span>GitHub · chainhelen/neural-atelier</span><span class="repo-external" aria-hidden="true">↗</span></a></div>
 </dialog>
 <div id="shelf-tooltip" role="tooltip" hidden></div>
-<script src="locales/en.js?v=append-preview-1"></script><script src="i18n.js?v=append-preview-1"></script><script src="music.js?v=append-preview-1"></script><script src="shell.js?v=append-preview-1"></script><script src="model.js?v=append-preview-1"></script><script src="campaign.js?v=append-preview-1"></script><script src="engine-model.js?v=append-preview-1"></script><script src="original-curriculum.js?v=append-preview-1"></script><script src="cloud-curriculum.js?v=append-preview-1"></script><script src="structure-map.js?v=append-preview-1"></script><script type="module" src="game.js?v=append-preview-1"></script></body></html>
+<script src="locales/en.js?v=menu-navigation-1"></script><script src="i18n.js?v=menu-navigation-1"></script><script src="music.js?v=menu-navigation-1"></script><script src="shell.js?v=menu-navigation-1"></script><script src="model.js?v=menu-navigation-1"></script><script src="campaign.js?v=menu-navigation-1"></script><script src="engine-model.js?v=menu-navigation-1"></script><script src="original-curriculum.js?v=menu-navigation-1"></script><script src="cloud-curriculum.js?v=menu-navigation-1"></script><script src="structure-map.js?v=menu-navigation-1"></script><script type="module" src="game.js?v=menu-navigation-1"></script></body></html>
