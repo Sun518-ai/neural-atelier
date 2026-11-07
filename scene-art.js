@@ -1,6 +1,6 @@
 // Scene objects represent weights, features and token rows; math stays in model.js.
 export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
- const context=new T.Group(),floor=new T.Group();scene.add(floor,context);
+ const context=new T.Group(),floor=new T.Group();floor.userData.environmentFloor=true;scene.add(floor,context);
  const units=new Map(),socketRings=new WeakMap(),sharedSphere=new T.SphereGeometry(.115,18,14),rows=[],tokens=[];
  const rowColor=i=>[0x397aa2,0x8862aa,0x288778][i]??0x557e6b;
  const featureColor=i=>[0x397aa2,0x8862aa,0xb68036,0x288778][i%4];
@@ -55,6 +55,10 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   });
   if(!labels.length)return;
   for(const module of modules){
+   if(context.userData.layout?.floating&&detailScope==='board'){
+    const center=new T.Vector3().setFromMatrixPosition(module.matrixWorld).project(camera);
+    if(Math.abs(center.x)>1.2||Math.abs(center.y)>1.2||center.z< -1||center.z>1)continue;
+   }
    const span=(x,z)=>{
     detailBottom.set(-x,.45,-z).applyMatrix4(module.matrixWorld).project(camera);
     detailTop.set(x,.45,z).applyMatrix4(module.matrixWorld).project(camera);
@@ -64,14 +68,16 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   }
   // Judge the whole module, not the fitted font of its longest decimal.
   // Normal-size modules keep all numbers; truly small plates switch together.
+  if(!Number.isFinite(smallest))return;
   const visible=smallest>=(detailModes[detailScope]?95:105);
   detailModes[detailScope]=visible;labels.forEach(mesh=>mesh.visible=visible);
  }
  function surroundings(samples,layout={},palette={}){
   for(const parent of [floor,context])for(const o of [...parent.children]){parent.remove(o);o.traverse(c=>{if(c.geometry&&!c.geometry.userData?.shared)c.geometry.dispose();c.material?.map?.dispose();c.material?.dispose?.();});}
-  tokens.length=0;rows.length=0;floor.visible=context.visible=true;
+  tokens.length=0;rows.length=0;floor.visible=!layout.floating;context.visible=true;
   const sourceX=layout.sourceX??-8.55,sinkX=layout.sinkX??9,dim=layout.sinkDim||2,w=layout.boardWidth??(layout.id==='wire'?11.6:layout.id==='projection'?15:22.1),d=layout.boardDepth??(layout.id==='ffn'||!layout.id?11:7);
   const surface=palette.surface||'#eaf0e4',edge=palette.edge||'#b7c8b9',accent=palette.accent||'#526d5e';
+  if(!layout.floating){
   slab(floor,w,d,.3,0,-.45,0,palette.edge||0xaabcb1);slab(floor,w-.2,d-.2,.09,0,-.12,0,palette.edge||0xd4dfd3);slab(floor,w-.45,d-.45,.035,0,-.01,0,surface);
   for(let x=Math.ceil(-w/2+1);x<w/2-.5;x++)tube(floor,[[x,.075,-d/2+.5],[x,.075,d/2-.5]],edge,.007,.55);
   for(let z=Math.ceil(-d/2+1);z<d/2-.5;z++)tube(floor,[[-w/2+.5,.075,z],[w/2-.5,.075,z]],edge,.007,.55);
@@ -79,10 +85,11 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   for(const x of [-w/2+.45,w/2-.45])for(const z of [-d/2+.4,d/2-.4]){const screw=new T.Mesh(new T.CylinderGeometry(.065,.065,.03,12),mat(0x728a7c));screw.position.set(x,.1,z);floor.add(screw);}
   textTile(context,layout.boardText||'FFN / SWIGLU',3.2,.48,-w/2+3.3,.1,d/2-.8,{color:accent,bg:surface,size:58});
   textTile(context,layout.shape||'2 → 4 → 2',2.5,.45,w/2-3.25,.1,d/2-.8,{color:accent,bg:surface,size:62});
+  }
   const seq=!!layout.sequence,inputCols=seq?(layout.sourceDim||6)/3:2,outCols=seq?(dim===3?1:dim/3):dim;
   const sourceW=inputCols>2?3.4:seq?2.4:1.8,rackW=seq?3.2:dim===4?2.6:1.8;
   for(const sourceId of layout.dualSource?['Z','R']:['R']){
-  const offset=sourceOffset(layout,sourceId);
+  const offset=sourceOffset(layout,sourceId),first=context.children.length;
   slab(context,sourceW,3.8,.42,sourceX,.07,offset,sourceId==='Z'?0x9d91b0:0x7fa6af);slab(context,sourceW-.14,3.64,.08,sourceX,.5,offset,0xe8f1ea);
   [I18n.t("我"),I18n.t("爱"),I18n.t("猫")].forEach((word,i)=>{
    const g=new T.Group();g.position.set(sourceX,.65,rowZ(i)+offset);g.userData.sourceRow=i;g.userData.sourceId=sourceId;context.add(g);
@@ -91,7 +98,9 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
    const label=textTile(g,seq?samples[0].word.split(' / ')[i]:word,.65,.3,inputCols>2?-1.22:seq?-.82:-.3,.17,-.02,{size:70});
    const cells=Array.from({length:inputCols},(_,j)=>{const x=inputCols>2?-.45+j*.48:seq?-.12+j*.48:.17+j*.34;box(g,seq?.4:.24,.12,.36,x,.18,0,0x73aaa6);return textTile(g,'·',seq?.4:.24,.34,x,.25,0,{color:'#fffdf4',bg:'#73aaa6',size:72});});tokens.push({g,cells,label,panel,stripe,sourceId,index:i});
   });
+  context.children.slice(first).forEach(o=>o.position.y+=layout.sourceHeights?.[sourceId]||0);
   }
+  const outputStart=context.children.length;
   slab(context,rackW,3.8,.42,sinkX,.07,0,0x608f7c);slab(context,rackW-.15,3.64,.08,sinkX,.5,0,0xe8f1df);
   const labelX=seq?-1.15:dim===4?-.87:-.47;
   textTile(context,I18n.t("位置"),.48,.28,sinkX+labelX,.63,-1.65,{size:72,color:'#526d5e',bg:'#e8f1df'});
@@ -103,11 +112,12 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
    const cw=seq?Math.min(.7,1.95/outCols):.36;
    const cells=Array.from({length:outCols},(_,j)=>textTile(g,'·',cw,.43,seq?-.55+j*(cw+.03):(dim===4?-.42:-.02)+j*.4,.14,0,{color:'#558974',bg:'#e9f3e2',size:51}));rows.push({g,cells,status,panel,stripe});
   });
+  context.children.slice(outputStart).forEach(o=>o.position.y+=layout.sinkY||0);
   context.userData={samples,layout};
 
  }
  function module(parent,n,d,weights,{register=true}={}){
-  const g=new T.Group();g.position.set(n.x,0,n.z);g.userData.node=n.id;parent.add(g);const color=colors[n.kind||n.id];
+  const g=new T.Group();g.position.set(n.x,n.y||0,n.z);g.userData.node=n.id;parent.add(g);const color=colors[n.kind||n.id];
   const backdrops=new Map();
   function backdrop(object,faint=.12,keep=()=>false){
    object?.traverse(mesh=>{if(!mesh.material)return;const m=mesh.material;mesh.userData.computationBackdrop=true;backdrops.set(mesh,{mesh,faint,keep,opacity:m.opacity,transparent:m.transparent,depthWrite:m.depthWrite,castShadow:mesh.castShadow,receiveShadow:mesh.receiveShadow});});return object;
@@ -778,7 +788,7 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   const fan=ramp(p,.12,.38),alpha=1-ramp(p,.72,.86);mesh.userData.routing=fan>0;
   mesh.children.find(o=>o.userData.packetTray).material.opacity=(1-ramp(p,.12,.3))*alpha;
   for(const {bar,pad,label,home,padHome,labelHome,tone} of routes){
-   const i=bar.userData.feature,target=new T.Vector3(u.g.position.x-1.12,.87,u.g.position.z+u.inputs[i].position.z);
+   const i=bar.userData.feature,target=new T.Vector3(u.g.position.x-1.12,u.g.position.y+.87,u.g.position.z+u.inputs[i].position.z);
    for(const [object,start] of [[bar,home],[pad,padHome],[label,labelHome]]){
     object.position.copy(start);
     if(p>=.12)object.position.copy(anchor).add(start).lerp(target.clone().add(new T.Vector3(0,start.y,0)),fan).sub(origin);
@@ -794,7 +804,7 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   mesh.userData.routing=time>0;mesh.children.find(o=>o.userData.packetTray).material.opacity=1-ramp(time,0,.2);
   for(const {bar,pad,label,home,padHome,labelHome,tone}of mesh.userData.featureRoutes){
    const index=bar.userData.feature,row=Math.floor(index/width),i=index%width,localTime=time-row*timing.rowDuration,p=projectionFrame(localTime,u.outputs.length).phase;
-   const fan=ramp(p,.04,.38),alpha=1-ramp(p,.72,.86),target=new T.Vector3(u.g.position.x-1.12,.87,u.g.position.z+u.inputs[i].position.z);
+   const fan=ramp(p,.04,.38),alpha=1-ramp(p,.72,.86),target=new T.Vector3(u.g.position.x-1.12,u.g.position.y+.87,u.g.position.z+u.inputs[i].position.z);
    const waiting=anchor.clone().add(new T.Vector3(-.55*ramp(time,0,.2),0,0));
    for(const [object,start]of [[bar,home],[pad,padHome],[label,labelHome]])object.position.copy(waiting).add(start).lerp(target.clone().add(new T.Vector3(0,start.y,0)),fan).sub(origin);
    bar.material.color.copy(tone).lerp(new T.Color(u.mixing?rowColor(i):featureColor(i)),fan);bar.material.emissive.copy(bar.material.color);bar.material.opacity=pad.material.opacity=alpha;
@@ -997,5 +1007,5 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   };
  }
  function resetUnits(){units.clear();}
- return {selectionFrame,selectionChoice,selectionAnchor,routeSelectionInput,routeSelectionOutput,surroundings,module,sync,fusionVisual,focusCalculations,updateDetail,detailsVisible:()=>detailModes[detailScope],pulseSource,layerNormFrame,layerNormStats,layerNormAnchor,routeLayerNormInput,routeLayerNormOutput,tokenOperation,tokenFrame,tokenAnchor,routeTokenInput,routeTokenOutput,projectionFrame,sequenceProjectionFrame,routeSequenceProjectionInput,routeSequenceProjectionOutput,routeAggregationValues,rmsFrame,rmsAnchor,routeRMSOutput,projectionColor,pairColorsFor:id=>units.get(id)?.pairTones||pairColors,processing,clearProcessing,packet,prepareProjectionPacket,routeProjectionPacket,routePairedPacket,projectionOutlet,projectionRadius,prepareProjectionOutput,routeProjectionOutput,featureColor,rowColor,rowZ,sourceOffset,resetUnits,focus(active){context.visible=!active;floor.visible=!active;detailScope=active?'card':'board';if(active)detailModes.card=true;}};
+ return {selectionFrame,selectionChoice,selectionAnchor,routeSelectionInput,routeSelectionOutput,surroundings,module,sync,fusionVisual,focusCalculations,updateDetail,detailsVisible:()=>detailModes[detailScope],pulseSource,layerNormFrame,layerNormStats,layerNormAnchor,routeLayerNormInput,routeLayerNormOutput,tokenOperation,tokenFrame,tokenAnchor,routeTokenInput,routeTokenOutput,projectionFrame,sequenceProjectionFrame,routeSequenceProjectionInput,routeSequenceProjectionOutput,routeAggregationValues,rmsFrame,rmsAnchor,routeRMSOutput,projectionColor,pairColorsFor:id=>units.get(id)?.pairTones||pairColors,processing,clearProcessing,packet,prepareProjectionPacket,routeProjectionPacket,routePairedPacket,projectionOutlet,projectionRadius,prepareProjectionOutput,routeProjectionOutput,featureColor,rowColor,rowZ,sourceOffset,resetUnits,focus(active){context.visible=!active;floor.visible=!active&&!context.userData.layout?.floating;detailScope=active?'card':'board';if(active)detailModes.card=true;}};
 }

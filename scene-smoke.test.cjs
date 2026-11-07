@@ -30,6 +30,36 @@ test('the ready-to-run full Transformer renders and completes every basic operat
  app.c.I18n.setPreference('en');assert.deepEqual([...app.c.I18n.missing],[]);
  app.api.switchLevel('wire');assert.equal(app.document.querySelectorAll('.demo-section-label').length,0);assert.equal(app.document.querySelector('#demo-views').hidden,true);
 });
+test('floating demonstration supports full orbit, pan and cursor zoom without editing',async()=>{
+ const app=await boot(),doc=app.document,T=app.c.T;app.api.switchLevel('transformer-demo');
+ const saved=JSON.stringify(app.api.getState()),scene=app.scenes.at(-1),host=doc.querySelector('#scene');
+ host.getBoundingClientRect=()=>({left:0,top:0,width:1400,height:760});
+ assert.ok(app.camera().isPerspectiveCamera);assert.equal(scene.children.find(o=>o.userData.environmentFloor).children.length,0);
+ const assembly=scene.children.find(o=>o.children.some(n=>n.userData.node==='demo-up'));
+ assert.equal(assembly.children.find(o=>o.userData.node==='demo-up').position.y,6);assert.equal(assembly.children.find(o=>o.userData.node==='demo-up-2').position.y,-6);
+ const fire=(target,type,props)=>{const e=new app.window.Event(type,{bubbles:true,cancelable:true});Object.assign(e,props);target.dispatchEvent(e);};
+ const drag=(dx,dy,props={})=>{fire(host,'pointerdown',{clientX:700,clientY:360,...props});fire(doc,'pointermove',{clientX:700+dx,clientY:360+dy});fire(doc,'pointerup',{clientX:700+dx,clientY:360+dy});};
+ const direction=()=>app.camera().getWorldDirection(new T.Vector3());
+ const before=direction();drag(700,0);assert.ok(direction().angleTo(before)>1,'orbit is no longer limited to the old board tilt');
+ const position=app.camera().position.clone(),heading=direction();drag(240,100,{shiftKey:true});assert.ok(app.camera().position.distanceTo(position)>10);assert.ok(direction().distanceTo(heading)<1e-9,'pan preserves heading');
+ doc.querySelector('#demo-pan').onclick();assert.equal(doc.querySelector('#demo-pan').getAttribute('aria-pressed'),'true');const panStart=app.camera().position.clone();drag(-150,0);assert.ok(app.camera().position.distanceTo(panStart)>5);
+ doc.querySelector('#camera-reset').onclick();doc.querySelector('#demo-pan').onclick();
+ const cursor=new T.Vector2(.45,-.1),ray=new T.Raycaster();ray.setFromCamera(cursor,app.camera());
+ const anchor=ray.ray.intersectPlane(new T.Plane().setFromNormalAndCoplanarPoint(direction(),new T.Vector3()),new T.Vector3());
+ fire(host,'wheel',{clientX:(cursor.x+1)*700,clientY:(1-cursor.y)*380,deltaY:-800});
+ const projected=anchor.clone().project(app.camera());assert.ok(Math.abs(projected.x-cursor.x)<1e-9&&Math.abs(projected.y-cursor.y)<1e-9,'zoom stays anchored under the cursor');
+ assert.equal(JSON.stringify(app.api.getState()),saved);app.api.switchLevel('wire');assert.ok(app.camera().isOrthographicCamera);assert.ok(scene.children.find(o=>o.userData.environmentFloor).visible);assert.equal(doc.querySelector('#demo-pan').hidden,true);
+});
+test('floating demonstration completes near one minute, keeps all operators and allows paused navigation',async()=>{
+ let app,pausedOnce=false,initialCamera;const processed=new Set();
+ app=await boot({reduced:false,frameMs:40,onFrame:({document})=>{
+  if(!app)return;for(const p of document.querySelectorAll('.processing-packet'))if(!p.hidden)processed.add(p.dataset.node);
+  if(!pausedOnce&&processed.size>8){pausedOnce=true;assert.ok(app.camera().position.distanceTo(initialCamera)>5,'the camera follows work without user input');app.api.togglePause();const camera=app.camera().position.clone();document.querySelector('[data-demo-view="cross"]').click();assert.ok(app.camera().position.distanceTo(camera)>1);assert.equal(document.querySelector('#demo-follow').getAttribute('aria-pressed'),'false','choosing a region takes manual control');document.querySelector('#demo-follow').onclick();assert.equal(document.querySelector('#demo-follow').getAttribute('aria-pressed'),'true');app.api.togglePause();}
+ }});
+ app.api.switchLevel('transformer-demo');initialCamera=app.camera().position.clone();const saved=JSON.stringify(app.api.getState()),start=app.time();await app.api.run();const elapsed=app.time()-start;
+ assert.ok(elapsed>=60000&&elapsed<61500,'one complete pass takes about 60 seconds at 0.25x');assert.equal(processed.size,67);assert.ok(pausedOnce);
+ assert.equal(app.document.querySelectorAll('#test-results .pass').length,1);assert.equal(JSON.stringify(app.api.getState()),saved);assert.equal(app.document.querySelectorAll('.packet').length,0);
+});
 test('demonstration cards show the selected instance and return to observation controls',async()=>{
  const app=await boot(),M=app.c.NeuralPrologue,doc=app.document;
  app.api.switchLevel('transformer-demo');const s=app.api.getState(),saved=JSON.stringify(s),ev=M.evaluate(s,M.samplesFor(s.levelId)[0].v);
