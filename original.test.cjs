@@ -302,6 +302,24 @@ test('the encoder–decoder capstone keeps source and target streams separate al
  assert.equal(ev.output.length,18);assert.ok(close(ev.output,O.vocabulary(ev.values['original-decoder'])));
  differs('encoder-decoder',s=>s.nodes.find(n=>n.id==='original-decoder').links.reverse());
 });
+test('vocabulary scoring is taught before model assembly using the decoder’s exact four-feature output',()=>{
+ const ids=['decoder-layer','vocabulary-scores','encoder-decoder','vocabulary','autoregressive'],route=Array.from(M.routes.main.ids);
+ assert.deepEqual(route.slice(route.indexOf(ids[0])),ids);
+ assert.deepEqual(plain(M.routes.main.groups.at(-1).ids),ids.slice(1));
+ ids.forEach((id,i)=>{assert.equal(M.levels[id].chapter,'原版基础 / '+(16+i));assert.equal(M.levels[id].next,ids[i+1]||null);});
+ assert.equal(M.levels['vocabulary-scores'].sourceDim,12);assert.equal(M.levels.vocabulary.sourceDim,12);
+ assert.deepEqual(plain(M.levels['vocabulary-scores'].nodes),['original-head']);
+ for(const [i,sample]of M.samplesFor('decoder-layer').entries()){
+  const d=M.reference(sample.v,'decoder-layer'),scoring=M.samplesFor('vocabulary-scores')[i].v,selection=M.samplesFor('vocabulary')[i].v;
+  assert.ok(close(scoring,d));assert.ok(close(selection,d));
+  const scores=M.reference(scoring,'vocabulary-scores'),ids=M.samplesFor('encoder-decoder')[i].v,full=M.evaluate(M.solutions('encoder-decoder'),ids);
+  assert.ok(close(full.values['original-decoder'],d));assert.ok(close(scores,full.output));
+  const selected=M.evaluate(M.solutions('vocabulary'),selection);
+  assert.ok(close(selected.values['original-head'],scores));assert.ok(close(selected.output,M.operations.pick([scores])));
+ }
+ assert.equal(M.inventory(M.levels['vocabulary-scores'])['original-transformer'],undefined,'assembly reward is not offered before its lesson');
+ differs('vocabulary',s=>s.nodes.find(n=>n.id==='original-head').links=['wide-invert']);
+});
 
 test('masked multihead bridge earns the exact downstream block and requires both masks and V paths',()=>{
  const id='masked-multihead',route=Array.from(M.routes.main.ids),index=route.indexOf(id),level=M.levels[id];

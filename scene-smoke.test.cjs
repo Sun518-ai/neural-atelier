@@ -315,6 +315,24 @@ test('V-only animation passes without Q/K and an actual outlet error remains dis
  app.c.I18n.setPreference('en');assert.match(app.document.querySelector('.local-fault strong').textContent,/Final result/);
  const before=JSON.stringify(app.api.getState());app.document.querySelector('.fault-close').dispatchEvent(new app.window.Event('click',{bubbles:true}));assert.equal(app.document.querySelector('.local-fault'),null);assert.equal(app.api.getFault(),null);assert.equal(JSON.stringify(app.api.getState()),before);
 });
+test('four-feature readout lessons animate their actual feature and score widths and inspect the shared head',async()=>{
+ let app;const widths=new Set();
+ app=await boot({reduced:false,frameMs:1000,onFrame:()=>{
+  if(!app)return;
+  for(const o of app.scenes.at(-1).children){
+   if(!o.visible||!o.userData.packet)continue;const bars=o.children.filter(c=>c.userData.feature!=null);
+   if(bars.length)widths.add(bars.length/(o.userData.row==='sequence'?3:1));
+  }
+ }});
+ const M=app.c.NeuralPrologue,doc=app.document;doc.querySelector('#welcome').close();
+ for(const id of ['vocabulary-scores','vocabulary']){
+  app.api.switchLevel(id);app.api.setState(M.solutions(id));app.api.getWorld().rebuild();const saved=JSON.stringify(app.api.getState());
+  await app.api.run();assert.equal(doc.querySelectorAll('#test-results .pass').length,3);assert.equal(JSON.stringify(app.api.getState()),saved);
+  assert.equal(doc.querySelectorAll('.packet').length,0);doc.querySelector('#complete-close').onclick();
+  app.api.getWorld().focusShelf('original-head');assert.match(doc.querySelector('#card-stats').textContent,/4 × 6/);assert.match(doc.querySelector('#card-purpose').textContent,/17.*18.*19/s);doc.querySelector('#card-close').onclick();
+ }
+ assert.ok(widths.has(4),'decoder features retain all four coordinates');assert.ok(widths.has(6),'projection carries all six candidate scores');
+});
 test('moving trays preserve feature columns and sequence rows through projection',async()=>{
  let app;const checked=new Set();
  app=await boot({reduced:false,frameMs:100,onFrame:()=>{

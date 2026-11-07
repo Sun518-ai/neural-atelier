@@ -18,17 +18,26 @@ export function createProgress(M,storage){
   const rename=id=>renames.get(id)||id;
   return {...s,nodes:s.nodes.map(n=>n?{...n,...(renames.has(n.id)?{id:rename(n.id),kind:'project'}:{}),links:Array.isArray(n.links)?n.links.map(rename):n.links}:n),sink:rename(s.sink),palette:Array.isArray(s.palette)?s.palette.map(k=>k==='up'?'project':k):s.palette};
  }
+ function upgradeReadout(s,id){
+  const aliases=M.levels[id]?.saveAliases;
+  if(!aliases||s?.version!==1||!Array.isArray(s.nodes))return s;
+  const old=s.nodes.filter(n=>aliases[M.nodeKind(n)]&&M.validNodeId(n.id,M.nodeKind(n)));if(!old.length)return s;
+  const used=new Set(s.nodes.filter(n=>!old.includes(n)).map(n=>n?.id)),renames=new Map();
+  for(const n of old){const kind=aliases[M.nodeKind(n)];let name=kind,i=2;while(used.has(name))name=kind+'-'+i++;used.add(name);renames.set(n.id,name);}
+  const rename=name=>renames.get(name)||name;
+  return {...s,placementRevision:1,nodes:s.nodes.map(n=>n?{...n,...(renames.has(n.id)?{id:rename(n.id),kind:aliases[M.nodeKind(n)]}:{}),links:Array.isArray(n.links)?n.links.map(rename):n.links}:n),sink:rename(s.sink),palette:Array.isArray(s.palette)?s.palette.map(k=>aliases[k]||k):s.palette};
+ }
  function validated(raw,id){
-  const s=mergeProjections(raw),l=M.levels[id];if(!l||s?.version!==1||!Array.isArray(s.nodes))return null;
-  const stock=M.inventory(l),allowed=Object.keys(stock);
+  const s=mergeProjections(upgradeReadout(raw,id)),l=M.levels[id];if(!l||s?.version!==1||!Array.isArray(s.nodes))return null;
+  const stock=M.inventory(l),allowed=[...new Set([...Object.keys(stock),...Object.keys(l.legacyInventory||{})])];
   const valid=new Set([...l.sources,...s.nodes.map(n=>n?.id)]),counts={};
   if((l.buildable?s.nodes.length>M.moduleLimit(l):s.nodes.length!==l.nodes.length)||new Set(s.nodes.map(n=>n?.id)).size!==s.nodes.length||s.nodes.some(n=>{
    const kind=M.nodeKind(n);counts[kind]=(counts[kind]||0)+1;
    return !n||!allowed.includes(kind)||!M.validNodeId(n.id,kind)||(!l.buildable&&n.id!==kind)||counts[kind]>Math.max(stock[kind]||0,l.legacyInventory?.[kind]||0)||!Number.isFinite(n.x)||!Number.isFinite(n.z)||!Array.isArray(n.links)||n.links.length!==M.definitions[kind].ins.length||n.links.some(k=>k!==null&&!valid.has(k));
   })||(s.sink!==null&&!valid.has(s.sink)))return null;
   // Old saves keep their IDs and positions; only append newly available stock.
-  s.palette=[...new Set((Array.isArray(s.palette)?s.palette:[]).filter(k=>allowed.includes(k)))];
-  s.palette.push(...allowed.filter(k=>!s.palette.includes(k)));
+  s.palette=[...new Set((Array.isArray(s.palette)?s.palette:[]).filter(k=>k in stock))];
+  s.palette.push(...Object.keys(stock).filter(k=>!s.palette.includes(k)));
   return {...s,levelId:id,...(l.engine?{settings:{...M.engineDefaults,...l.settings,...s.settings},nodes:s.nodes.map(n=>({...n,device:['cpu','gpu','ane'].includes(n.device)?n.device:'gpu'}))}:{})};
  }
  function solved(s,id){
@@ -40,7 +49,11 @@ export function createProgress(M,storage){
   });
  }
  function load(id){
-  const l=M.levels[id];let s=validated(read(key(id)),id)||M.initial(id);
+  const l=M.levels[id],raw=read(key(id)),upgraded=upgradeReadout(raw,id);
+  // Keep an exact recovery copy before upgrading old two-feature modules.
+  // Existing positions, wiring and completion badges are not reset.
+  if(upgraded!==raw&&!read(key(id)+'-before-four-feature-readout')&&!write(key(id)+'-before-four-feature-readout',raw))return raw;
+  let s=validated(upgraded,id)||M.initial(id);
   if(l.requirePlacement&&s.placementRevision!==1){
    // Only the former auto-filled, still-unwired starting set is retired.
    // Keep a recoverable copy, and never clear a connected or completed board.

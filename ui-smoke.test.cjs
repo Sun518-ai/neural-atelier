@@ -91,7 +91,7 @@ test('gating rationale uses actual weights to show equal content receiving diffe
 test('inline report appears without clicking, stays during scene interaction, dismisses independently and returns next run',async()=>{
  const app=boot(),panel=app.document.querySelector('#run-report');app.document.querySelector('#run').focus=()=>{};
  assert.equal(panel.hidden,true);
- app.eval("switchLevel('vocabulary');state=M.solutions(stageId);state.nodes.find(n=>n.id==='lmhead').links=['invert']");await app.eval('run()');
+ app.eval("switchLevel('vocabulary');state=M.solutions(stageId);state.nodes.find(n=>n.id==='original-head').links=['wide-invert']");await app.eval('run()');
  assert.ok(panel.textContent.includes('你恨狗'));assert.equal(panel.hidden,false);
  const state=app.eval('JSON.stringify(state)'),fault=app.eval('JSON.stringify(fault)'),results=app.eval('JSON.stringify(results)');
  app.document.querySelector('#scene').dispatchEvent(new app.window.Event('pointerdown',{bubbles:true}));assert.equal(panel.hidden,false);
@@ -512,6 +512,42 @@ test('old auto-filled original starts are archived once and can be restored with
   assert.equal(app.eval('busy'),false);assert.equal(app.eval('JSON.stringify(state.nodes)'),JSON.stringify(legacy.nodes));
   const reopened=boot(storage,'#'+id);assert.equal(reopened.eval('state.nodes.length'),legacy.nodes.length,'explicitly restored layouts are not retired again');
   app.document.querySelector('#undo').onclick();assert.equal(app.eval('state.nodes.length'),0,'restoring remains undoable');
+ }
+});
+test('readout lesson order, completion navigation and bilingual copy agree on one four-feature pipeline',async()=>{
+ const app=boot(new Map(),'#vocabulary-scores'),doc=app.document;
+ for(const language of ['zh','en']){
+  app.c.I18n.setPreference(language);app.eval('levelMenu()');
+  assert.deepEqual([...doc.querySelectorAll('[data-level-group="generation"] [data-level]')].map(el=>el.dataset.level),['vocabulary-scores','encoder-decoder','vocabulary','autoregressive']);
+  for(const [id,number]of [['vocabulary-scores',17],['encoder-decoder',18],['vocabulary',19]]){
+   app.eval(`switchLevel('${id}')`);assert.match(doc.querySelector('.route strong').textContent,id==='vocabulary-scores'?/打分|score/i:id==='encoder-decoder'?/两半|halves/i:/选|Select/i);
+   assert.equal(app.eval('stage().chapter'),(language==='zh'?'原版基础 / ':'Original / ')+number);
+   if(id!=='encoder-decoder')assert.match(doc.querySelector('#sample-value').textContent,/4/);
+   if(language==='en')assert.doesNotMatch(doc.querySelector('.mission').textContent,/[\u3400-\u9fff]/);
+  }
+ }
+ app.eval("switchLevel('vocabulary-scores');state=M.solutions(stageId)");await app.eval('run()');assert.ok(doc.querySelector('#level-complete').open);
+ doc.querySelector('#complete-next').onclick();assert.equal(app.location.hash,'#encoder-decoder');
+ app.eval('state=M.solutions(stageId)');await app.eval('run()');doc.querySelector('#complete-next').onclick();assert.equal(app.location.hash,'#vocabulary');
+ app.eval('state=M.solutions(stageId)');await app.eval('run()');assert.equal(doc.querySelectorAll('.vocab-scores>div').length,4);assert.equal(app.eval('levelPassed()'),true);
+ assert.deepEqual([...app.c.I18n.missing],[]);
+});
+test('two-feature readout saves upgrade once without losing wires, positions, duplicate modules or badges',()=>{
+ const setup=boot(),M=setup.c.NeuralPrologue;
+ for(const id of ['vocabulary-scores','vocabulary']){
+  const saved=JSON.parse(JSON.stringify(M.solutions(id))),aliases={'original-head':'lmhead','wide-invert':'invert'},rename=name=>aliases[name]||name;
+  for(const n of saved.nodes){n.kind=rename(n.kind);n.id=rename(n.id);n.links=n.links.map(rename);}saved.sink=rename(saved.sink);saved.palette=saved.palette.map(rename);
+  saved.nodes[0].x=-2.71;saved.nodes.push({id:'original-head',kind:'original-head',x:3.2,z:1.1,links:[null]});
+  if(id==='vocabulary-scores')saved.nodes.push({id:'original-transformer',kind:'original-transformer',x:4,z:-1,links:[null,null]});
+  const key='neural-atelier-level-'+id+'-v1',raw=JSON.stringify(saved),storage=new Map([[key,raw],['neural-atelier-chapters-v1',JSON.stringify({current:id,completed:['decoder-layer','encoder-decoder',id]})]]),app=boot(storage,'#'+id);
+  const state=JSON.parse(app.eval('JSON.stringify(state)'));assert.equal(storage.get(key+'-before-four-feature-readout'),raw);
+  assert.equal(state.nodes.length,saved.nodes.length);assert.deepEqual(state.nodes.map(n=>[n.x,n.z]),saved.nodes.map(n=>[n.x,n.z]));
+  assert.equal(state.nodes[0].id,'original-head-2');assert.equal(state.nodes[0].kind,'original-head');assert.equal(state.nodes[0].links[0],'R');
+  if(id==='vocabulary'){assert.equal(state.nodes.find(n=>n.id==='pick').links[0],'original-head-2');assert.ok(state.nodes.some(n=>n.kind==='wide-invert'));}
+  else{assert.equal(state.sink,'original-head-2');assert.ok(state.nodes.some(n=>n.kind==='original-transformer'));assert.equal(app.document.querySelector('[data-add-module="original-transformer"]'),null);}
+  assert.equal(app.eval('progress.completed(stageId)'),true);assert.equal(app.eval("progress.completed('encoder-decoder')"),true);
+  const reopened=boot(storage,'#'+id);assert.equal(reopened.eval('JSON.stringify(state)'),app.eval('JSON.stringify(state)'));assert.equal(storage.get(key+'-before-four-feature-readout'),raw);
+  assert.equal(app.eval('M.evaluate(state,M.samplesFor(stageId)[0].v).error'),null);
  }
 });
 

@@ -94,7 +94,8 @@ Object.assign(M.definitions,{
  'ffn-add':def(L('FFN 残差','FFN residual'),[12,12],12,'residual',L('将 FFN 更新加到进入 FFN 前的特征，随后交给 LayerNorm。','Add the FFN update to the features entering the FFN, then send the sum to LayerNorm.')),
  'original-score':def(L('QKᵀ · 四维打分','QKᵀ · four-feature scores'),[12,12],9,'score',L('每个四维 Q 与每个四维 K 点乘，再除以 √4。三个目标位置对三个源位置得到九个分数。','Dot each four-feature Q with each four-feature K and divide by √4. Three target positions against three source positions produce nine scores.')),
  'original-aggregate':def(L('AV · 汇合四维内容','AV · aggregate four-feature values'),[9,12],12,'mix',L('每个目标位置按三个注意力权重加权汇合源 V，保留四个输出特征。','Each target position uses its three attention weights to combine source V while retaining four output features.')),
- 'original-head':def(L('词表投影 · 四维','Vocabulary projection · four features'),[12],18,'vocabulary',L('为每个目标位置的四维特征计算六个候选词分数，并加入固定偏置。','Compute six candidate-token scores from each target’s four features and add the fixed bias.'))
+ 'original-head':def(L('词表投影 · 四维','Vocabulary projection · four features'),[12],18,'vocabulary',L('为每个目标位置的四维特征计算六个候选词分数，并加入固定偏置。','Compute six candidate-token scores from each target’s four features and add the fixed bias.')),
+ 'wide-invert':def(L('反向投影 · 四维','Negation · four features'),[12],12,'invert',L('把每个特征乘 −1。它会改变送入词表投影的数值，供你比较候选分数怎样变化。','Multiply each feature by −1. This changes the input to the vocabulary projection so you can compare the resulting candidate scores.'))
 });
 for(const [kind,name]of [['q',L('Q · 查询投影','Q · query projection')],['k',L('K · 键投影','K · key projection')],['v',L('V · 值投影','V · value projection')],['output',L('输出投影 Wo','Output projection Wo')]]){
  M.definitions['original-'+kind]=def(name,[12],12,'linear',L('每个位置的四个特征乘同一套 4 × 4 权重，产生四个新特征。不会在这里混合不同 token。','Each position’s four features use the same 4 × 4 weights to produce four new features. Tokens are not mixed by this projection.'));
@@ -118,7 +119,7 @@ Object.assign(M.operations,{
  'source-embed':([ids])=>position(embed(ids,4)),'target-embed':([ids])=>position(embed(ids,4)),
  'wide-embedding':([ids])=>embed(ids,4),'wide-position':([x])=>position(x),
  'encoder-add':([a,b])=>plus(a,b),'ffn-add':([a,b])=>plus(a,b),
- 'original-score':([q,k])=>scoreWide(q,k),'original-aggregate':([a,v])=>mixWide(a,v),'original-head':([v])=>vocabulary(v),
+ 'original-score':([q,k])=>scoreWide(q,k),'original-aggregate':([a,v])=>mixWide(a,v),'original-head':([v])=>vocabulary(v),'wide-invert':([v])=>v.map(x=>-x),
  'original-q':([x])=>project(x,wide.q),'original-k':([x])=>project(x,wide.k),'original-v':([x])=>project(x,wide.v),'original-output':([x])=>project(x,wide.output)
 });
 Object.assign(M.operations,{
@@ -137,11 +138,12 @@ for(const [headIndex,headName]of ['A','B'].entries())for(const role of ['q','k',
 M.definitions['wide-concat']=def(L('按特征拼接 · 四维','Concatenate features · four features'),[6,6],12,'concat',L('每个词把头 A 的两个数放在前面、头 B 的两个数放在后面，合成四个特征。不是相加，也不增加词数。','For each token, place head A’s two numbers before head B’s two numbers to form four features. Do not add them or increase the token count.'));
 M.operations['wide-concat']=([a,b])=>concat(a,b);
 const operatorIds=['relu','layernorm2','relu-ffn','position','original-weights','head-a','head-b','concat','self-heads','masked-heads','cross-heads','ln-attn','ln-ffn','ln-cross','original-ffn-block','cross-add','original-encoder','original-decoder','source-embed','target-embed','wide-embedding','wide-position','encoder-add','ffn-add','original-score','original-aggregate','original-head','original-q','original-k','original-v','original-output'];
-operatorIds.push(...maskedProjectionIds,'wide-concat','single-attention','two-head-attention','single-cross-attention','silu-ffn','swiglu-ffn','swiglu-residual','original-transformer','modern-block');
+operatorIds.push(...maskedProjectionIds,'wide-concat','single-attention','two-head-attention','single-cross-attention','silu-ffn','swiglu-ffn','swiglu-residual','original-transformer','modern-block','wide-invert');
 for(const id of operatorIds){
  const d=M.definitions[id];M.extraColors[id]=({linear:0x789abf,score:0x879bb3,mix:0x64a68f,vocabulary:0xb79b6b,embedding:0x7d9ea5,activation:0xc6a574,layernorm:0xb8a36a,ffn:0x759c88,position:0xb49b6a,attention:0x789abf,concat:0x9b86b4,residual:0xc3a26f,encoder:0x6a9c93,decoder:0x9387ad})[d.type];
 }
 M.extraColors['head-b']=0xa394bd;
+M.extraColors['wide-invert']=0xb88475;
 for(const id of maskedProjectionIds)M.extraColors[id]=({q:0x789abf,k:0xa394bd,v:0x5da995})[id.slice(-1)];
 M.extraColors['original-k']=0xa394bd;M.extraColors['original-v']=0x5da995;
 for(const id of ['mask','attention','attentionweights','enattn'])M.definitions[id].causal=true;
@@ -285,12 +287,30 @@ lesson('decoder-layer',L('加入 FFN，接成完整解码器层','Add the FFN an
  L('前两关解决“从哪些词取信息”：先看目标前文，再读源句。FFN 接着对每个目标位置的特征做展开、ReLU 和压回，学习非线性组合；它不再从其他位置取信息。这样一层既能交流信息，也能加工交流后的特征。','The previous lessons decide which tokens to read: target context first, then the source. The FFN then expands each target feature vector, applies ReLU and projects it back, forming nonlinear combinations without reading other positions. A layer therefore both exchanges information and transforms the resulting features.'),
  L('每次残差都加回当前子层的输入。原版是三次 Post-LN；不要跳过交叉注意力，也不要把所有残差都接回最初的 D。','Each residual adds back that sublayer’s input. The original has three Post-LN steps: do not skip cross-attention or connect every residual to the initial D.'),
  {'masked-heads':['R'],residual1:['R','masked-heads'],'ln-attn':['residual1'],'cross-heads':['ln-attn','Z'],'cross-add':['ln-attn','cross-heads'],'ln-cross':['cross-add'],'original-ffn-block':['ln-cross'],residual2:['ln-cross','original-ffn-block'],'ln-ffn':['residual2'],sink:'ln-ffn'},x=>decoder(x,memory()),{...dual,buildable:true,maxModules:11});
+lesson('vocabulary-scores',L('先给候选词打分','First, score the candidate tokens'),['original-head'],
+ L('把解码器的四维特征变成六个候选分数','Turn four decoder features into six candidate scores'),
+ L('输入直接取第 16 关解码器最后一个 LayerNorm 的输出，每个目标位置有四个特征。放置词表投影并连线，让每个位置得到六个候选词的分数；本关还不选词。','The input comes directly from the final LayerNorm in level 16’s decoder: four features at each target position. Place and wire the vocabulary projection to produce six candidate-token scores per position. Do not select a token yet.'),
+ L('解码器输出的四个数是特征坐标，还没有哪个数对应“猫”或“狗”。词表投影用一列权重对应一个候选词，把四个特征加权求和并加偏置，才得到该词的分数。六列权重就得到六个候选分数。','The decoder’s four values are feature coordinates; none is a score for Cat or Dog yet. Vocabulary projection assigns one weight column to each candidate, takes a weighted sum of all four features and adds a bias. Six columns produce six candidate scores.'),
+ L('L = D × W_vocab + b：3 × 4 乘 4 × 6，得到 3 × 6。每个位置仍独立打分，六列依次对应“我、爱、猫、你、恨、狗”；分数不是概率。下一关把这块放回完整模型。','L = D × W_vocab + b: 3 × 4 times 4 × 6 gives 3 × 6. Each position is scored independently; the six columns are I, Love, Cat, You, Hate and Dog. Scores are not probabilities. The next lesson puts this module into the complete model.'),
+ {'original-head':['R'],sink:'original-head'},vocabulary,{sourceDim:12,sinkDim:18,wide:true,sourceTitle:L('解码器输出 D','Decoder output D'),sourceNote:L('第 16 关最后一个 LayerNorm 的输出','Output of level 16’s final LayerNorm'),outputTitle:L('候选词分数 L','Candidate-token scores L'),shape:'3 × 4 → 3 × 6',buildable:true,maxModules:3,boardWidth:18,boardDepth:8,sourceX:-6.5,sinkX:6.5,zoom:.9,startWithModules:true,saveAliases:{lmhead:'original-head'}});
 lesson('encoder-decoder',L('把原版两半接起来','Connect both halves of the original'),['source-embed','target-embed','original-encoder','original-decoder','lmhead'],
  L('源句经过编码器，目标前缀经过解码器','Encode the source and decode the target prefix'),
- L('两份 ID 分别查词向量并加入位置。源句交给编码器；目标前缀和编码器输出一起交给解码器，最后为候选词打分。','Look up both ID sequences and add positions. Send the source to the encoder, then the target prefix and encoder output to the decoder. Finally score candidate tokens.'),
+ L('第 12 关的编码器、第 16 关的解码器、第 17 关的词表投影都已经学过。本关把它们接起来：两份 ID 各自查词向量并加位置，源句经编码器送入解码器，解码器再为目标位置输出词表分数。','You have learned the encoder in level 12, the decoder in level 16 and vocabulary projection in level 17. Connect them here: embed both ID sequences and add positions, send the encoded source to the decoder, then project the decoder’s target features into vocabulary scores.'),
  L('原版 Transformer 是编码器—解码器模型。编码器整理已给定的源句，解码器结合源句与目标前缀预测下一词；并非只有一条自注意力链。','The original Transformer is an encoder–decoder model. The encoder processes the given source; the decoder combines it with the target prefix to predict the next token. It is more than one self-attention chain.'),
  L('输出是每个目标位置的六个候选分数。真实生成会做 Softmax 和选词，并追加到目标前缀；本例只验证结构与数值，不宣称这些手工权重能翻译。','The output contains six candidate scores per target position. Generation applies Softmax and token selection, then appends to the prefix. This checks structure and arithmetic; these hand-written weights are not a translation model.'),
  {'source-embed':['Z'],'target-embed':['R'],'original-encoder':['source-embed'],'original-decoder':['target-embed','original-encoder'],lmhead:['original-decoder'],sink:'lmhead'},ids=>vocabulary(decoder(position(embed(ids,4)),memory())),{...dual,positioned:false,sourceDim:3,sinkDim:18,sourcePorts:{R:'D ID',Z:'S ID'},sourceNames:{R:L('目标前缀 ID','Target prefix IDs'),Z:L('源序列 ID','Source sequence IDs')},sourceTitle:L('目标前缀 ID','Target prefix IDs'),shape:'2 × 3 ID → 3 × 6',buildable:true,maxModules:7});
+lesson('vocabulary',L('从分数中选出词','Select tokens from scores'),['original-head','pick','wide-invert'],
+ L('按每个位置的最高分选择 token','Select the highest-scoring token at each position'),
+ L('继续用同一份解码器四维输出和第 17、18 关的词表投影。这次在六个候选分数之后接入选词，让出口得到最高分对应的词表 ID。','Keep the same four-feature decoder output and the vocabulary projection from levels 17 and 18. This time, add token selection after the six candidate scores so the outlet receives the ID of the highest-scoring token.'),
+ L('上一关的出口是候选分数，还不是词。取最高分把每组分数变成一个词表编号；每个目标位置得到一个预测。生成下一词时采用最后一个位置的预测，再追加到前缀。','The previous outlet contains candidate scores, not tokens. Taking the maximum converts each score group into one vocabulary ID, one prediction per target position. To generate the next token, use the final position’s prediction and append it to the prefix.'),
+ L('取最高分与取 Softmax 后的最大概率会选中同一个词，所以本关直接按分数选择。手工教学权重不保证预测有语言意义，也不要求输出等于输入；三个位置都要按实际分数正确选词。','The largest logit and largest Softmax probability select the same token, so this lesson selects directly from scores. The hand-written teaching weights do not guarantee meaningful predictions or a copy of the input. Select the correct candidate at all three positions.'),
+ {'original-head':['R'],pick:['original-head'],'wide-invert':['R'],sink:'pick'},v=>M.operations.pick([vocabulary(v)]),{sourceDim:12,sinkDim:3,wide:true,sourceTitle:L('解码器输出 D','Decoder output D'),sourceNote:L('与第 17、18 关相同的解码器特征','The same decoder features as levels 17 and 18'),outputTitle:L('预测 Token ID','Predicted token IDs'),shape:'3 × 4 → 3 × 6 → 3 ID',tokenOutput:true,buildable:true,maxModules:5,saveAliases:{lmhead:'original-head',invert:'wide-invert'}});
+for(const id of ['vocabulary-scores','vocabulary'])Object.assign(added[id],{sourceNames:{R:added[id].sourceTitle},sourcePorts:{R:'D'}});
+for(const id of ['vocabulary-scores','encoder-decoder'])Object.assign(added[id],{
+ outputTitle:L('候选词分数 L','Candidate-token scores L'),
+ outputNote:L('每个位置的六个候选词分数','Six candidate scores per position'),
+ resultNote:L('这里已经是候选词分数，还没有选词。每个目标位置分别有六个分数，下一步才从中选择 token。','These are candidate-token scores, with no token selected yet. Each target position has six scores; token selection comes next.')
+});
 lesson('wider-features',L('词不变，特征变宽','Same tokens, wider features'),['wide-embedding','wide-position'],
  L('为每个 token 取出四维词向量，再加入位置','Look up four features per token, then add positions'),
  L('前面每个 token 已经用两个数表示。本关重新从 token ID 查四维词表，改用四个数共同表示一个 token，再加入位置信息。三个 token 仍是三个，输出是 3 × 4。','Earlier, each token was already represented by two numbers. Here, start from token IDs and look up a four-feature embedding table, then add positions. Four numbers jointly represent each token. Three tokens remain three; the output is 3 × 4.'),
@@ -327,9 +347,13 @@ lesson('pack-scores',L('把匹配过程收进一个组件','Package the matching
  L('Q/K → 打分 → Softmax 的计算完全保留，三个位置彼此可见，没有遮罩或 RoPE。封装后的 3 × 3 输出就是前一关的注意力权重。','The Q/K → scores → Softmax computation is preserved. All three positions remain visible, with no mask or RoPE. Its 3 × 3 output is exactly the attention weights from the preceding lesson.'),
  {'original-weights':['R'],sink:'original-weights'},unmaskedWeights,{sinkDim:9,shape:'3 × 2 → 3 × 3',buildable:true,maxModules:6,attentionReadout:true,packages:['original-weights']});
 Object.assign(M.levels,added);
+// Old scoring saves may contain parts that were formerly taught before this
+// lesson. Preserve those placed parts without offering them early on the shelf.
+M.levels['vocabulary-scores'].legacyInventory={'original-head':4,'target-embed':2,'original-transformer':2};
+M.levels.vocabulary.legacyInventory={'original-head':4};
 for(const level of Object.values(added))if(level.buildable)level.inventory=Object.fromEntries(level.nodes.map(kind=>[kind,2]));
 const originalPrologue=['wire','projection','relu','down-projection','original-ffn','residual','workshop'];
-const originalNetwork=['embedding','positions','layernorm','add-norm','qkv','scores','softmax','weighted-sum','self-attention','multihead','wider-features','encoder-layer','causal','decoder-self','cross-attention','decoder-layer','encoder-decoder','vocabulary-scores','vocabulary','autoregressive'];
+const originalNetwork=['embedding','positions','layernorm','add-norm','qkv','scores','softmax','weighted-sum','self-attention','multihead','wider-features','encoder-layer','causal','decoder-self','cross-attention','decoder-layer','vocabulary-scores','encoder-decoder','vocabulary','autoregressive'];
 const modern=['activation','plain-ffn','gate-projection','pairwise','gating','swiglu','normalize','ffn','rotation','rope','aggregation','attention','block'];
 for(const level of Object.values(M.levels))level.practice=false;
 for(const [ids,prefix,board]of [[originalPrologue,L('序章 / ','Prologue / '),'PROLOGUE'],[originalNetwork,L('原版基础 / ','Original / '),'ORIGINAL'],[modern,L('现代扩展 / ','Modern / '),'MODERN']])ids.forEach((id,i)=>{
@@ -352,7 +376,7 @@ M.routes.main.groups=[
  {id:'attention',label:L('搭出注意力','Build attention'),title:L('注意力 · 从单头扩展到多头','Attention · From one head to several'),description:L('先学 Q/K 怎样匹配、V 怎样提供内容，再拼成单头。第 10 关扩展头的数量，后面的编码器会复用这套结构。','Learn how Q/K match and V supplies content, then assemble one head. Level 10 adds more heads; the encoder will reuse that structure.'),ids:['qkv','scores','softmax','pack-scores','weighted-sum','self-attention','multihead']},
  {id:'encoder',label:L('组装编码器','Assemble the encoder'),title:L('编码器 · 准备输入，再组装整层','Encoder · Prepare the input, then assemble the layer'),description:L('第 11 关换用每词四个特征的输入；第 12 关沿用已学的双头结构，配上相应尺寸的权重，和 FFN、残差、LayerNorm 组成一层。','Level 11 prepares four features per token. Level 12 reuses the two-head structure with matching weight sizes, then combines it with the FFN, residuals and LayerNorm into one layer.'),ids:['wider-features','encoder-layer'],connections:{sources:[{label:L('已学的计算','Familiar computations'),text:L('10 多头 + FFN + 残差 + LayerNorm','10 Multi-head + FFN + residuals + LayerNorm')},{label:L('准备的输入','Prepared input'),text:L('11 四维词向量与位置','11 Four-feature embeddings and positions')}],target:{label:L('组合起来','Assemble'),text:L('12 一层编码器','12 One encoder layer')}}},
  {id:'decoder',label:L('开始搭解码器','Build the decoder'),title:L('开始搭解码器 · 限制读取，再接入源句','Start the decoder · Limit reading, then bring in the source'),description:L('先用第 13 关与组合关准备好因果注意力，再连续搭解码器：14 整理目标前文，15 读取源句，16 加入 FFN 并组装整层。','Prepare causal attention in level 13 and the packaging lesson, then build the decoder: 14 processes target context, 15 reads the source, and 16 adds the FFN and assembles the layer.'),ids:['causal','masked-multihead','decoder-self','cross-attention','decoder-layer'],connections:{sources:[{label:L('目标侧','Target side'),text:L('13 遮罩 → 组合双头 → 14 残差与归一化','13 Mask → Package both heads → 14 Residual and normalization')},{label:L('源句侧','Source side'),text:L('12 编码器的输出','12 Encoder output')}],target:{label:L('在这里汇合','Meet here'),text:L('15 交叉注意力','15 Cross-attention')}}},
- {id:'generation',label:L('连接与生成','Connect and generate'),title:L('连接两端 · 从特征到选词','Connect both halves · From features to token selection'),description:L('把编码器与解码器接成完整模型，再看特征怎样变成词表分数、怎样选出词。最后单独练习把新词追加回输入的生成循环。','Connect the encoder and decoder into a complete model, then turn features into vocabulary scores and select tokens. Finally, practice the generation loop that appends each new token to the input.'),ids:['encoder-decoder','vocabulary-scores','vocabulary','autoregressive']}
+ {id:'generation',label:L('打分、组合与选词','Score, assemble and select'),title:L('模型末端 · 先学打分，再连接完整模型','Model output · Learn scoring before assembling the model'),description:L('16 关已得到解码器特征；17 关先学词表打分，18 关把已学组件接成完整模型，19 关再从分数选词。三关沿用相同的四维特征和词表权重；最后单独练习生成循环。','Level 16 produced decoder features. Learn vocabulary scoring in 17, assemble the familiar modules into the full model in 18, then select tokens in 19. All three use the same four-feature states and vocabulary weights. Finally, practice the generation loop separately.'),ids:['vocabulary-scores','encoder-decoder','vocabulary','autoregressive']}
 ];
 const menuLesson=(id,kind,label,summary)=>{M.levels[id].menu={kind,label,summary};};
 menuLesson('multihead','extend',L('扩展组件','Extend a component'),L('承接第 09 关的单头：让两组权重分别读取信息，拼接后再经过 Wo。第 12 关会复用双头结构。','Extend the single head from level 09: read with two sets of weights, concatenate, then apply Wo. Level 12 will reuse the two-head structure.'));
@@ -366,7 +390,12 @@ menuLesson('decoder-layer','assemble',L('完整层 · 再加入 FFN','Complete l
 M.levels['decoder-self'].menu.connection=L('本关输出 D → 第 15 关的查询来源','Output D → supplies the queries in level 15');
 M.levels['cross-attention'].menu.connection=L('14 的 D + 12 的 E → 交叉注意力更新；16 关再把它接回目标特征','D from 14 + E from 12 → cross-attention update; level 16 adds it back to the target features');
 M.levels['decoder-layer'].menu.connection=L('目标内交流 → 读取源句 → FFN 加工，三段都在解码器层里面','Target context → source retrieval → FFN processing, all inside the decoder layer');
-menuLesson('encoder-decoder','connect',L('连接两端','Connect both halves'),L('前面两半都搭好了。让源句经过编码器、目标前缀经过解码器，把两端接起来，再输出词表分数。','Both halves are ready. Send the source through the encoder and the target prefix through the decoder, connect the two, then produce vocabulary scores.'));
+menuLesson('vocabulary-scores','prepare',L('先学词表打分','Learn vocabulary scoring'),L('接第 16 关的四维解码器输出，用 4 × 6 的词表权重算出六个候选分数。这里只打分，还不选词。','Take the four-feature decoder output from level 16 and apply 4 × 6 vocabulary weights to obtain six candidate scores. Score only; token selection comes later.'));
+menuLesson('encoder-decoder','connect',L('组合已学组件','Assemble familiar modules'),L('复用第 12 关编码器、第 16 关解码器和第 17 关词表投影，把两份 ID 一路接到候选分数。','Reuse the encoder from 12, decoder from 16 and vocabulary projection from 17 to connect both ID sequences through to candidate scores.'));
+menuLesson('vocabulary','prepare',L('再从分数选词','Then select tokens'),L('沿用同一套四维特征与词表投影，增加取最高分，把六个候选分数变成一个词表 ID。','Keep the same four-feature states and vocabulary projection; add maximum selection to turn six candidate scores into one vocabulary ID.'));
+M.levels['vocabulary-scores'].menu.connection=L('16 解码器特征 → 17 候选词分数','16 Decoder features → 17 candidate scores');
+M.levels['encoder-decoder'].menu.connection=L('12 编码器 + 16 解码器 + 17 词表投影 → 完整模型','12 Encoder + 16 decoder + 17 vocabulary projection → complete model');
+M.levels.vocabulary.menu.connection=L('18 模型末端的相同分数 → 19 选出 token','The same scores as model output in 18 → 19 select tokens');
 M.levelMenuCopy={decoderSteps:L('14 → 15 → 16：逐段搭成同一层解码器','14 → 15 → 16: build one decoder layer in stages'),stages:L('按学习阶段浏览','Browse learning stages'),progress:L('关已通过','levels completed'),connections:L('这些关卡怎样接起来','How these lessons connect')};
 I18n.prepare(M.levelMenuCopy);
 // Explain visibility separately from the Q/K scores whose values are checked.
@@ -619,6 +648,7 @@ M.levels.autoregressive.description=L('用固定转移表为下一词算分，�
 M.levels.autoregressive.rationale.scope=L('本关的固定转移表用于隔离控制流程，不是训练好的语言模型。前面的编码器—解码器关验证原版结构和候选分数。','The fixed transition table isolates control flow; it is not a trained language model. The preceding encoder–decoder lesson validates the original structure and candidate scores.');
 const previousSamples=M.samplesFor,previousSources=M.sourceValues,previousReference=M.reference,previousSolutions=M.solutions,previousExample=M.extraExample,previousCard=M.extraCard;
 M.samplesFor=id=>{
+ if(['vocabulary-scores','vocabulary'].includes(id))return previousSamples('embedding').map(s=>({...s,v:decoder(position(embed(s.v,4)),memory())}));
  if(!M.levels[id]?.positioned)return previousSamples(id);
  return previousSamples('embedding').map(s=>{const positioned=position(embed(s.v,M.levels[id].wide?4:2));return {...s,v:id==='cross-attention'?decoderSelf(positioned):positioned};});
 };
@@ -653,6 +683,10 @@ cards['modern-block'].formula='R1 = X + Attention(RMSNorm(X)); Y = R1 + SwiGLU(R
 cards['original-transformer'].formula='L = Vocabulary(Decoder(TargetEmbedding, Encoder(SourceEmbedding)))';cards['original-transformer'].purpose=M.packages['original-transformer'].note;
 cards['encoder-add'].formula='R = X + MHA(X)';cards['ffn-add'].formula='R = A + FFN(A)';
 cards['original-score'].formula='S = QKᵀ / √4';cards['original-aggregate'].formula='O = AV';cards['original-head'].formula='L = DW_vocab + b';
+cards['original-head'].ability=L('用四个特征，为六个候选词打分','Use four features to score six candidates');
+cards['original-head'].meaning=L('D 来自解码器最后一个 LayerNorm。每个目标位置的四个特征，分别与 W_vocab 的六列权重相乘求和，再加各列偏置；第 j 列的结果就是词表中第 j 个候选词的分数。','D comes from the decoder’s final LayerNorm. For each target position, take the dot product of its four features with each of the six W_vocab columns, then add that column’s bias. Column j produces the score for vocabulary candidate j.');
+cards['original-head'].purpose=L('第 17 关单独练这一步，第 18 关把同一块放回完整模型，第 19 关再接取最高分。三个关卡使用同一套 4 × 6 权重和偏置；分数还不是概率或已经选出的词。','Practice this step in level 17, place the same module into the full model in 18, then add maximum selection in 19. All three use the same 4 × 6 weights and biases. Scores are not probabilities or selected tokens.');
+cards['wide-invert'].formula='Y = −D';
 cards['original-q'].formula='Q = DWq';cards['original-k'].formula='K = EWk';cards['original-v'].formula='V = EWv';cards['original-output'].formula='Y = OWo';
 cards['original-q'].meaning=L('从目标 D 的四个特征产生查询 Q，用来决定当前目标位置想从源句取什么信息。','Project queries Q from the target D’s four features to select source information for each target position.');
 for(const id of ['original-k','original-v'])cards[id].meaning=L('从编码器输出 E 的四个特征产生键或值，供目标侧查询匹配和读取。Q 来自目标，K/V 来自源句。','Project keys or values from encoder E’s four features. Target queries match and read them: Q comes from the target, K/V from the source.');
@@ -810,6 +844,7 @@ M.extraExample=(id,levelId)=>{
  const s=M.solutions(levelId),sampleIndex=levelId==='relu'?2:0,input=M.samplesFor(levelId)[sampleIndex].v,ev=M.evaluate(s,input),n=s.nodes.find(n=>n.id===id);
  if(!n)return null;
  const names={R:M.levels[levelId].dualSource?'D':'X',Z:levelId==='encoder-decoder'?'Source ID':'E',project:'P',relu:'A',down:'F',add:'R',layernorm2:'Y',q:'Q',k:'K',v:'V',score:'S',softmax:'A',aggregate:'O',output:'Y','original-q':'Q','original-k':'K','original-v':'V','original-score':'S','original-aggregate':'O','original-output':'Y','original-head':'L','wide-embedding':'X','wide-position':'Xp',position:'Xp','head-a':'H_A','head-b':'H_B',concat:'C','original-weights':'A','relu-ffn':'F','original-ffn-block':'F','self-heads':'O','masked-heads':'O','cross-heads':'O','cross-add':'Rc','source-embed':'Xs','target-embed':'Xt','original-encoder':'E','original-decoder':'D','encoder-add':'R1','ffn-add':'R2','ln-attn':'X1','ln-cross':'X2','ln-ffn':'Y'};
+ if(['vocabulary-scores','vocabulary'].includes(levelId))names.R='D';
  for(const kind of maskedProjectionIds)names[kind]=kind.slice(-1).toUpperCase()+'_'+kind.split('-')[1].toUpperCase();
  Object.assign(names,{'wide-concat':'C','score-2':'S_B','mask-2':'S_B masked','softmax-2':'A_B','aggregate-2':'H_B'});
  if(levelId==='masked-multihead')Object.assign(names,{aggregate:'H_A','original-output':'Om'});
