@@ -416,6 +416,46 @@ test('token outlet reveals completed selections one at a time and clears them on
  mode='disconnected';state.sink=null;app.api.getWorld().rebuild();await app.api.run();assert.ok(seen.has('unwired picker stays private'));assert.deepEqual(outlet().map(r=>r.word),['','','']);
  assert.deepEqual([...app.c.I18n.missing],[]);
 });
+test('append outlet retains two old words then reveals the new token before transport ends',async()=>{
+ let app,mode='complete',paused=false,pauseFrames=0,stopped=false;const seen=new Set();
+ const outlet=()=>{const out=[];app.scenes.at(-1).traverse(o=>{if(o.userData.sinkRow!=null){const text=o.children.filter(c=>c.material?.map).map(c=>c.material.map.image.drawnText);out[o.userData.sinkRow]={word:text.at(-1),status:text.at(-2)};}});return out;};
+ app=await boot({reduced:false,frameMs:80,onFrame:({document})=>{
+  if(!app||mode==='stopped')return;
+  const M=app.c.NeuralPrologue,sample=M.samplesFor('autoregressive').find(s=>s.word===document.querySelector('#sample-name').textContent);if(!sample)return;
+  const ev=M.evaluate(app.api.getState(),sample.v),displayed=outlet();
+  const process=document.querySelector('.processing-packet[data-node="feedback-2"]:not([hidden])');
+  const outbound=document.querySelector('.packet[data-motion="wire"][data-from="feedback-2"][data-to="sink"]:not([hidden])');
+  if(mode==='disconnected'){
+   if(process){assert.deepEqual(displayed.map(r=>r.word),['','','']);seen.add('unused append stays private');}return;
+  }
+  if(process?.dataset.phase==='enter'){
+   assert.deepEqual(displayed.map(r=>r.word),[...ev.output.slice(0,2).map(i=>M.math.vocab[i]),'']);
+   assert.ok(displayed.every(r=>r.status==='·'));seen.add('retained words');
+   if(mode==='stop'){stopped=true;mode='stopped';app.api.run();assert.deepEqual(outlet().map(r=>r.word),['','','']);return;}
+   if(!paused){paused=true;app.api.togglePause();}
+   if(pauseFrames<3){
+    if(++pauseFrames===2)app.c.I18n.setPreference('en');
+    if(pauseFrames===3){assert.equal(outlet().filter(r=>r.word).length,2);app.c.I18n.setPreference('zh');app.api.togglePause();}
+   }
+  }
+  if(outbound){
+   assert.deepEqual(displayed.map(r=>r.word),Array.from(ev.output,i=>M.math.vocab[i]));
+   assert.ok(displayed.every(r=>r.status==='·'),'preview must not grade the result');
+   assert.equal(outbound.querySelector('.packet-values').textContent,M.readTokens(ev.output));seen.add(mode+' new token in transit');
+  }
+ }});
+ const M=app.c.NeuralPrologue,doc=app.document;doc.querySelector('#welcome').close();app.api.switchLevel('autoregressive');
+ const state=M.solutions('autoregressive');state.nodes.find(n=>n.id==='feedback').id='feedback-2';state.sink='feedback-2';
+ app.api.setState(state);app.api.getWorld().rebuild();const saved=JSON.stringify(state);await app.api.run();
+ assert.equal(JSON.stringify(state),saved);assert.equal(pauseFrames,3);assert.ok(seen.has('retained words'));assert.ok(seen.has('complete new token in transit'));
+ assert.equal(doc.querySelectorAll('#test-results .pass').length,3);
+ mode='stop';const run=app.api.run();assert.deepEqual(outlet().map(r=>r.word),['','','']);await run;assert.ok(stopped);
+ mode='wrong';state.nodes.find(n=>n.id==='feedback-2').links=['R'];app.api.getWorld().rebuild();await app.api.run();
+ assert.ok(seen.has('wrong new token in transit'));assert.equal(doc.querySelectorAll('#test-results .fail').length,1);
+ assert.deepEqual(outlet().map(r=>r.word),Array.from(M.evaluate(state,M.samplesFor('autoregressive')[0].v).output,i=>M.math.vocab[i]));
+ mode='disconnected';state.sink=null;app.api.getWorld().rebuild();await app.api.run();assert.ok(seen.has('unused append stays private'));assert.deepEqual(outlet().map(r=>r.word),['','','']);
+ assert.deepEqual([...app.c.I18n.missing],[]);
+});
 test('moving trays preserve feature columns and sequence rows through projection',async()=>{
  let app;const checked=new Set();
  app=await boot({reduced:false,frameMs:100,onFrame:()=>{

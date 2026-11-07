@@ -1,5 +1,5 @@
-import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=generation-map-1';
-import {createProgress} from './level-progress.js?v=generation-map-1';
+import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=append-preview-1';
+import {createProgress} from './level-progress.js?v=append-preview-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -365,7 +365,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=generation-map-1');
+ const {createSceneArt}=await import('./scene-art.js?v=append-preview-1');
  function scenePalette(){
   if(typeof getComputedStyle!=='function')return {};
   const css=getComputedStyle(document.body),read=name=>css.getPropertyValue(name).trim();
@@ -717,8 +717,10 @@ try{
   clearPackets();lastDepth=-1;const reduced=matchMedia('(prefers-reduced-motion:reduce)').matches;if(reduced)ms=70;
   let previous=animationTime(),elapsed=0;
   const seq=!!stage().sequence,readyNodes=state.nodes.filter(n=>ev.values[n.id]);
-  // Preview only the picker actually wired to the outlet, never an unused branch.
-  const tokenSink=seq&&stage().tokenOutput&&ev.output&&readyNodes.find(n=>n.id===state.sink&&definition(n.id).type==='pick');
+  // Follow the actual outlet producer: selected predictions and an appended
+  // context have different reveal clocks. Unused branches cannot fill the outlet.
+  const tokenSink=seq&&stage().tokenOutput&&ev.output&&readyNodes.find(n=>n.id===state.sink&&(definition(n.id).type==='pick'||M.nodeKind(n)==='feedback'));
+  const carriesTokens=from=>definition(from)?.type==='pick'||kindOf(from)==='feedback';
   const pairedNode=id=>!seq&&['multiply','add'].includes(definition(id)?.type);
   const mixingNode=id=>definition(id)?.type==='mix';
   const projectionNode=id=>definition(id)?.type==='linear'||definition(id)?.type==='vocabulary'&&!!weightsFor(id);
@@ -746,7 +748,7 @@ try{
    const el=document.createElement('span');el.className='packet';el.hidden=true;el.dataset.motion=motion;el.dataset.row=seq?'sequence':sample<3?String(sample):'validation';el.dataset.from=from;el.dataset.to=to;el.style.setProperty('--row-color',colorHex(color));
    const title=document.createElement('b');title.className='packet-title';title.textContent=packetIdentity(from);el.appendChild(title);
    const cells=document.createElement('span');cells.className='packet-values';
-   cells.textContent=motion==='wire'&&definition(from)?.type==='pick'?M.readTokens(values):seq?shape(values.length):vector(values);
+   cells.textContent=motion==='wire'&&carriesTokens(from)?M.readTokens(values):seq?shape(values.length):vector(values);
    el.appendChild(document.createTextNode(' '));el.appendChild(cells);overlay.appendChild(el);
    const mesh=art.packet(values,color,{sequence:seq});Object.assign(mesh.userData,{packet:motion==='wire',row:el.dataset.row,from,to});mesh.visible=false;scene.add(mesh);
    return {values,el,cells,mesh,color,materials:fadeMaterials(mesh),p:new T.Vector3(),motion};
@@ -764,10 +766,11 @@ try{
   readyNodes.forEach(n=>{
    const input=ev.values[n.links[0]],output=ev.values[n.id],p=movingPacket(input,n.id,n.id,'process');
    p.el.classList.add('processing-packet');p.el.dataset.node=n.id;p.mesh.userData.processing=n.id;
-   const operation=definition(n.id).type,mixing=operation==='mix',selection=operation==='pick',vocabulary=operation==='vocabulary'&&projectionNode(n.id),detailed=projectionNode(n.id)||mixing,sequenceProjection=seq&&detailed,paired=pairedNode(n.id),gather=operation==='concat'&&output.length===4,worked=detailed||paired,other=paired||mixing||gather?ev.values[n.links[1]]:null;
+   const operation=definition(n.id).type,appending=M.nodeKind(n)==='feedback',mixing=operation==='mix',selection=operation==='pick',vocabulary=operation==='vocabulary'&&projectionNode(n.id),detailed=projectionNode(n.id)||mixing,sequenceProjection=seq&&detailed,paired=pairedNode(n.id),gather=operation==='concat'&&output.length===4,worked=detailed||paired,other=paired||mixing||gather?ev.values[n.links[1]]:null;
    const tokenOperation=art.tokenOperation(definition(n.id)),centering=operation==='layernorm',normalizing=operation==='norm'||centering,pairTones=paired?art.pairColorsFor(n.id):null,operator=operation==='add'?'+':'×';
    const columns=mixing?output.length/3:detailed?weightsFor(n.id)[0].length:output.length,matrix=mixing?M.math.rows(other,columns):detailed?weightsFor(n.id):null;
-   Object.assign(p,{selection,vocabulary,detailed,sequenceProjection,columns,matrix,mixing,paired,gather,worked,other,normalizing,centering,tokenOperation});
+   Object.assign(p,{appending,selection,vocabulary,detailed,sequenceProjection,columns,matrix,mixing,paired,gather,worked,other,normalizing,centering,tokenOperation});
+   if(appending)p.cells.textContent=M.readTokens(input);
    if(mixing)p.valueWords=()=>wordsFrom(n.links[1]);
    if(worked||tokenOperation||centering||selection)art.prepareProjectionPacket(p.mesh,paired?()=>pairTones[0]:mixing?i=>art.rowColor(i%3):undefined);
    if(paired||mixing||gather){
@@ -781,7 +784,7 @@ try{
     tint(p.mesh,0x659bab);tint(p.otherMesh,0x9b88c4);tint(outputMesh,i=>i<2?0x659bab:0x9b88c4);
    }
    const morph=document.createElement('span');morph.className='packet-morph';p.cells.replaceWith(morph);morph.appendChild(p.cells);
-   const after=document.createElement('span');after.className='packet-values';after.textContent=selection?M.readTokens(output):seq?shape(output.length):vector(output);after.style.opacity='0';morph.appendChild(after);
+   const after=document.createElement('span');after.className='packet-values';after.textContent=selection||appending?M.readTokens(output):seq?shape(output.length):vector(output);after.style.opacity='0';morph.appendChild(after);
    p.el.style.visibility='hidden';p.el.hidden=false;
    const beforeWidth=p.cells.offsetWidth||p.cells.textContent.length*6.6,afterWidth=after.offsetWidth||after.textContent.length*6.6;
    p.el.hidden=true;p.el.style.visibility='';morph.style.width=beforeWidth+'px';
@@ -897,8 +900,16 @@ try{
    if(t>=max){clearPackets();labels();renderShelf();resolve();return;}
    if(level!==lastDepth){lastDepth=level;labels();renderShelf();}
    if(tokenSink){
-    const values=ev.values[tokenSink.id],timing=art.selectionFrame(t-starts[ev.depths[tokenSink.id]],definition(tokenSink.id).ins[0]/values.length,values.length);
-    const ready=Math.max(0,Math.min(values.length,Math.floor((t-starts[ev.depths[tokenSink.id]]-timing.ready)/timing.rowDuration)+1));
+    const values=ev.values[tokenSink.id],clock=t-starts[ev.depths[tokenSink.id]];
+    let ready=0;
+    if(M.nodeKind(tokenSink)==='feedback'){
+     // The retained words come from the stored context. Reveal the new final
+     // token when the append operation's outgoing packet is fully formed.
+     ready=clock<0?0:clock<.9?values.length-1:values.length;
+    }else{
+     const timing=art.selectionFrame(clock,definition(tokenSink.id).ins[0]/values.length,values.length);
+     ready=Math.max(0,Math.min(values.length,Math.floor((clock-timing.ready)/timing.rowDuration)+1));
+    }
     if(ready!==(tokenPreview?.length||0)){tokenPreview=values.slice(0,ready);labels();}
    }
    art.pulseSource(reduced?1:t);
@@ -1031,6 +1042,6 @@ try{
  $('#camera-reset').onclick=()=>{if(focusId){const n=shelfFocus?{x:0,z:0}:state.nodes.find(n=>n.id===focusId);transition(new T.Vector3(n.x,.72,n.z),Math.max(4.1,3.5*host.clientWidth/host.clientHeight)/23,.32,.92);}else{yaw=.05;pitch=.8;zoom=stage().zoom;cameraTarget.set(0,0,0);render();}};
  function beforeStage(){clearConnectionError();if(focusId)leaveFocus();cancelAnimationFrame(cameraFrame);transitioning=false;host.setAttribute('aria-busy','false');drag=lastTap=null;clearPreview();clearPlacement();clearPackets();elements=[];overlay.replaceChildren();}
  function setStage(){art.surroundings(samples(),stage(),scenePalette());yaw=.05;pitch=.8;zoom=stage().zoom;cameraTarget.set(0,0,0);rebuild();}
- function relocalize(){clearConnectionError();art.surroundings(samples(),stage(),scenePalette());rebuild();packets.forEach(p=>{p.el.querySelector('.packet-title').textContent=packetIdentity(p.el.dataset.from);if(p.sequenceProjection)p.updateEquation(p.column,p.projectionRow);if(p.motion==='wire'&&definition(p.el.dataset.from)?.type==='pick')p.cells.textContent=M.readTokens(p.values);if(p.selection&&p.progress!=null){p.after.textContent=M.readTokens(p.output);p.updateSelection(art.selectionFrame(p.progress,p.input.length/p.output.length,p.output.length));p.outputLabels.forEach(({el},j)=>el.textContent=M.math.vocab[p.output[j]]);}if(p.normalizing&&p.progress!=null)p.updateRMS(normalizationFrame(p.progress,p.centering));if(p.tokenOperation&&p.progress!=null)p.updateToken(art.tokenFrame(p.progress,p.tokenOperation));if(p.motion==='process'&&p.progress!=null)art.processing(p.node.id,p.progress,p.input,p.output,p.color,{sequence:!!stage().sequence,detailed:p.detailed,paired:p.paired,other:p.other,words:p.words?.(),valueWords:p.valueWords?.()});});render();}
+ function relocalize(){clearConnectionError();art.surroundings(samples(),stage(),scenePalette());rebuild();packets.forEach(p=>{p.el.querySelector('.packet-title').textContent=packetIdentity(p.el.dataset.from);if(p.sequenceProjection)p.updateEquation(p.column,p.projectionRow);if(p.motion==='wire'&&(definition(p.el.dataset.from)?.type==='pick'||kindOf(p.el.dataset.from)==='feedback'))p.cells.textContent=M.readTokens(p.values);if(p.appending){p.cells.textContent=M.readTokens(p.input);p.after.textContent=M.readTokens(p.output);}if(p.selection&&p.progress!=null){p.after.textContent=M.readTokens(p.output);p.updateSelection(art.selectionFrame(p.progress,p.input.length/p.output.length,p.output.length));p.outputLabels.forEach(({el},j)=>el.textContent=M.math.vocab[p.output[j]]);}if(p.normalizing&&p.progress!=null)p.updateRMS(normalizationFrame(p.progress,p.centering));if(p.tokenOperation&&p.progress!=null)p.updateToken(art.tokenFrame(p.progress,p.tokenOperation));if(p.motion==='process'&&p.progress!=null)art.processing(p.node.id,p.progress,p.input,p.output,p.color,{sequence:!!stage().sequence,detailed:p.detailed,paired:p.paired,other:p.other,words:p.words?.(),valueWords:p.valueWords?.()});});render();}
  new ResizeObserver(render).observe(host);world={relocalize,labels,rebuild,animate,fuse,skipFusion:()=>finishFusion(true),clearPackets,showConnectionError,clearConnectionError,clearPreview,clearPlacement,previewAt,previewPlacement,focus,focusShelf,focused:()=>focusId,beforeStage,setStage,syncShelf:()=>syncPlacementGuide(host.clientWidth,host.clientHeight)};$('#loading').hidden=true;rebuild();refresh();
 }catch(e){$('#loading').innerHTML=I18n.t("<strong>3D 台面没有加载成功，请刷新重试。</strong>");say(I18n.t("页面尚未开始运行。"),'error');console.error(e);}
