@@ -1,5 +1,5 @@
-import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=cross-inputs-1';
-import {createProgress} from './level-progress.js?v=cross-inputs-1';
+import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=clear-entries-1';
+import {createProgress} from './level-progress.js?v=clear-entries-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -361,7 +361,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=cross-inputs-1');
+ const {createSceneArt}=await import('./scene-art.js?v=clear-entries-1');
  function scenePalette(){
   if(typeof getComputedStyle!=='function')return {};
   const css=getComputedStyle(document.body),read=name=>css.getPropertyValue(name).trim();
@@ -373,7 +373,7 @@ try{
  const cameraTarget=new T.Vector3();let focusId=null,shelfFocus=null,shelfModel=null,overview=null,cameraFrame=0,transitioning=false,lastTap=null;
  const ray=new T.Raycaster(),cursor=new T.Vector2(),plane=new T.Plane(new T.Vector3(0,1,0),0);
  function dispose(group){for(const o of [...group.children]){group.remove(o);o.traverse(c=>{if(c.geometry&&!c.geometry.userData?.shared)c.geometry.dispose();c.material?.map?.dispose();c.material?.dispose?.();});}}
- function point(id,kind='out',index=0){if(id==='R'||id==='Z')return new T.Vector3(stage().sourceX+(stage().sourceDim===12?1.65:stage().sequence?1.15:.85),.65,stage().dualSource?(id==='Z'?-2.15:2.15):stageId==='ffn'?(id==='Z'?-.75:.75):0);if(id==='sink')return new T.Vector3(stage().sinkX-(stage().sequence?1.5:stage().sinkDim===4?1.2:.8),.65,0);const n=state.nodes.find(n=>n.id===id),d=definition(id);return new T.Vector3(n.x+(kind==='in'?-1.12:1.12),.68,n.z+(kind==='in'&&d.ins.length===2?(index===0?-.55:.55):0));}
+ function point(id,kind='out',index=0){if(id==='R'||id==='Z')return new T.Vector3(stage().sourceX+(stage().sourceDim===12?1.65:stage().sequence?1.15:.85),.65,stage().dualSource?art.sourceOffset(stage(),id):stageId==='ffn'?(id==='Z'?-.75:.75):0);if(id==='sink')return new T.Vector3(stage().sinkX-(stage().sequence?1.5:stage().sinkDim===4?1.2:.8),.65,0);const n=state.nodes.find(n=>n.id===id),d=definition(id);return new T.Vector3(n.x+(kind==='in'?-1.12:1.12),.68,n.z+(kind==='in'&&d.ins.length===2?(index===0?-.55:.55):0));}
  let connectionNotice=null,connectionTimer=null;
  function clearConnectionError(){
   if(connectionTimer!==null)clearTimeout(connectionTimer);connectionTimer=null;
@@ -395,7 +395,29 @@ try{
   el.style.left=left+'px';el.style.top=Math.max(12,Math.min(h-height-12,above?y-height-gap:y+gap))+'px';
   el.dataset.side=above?'above':'below';el.style.setProperty('--tip-x',Math.max(16,Math.min(width-16,x-left))+'px');
  }
- const curve=(a,b)=>new T.CubicBezierCurve3(a,new T.Vector3(a.x+.8,a.y+.4,a.z),new T.Vector3(b.x-.8,b.y+.4,b.z),b);
+ // Keep a visible side approach at both sockets, even for a backward wire.
+ // Rounded corners share one route with the cable, click target and carrier.
+ function curve(a,b){
+  const lead=1.5,exit=a.clone().add(new T.Vector3(lead,0,0)),entry=b.clone().add(new T.Vector3(-lead,0,0)),midY=(a.y+b.y)/2;
+  let points;
+  if(b.x-a.x>lead*2){
+   const x=(a.x+b.x)/2;points=[a,new T.Vector3(x,a.y,a.z),new T.Vector3(x,b.y,b.z),b];
+  }else{
+   const back=Math.min(a.z,b.z)-2.7,front=Math.max(a.z,b.z)+2.7,edge=(stage().boardDepth||11)/2-.4;
+   const detour=b.z<a.z?(back>=-edge?back:front):(front<=edge?front:back);
+   const z=Math.abs(b.z-a.z)>3?(a.z+b.z)/2:detour;
+   points=[a,exit,new T.Vector3(exit.x,midY,z),new T.Vector3(entry.x,midY,z),entry,b];
+  }
+  points=points.filter((p,i)=>!i||p.distanceTo(points[i-1])>1e-6);
+  const path=new T.CurvePath();let start=points[0];
+  const lineTo=end=>{if(start.distanceTo(end)>1e-6)path.add(new T.LineCurve3(start.clone(),end.clone()));start=end;};
+  for(let i=1;i<points.length-1;i++){
+   const corner=points[i],before=points[i-1],after=points[i+1],radius=Math.min(.35,corner.distanceTo(before)/3,corner.distanceTo(after)/3);
+   const incoming=corner.clone().lerp(before,radius/corner.distanceTo(before)),outgoing=corner.clone().lerp(after,radius/corner.distanceTo(after));
+   lineTo(incoming);path.add(new T.QuadraticBezierCurve3(incoming,corner.clone(),outgoing));start=outgoing;
+  }
+  lineTo(points.at(-1));return path;
+ }
  const guide=document.createElementNS('http://www.w3.org/2000/svg','svg'),guidePath=document.createElementNS('http://www.w3.org/2000/svg','path');
  guide.setAttribute('class','connection-guide');guide.setAttribute('aria-hidden','true');guide.setAttribute('hidden','');guidePath.setAttribute('vector-effect','non-scaling-stroke');guide.appendChild(guidePath);
  const placementGuide=document.createElementNS('http://www.w3.org/2000/svg','svg'),placementPath=document.createElementNS('http://www.w3.org/2000/svg','path'),placementOutline=document.createElementNS('http://www.w3.org/2000/svg','path');
@@ -407,7 +429,7 @@ try{
  function rowEndpoint(kind){return new T.Vector3(kind==='source'?stage().sourceX+.34:stage().sinkX+.18,kind==='source'?.95:.98,art.rowZ(sample));}
  function wire(from,to,index){
   const cv=curve(point(from),point(to,'in',index)),color=nodeColor(from),dim=Math.min(4,(from==='R'||from==='Z')?(stage().sourceDim||2):definition(from).out),visuals=[];
-  for(let j=0;j<dim;j++){const offset=(j-(dim-1)/2)*.035,points=cv.getPoints(32).map(p=>p.add(new T.Vector3(0,0,offset))),lane=new T.CatmullRomCurve3(points),mesh=new T.Mesh(new T.TubeGeometry(lane,32,.012,6,false),material(color));wires.add(mesh);visuals.push(mesh);}
+  for(let j=0;j<dim;j++){const offset=new T.Vector3(0,0,(j-(dim-1)/2)*.035),lane=curve(point(from).add(offset),point(to,'in',index).add(offset)),mesh=new T.Mesh(new T.TubeGeometry(lane,64,.012,6,false),material(color));wires.add(mesh);visuals.push(mesh);}
   const arrow=new T.Mesh(new T.ConeGeometry(.08,.19,8),material(color));arrow.position.copy(cv.getPoint(.6));arrow.quaternion.setFromUnitVectors(new T.Vector3(0,1,0),cv.getTangent(.6).normalize());wires.add(arrow);visuals.push(arrow);visuals.forEach(mesh=>mesh.userData.wire={from,to});curves.push({from,to,index,curve:cv,visuals});
  }
  function neuralModule(n){art.module(assembly,n,definition(n.id),M.weights);}
@@ -418,8 +440,8 @@ try{
   if(edge&&!busy&&!focusId)addLabel('div','wire-actions',`<span>${outputName(edge.from)} → ${edge.to==='sink'?stage().outputTitle:nodeName(edge.to)}</span><button type="button" data-delete-wire>${I18n.t("删除连线")}</button><button type="button" data-close-wire aria-label="${I18n.t("关闭")}">×</button>`,{},()=>edge.curve.getPoint(.5));
   const removable=stage().buildable&&state.nodes.find(n=>n.id===actionNode);
   if(removable&&!busy&&!focusId&&!pending&&!placing&&!selectedWire)addLabel('div','wire-actions node-actions',`<button type="button" data-delete-node="${removable.id}">${I18n.t("删除组件")}</button><button type="button" data-close-node aria-label="${I18n.t("关闭")}">×</button>`,{'data-owner':removable.id},()=>new T.Vector3(removable.x,.7,removable.z+1.1));
-  addLabel('span','source-label',`<b>${stage().sourceTitle}</b>${stage().sourceNote?'<br>'+stage().sourceNote:''}`,{},()=>new T.Vector3(stage().sourceX,1.6,-2.05+(stage().dualSource?2.15:0)));
-  if(stage().dualSource)addLabel('span','source-label',`<b>${stage().sourceNames.Z}</b><br>${stage().secondaryTitle}`,{},()=>new T.Vector3(stage().sourceX,1.6,-4.2));
+  addLabel('span','source-label',`<b>${stage().sourceTitle}</b>${stage().sourceNote?'<br>'+stage().sourceNote:''}`,{'data-source-label':'R'},()=>new T.Vector3(stage().sourceX,stage().dualSource?.95:1.6,art.sourceOffset(stage(),'R')-2.05));
+  if(stage().dualSource)addLabel('span','source-label',`<b>${stage().sourceNames.Z}</b><br>${stage().secondaryTitle}`,{'data-source-label':'Z'},()=>new T.Vector3(stage().sourceX,.95,art.sourceOffset(stage(),'Z')-2.05));
   addLabel('span','source-label',`<b>${stage().outputTitle}</b><br>${stage().tokenOutput?I18n.t("词表选择后的文字"):shape(stage().sinkDim)+(stage().attentionReadout&&stage().sinkDim===9?' · '+M.causalGuide.weightsNote:I18n.t(" · 各位置的特征"))}`,{},()=>new T.Vector3(stage().sinkX,1.6,-2.05));
   if(busy&&!stage().sequence){const marker=addLabel('span','row-marker',flowIdentity(),{'data-owner':'R','data-row':sample<3?String(sample):'validation'},()=>sample<3?new T.Vector3(stage().sourceX-1,.99,art.rowZ(sample)):new T.Vector3(stage().sourceX,1.4,2));marker.style.setProperty('--row-color',colorHex(art.rowColor(sample)));}
   stage().sources.forEach(id=>addLabel('button','port '+(pending===id?'pending':''),(stage().sourcePorts?.[id]||(id==='R'&&stageId!=='ffn'?'X':id))+' · '+shape(stage().sourceDim||2),{'type':'button','data-output':id,'aria-label':`${outputName(id)}${I18n.t(" 输出口，")}${shape(stage().sourceDim||2)}`},()=>point(id)));
@@ -446,7 +468,7 @@ try{
   if(wireTargets.parentNode!==overlay)overlay.prepend(wireTargets);wireTargets.style.display=busy||focusId||placing||pending?'none':'';wireTargets.setAttribute('viewBox',`0 0 ${w} ${h}`);
   const key=I18n.language()+curves.map(c=>`${c.from}:${c.to}:${c.index}`).join('|');
   if(key!==wireTargetKey){wireTargetKey=key;wireTargets.replaceChildren();wirePaths=curves.map(edge=>{const path=document.createElementNS('http://www.w3.org/2000/svg','path');path.setAttribute('tabindex','0');path.setAttribute('role','button');path.setAttribute('aria-label',outputName(edge.from)+' → '+(edge.to==='sink'?stage().outputTitle:nodeName(edge.to))+I18n.t("，选择连线"));path.dataset.wireTo=edge.to;path.dataset.wirePort=String(edge.index);path.addEventListener('click',()=>chooseWire(edge.to,edge.index));path.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();chooseWire(edge.to,edge.index);}});wireTargets.appendChild(path);return path;});}
-  curves.forEach((edge,i)=>{wirePaths[i].setAttribute('d',edge.curve.getPoints(32).map((p,j)=>{const [x,y]=project(p);return `${j?'L':'M'}${x.toFixed(1)} ${y.toFixed(1)}`;}).join(' '));wirePaths[i].classList.toggle('selected',!!selectedWire&&edge.to===selectedWire.to&&edge.index===selectedWire.index);});
+  curves.forEach((edge,i)=>{wirePaths[i].setAttribute('d',edge.curve.getPoints(64).map((p,j)=>{const [x,y]=project(p);return `${j?'L':'M'}${x.toFixed(1)} ${y.toFixed(1)}`;}).join(' '));wirePaths[i].classList.toggle('selected',!!selectedWire&&edge.to===selectedWire.to&&edge.index===selectedWire.index);});
  }
  function syncConnectionGuide(w,h){
   const visible=stageId==='wire'&&!state.sink&&!busy&&!pending&&!focusId;

@@ -8,6 +8,7 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
  const pairColors=[0x8b6ea5,0x368d77];
  const additionColors=[0x397aa2,0xb68036];
  const rowZ=i=>-1.05+i*.96;
+ const sourceOffset=(layout,id)=>layout.dualSource?(id==='Z'?-3:3):0;
  const tokenOperation=d=>d.type==='mask'&&d.out===9?'mask':d.type==='embedding'&&d.ins[0]===3?'lookup':d.type==='position'&&d.ins[0]===d.out?'position':null;
  const positionalValue=(p,j,width)=>(j%2?Math.cos:Math.sin)(p/10000**(2*Math.floor(j/2)/width));
  sharedSphere.userData.shared=true;
@@ -81,7 +82,7 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   const seq=!!layout.sequence,inputCols=seq?(layout.sourceDim||6)/3:2,outCols=seq?(dim===3?1:dim/3):dim;
   const sourceW=inputCols>2?3.4:seq?2.4:1.8,rackW=seq?3.2:dim===4?2.6:1.8;
   for(const sourceId of layout.dualSource?['Z','R']:['R']){
-  const offset=layout.dualSource?(sourceId==='Z'?-2.15:2.15):0;
+  const offset=sourceOffset(layout,sourceId);
   slab(context,sourceW,3.8,.42,sourceX,.07,offset,sourceId==='Z'?0x9d91b0:0x7fa6af);slab(context,sourceW-.14,3.64,.08,sourceX,.5,offset,0xe8f1ea);
   [I18n.t("我"),I18n.t("爱"),I18n.t("猫")].forEach((word,i)=>{
    const g=new T.Group();g.position.set(sourceX,.65,rowZ(i)+offset);g.userData.sourceRow=i;g.userData.sourceId=sourceId;context.add(g);
@@ -904,5 +905,5 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   };
  }
  function resetUnits(){units.clear();}
- return {surroundings,module,sync,fusionVisual,focusCalculations,updateDetail,detailsVisible:()=>detailModes[detailScope],pulseSource,layerNormFrame,layerNormStats,layerNormAnchor,routeLayerNormInput,routeLayerNormOutput,tokenOperation,tokenFrame,tokenAnchor,routeTokenInput,routeTokenOutput,projectionFrame,sequenceProjectionFrame,routeSequenceProjectionInput,routeSequenceProjectionOutput,routeAggregationValues,rmsFrame,rmsAnchor,routeRMSOutput,projectionColor,pairColorsFor:id=>units.get(id)?.pairTones||pairColors,processing,clearProcessing,packet,prepareProjectionPacket,routeProjectionPacket,routePairedPacket,projectionOutlet,projectionRadius,prepareProjectionOutput,routeProjectionOutput,featureColor,rowColor,rowZ,resetUnits,focus(active){context.visible=!active;floor.visible=!active;detailScope=active?'card':'board';if(active)detailModes.card=true;}};
+ return {surroundings,module,sync,fusionVisual,focusCalculations,updateDetail,detailsVisible:()=>detailModes[detailScope],pulseSource,layerNormFrame,layerNormStats,layerNormAnchor,routeLayerNormInput,routeLayerNormOutput,tokenOperation,tokenFrame,tokenAnchor,routeTokenInput,routeTokenOutput,projectionFrame,sequenceProjectionFrame,routeSequenceProjectionInput,routeSequenceProjectionOutput,routeAggregationValues,rmsFrame,rmsAnchor,routeRMSOutput,projectionColor,pairColorsFor:id=>units.get(id)?.pairTones||pairColors,processing,clearProcessing,packet,prepareProjectionPacket,routeProjectionPacket,routePairedPacket,projectionOutlet,projectionRadius,prepareProjectionOutput,routeProjectionOutput,featureColor,rowColor,rowZ,sourceOffset,resetUnits,focus(active){context.visible=!active;floor.visible=!active;detailScope=active?'card':'board';if(active)detailModes.card=true;}};
 }
