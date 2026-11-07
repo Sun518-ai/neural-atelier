@@ -215,16 +215,10 @@ encoderLesson.rationale.kind='encoder-layer';
 encoderLesson.rationale.title=L('两段，每段都要收尾','Two stages, each with its own finish');
 encoderLesson.description=L('先完成“注意力 → 相加 → LayerNorm”，再完成“FFN → 相加 → LayerNorm”。需要两块残差相加、两块 LayerNorm；相加的另一份数据，都来自本段开始的地方。','Finish “attention → add → LayerNorm”, then “FFN → add → LayerNorm”. Use two residual additions and two LayerNorm modules. Each addition also receives the input from the start of its own stage.');
 encoderLesson.rationale.scope=L('沿用 2017 原版的 Post-LN 顺序。输入、两段之间、输出都是 3 个词 × 4 个特征；整句互相可见。','Uses the original 2017 Post-LN order. The input, intermediate state and output all have three tokens × four features; every token can read the whole sentence.');
-// These pairs differ only in their old positional names, not their operation.
-// Do not rewrite stored nodes or wires when presenting a reusable operator.
-encoderLesson.componentAliases={'ffn-add':'encoder-add','ln-ffn':'ln-attn'};
-encoderLesson.componentNames={
- 'encoder-add':L('残差相加','Residual addition'),
- 'ln-attn':'LayerNorm'
-};
+// Named wrappers keep their sublayer roles and independent shelf stock.
 encoderLesson.shelf={
  featureWidth:12,
- order:['self-heads','original-ffn-block','encoder-add','ln-attn','wide-position'],
+ order:['self-heads','encoder-add','ln-attn','original-ffn-block','ffn-add','ln-ffn','wide-position'],
  current:L('四维组件','4 features'),
  earlier:L('已学零件','Earlier parts'),
  note:L('前面拆开的零件仍可查看、拖出。两维端口不能直接接到本关的四维特征。','Previously expanded parts can still be inspected and placed. Two-feature ports cannot connect directly to this lesson’s four-feature tensors.')
@@ -243,7 +237,7 @@ M.encoderGuide={
  formulaTitle:L('用公式对照两段','Compare the two stages in formulas'),
  first:L('X1：交流这一段完成后的特征','X1: features after the exchange stage'),
  second:L('Y：加工这一段完成后的特征','Y: features after the processing stage'),
- formulaNote:L('LN 就是 LayerNorm。残差与归一化各用两块相同组件，不需要区分“Attention 专用”和“FFN 专用”。','LN means LayerNorm. Use two copies each of the same residual and normalization operators; there are no separate Attention-only and FFN-only versions.')
+ formulaNote:L('LN 就是 LayerNorm。Attention 的结果接 Attention 残差与对应的 LayerNorm；FFN 的结果接 FFN 残差与对应的 LayerNorm。运算形式相同，组件归属的子层不同。','LN means LayerNorm. Use the Attention residual and its LayerNorm for attention, and the FFN residual and its LayerNorm for the FFN. The operation has the same form, but each module belongs to its own sublayer.')
 };
 I18n.prepare(M.encoderGuide);
 lesson('masked-multihead',L('把遮罩放进两个头','Put the mask inside both heads'),
@@ -455,6 +449,91 @@ for(const [track,route]of Object.entries(M.routes)){
 // Cards for optional shelf modules use a real, dimensionally valid example
 // from the lesson in which that module was taught, rather than a missing node.
 M.exampleLevel=(kind,id)=>M.levels[id].nodes.includes(kind)?id:origins[kind]||fusionOrigins[kind]||id;
+// Equal toy parameters do not make named sublayer instances interchangeable.
+// Generic arithmetic (add, layernorm2) has no positional contract.
+const residualRoles={'encoder-add':'attention',residual1:'attention','cross-add':'cross','ffn-add':'ffn',residual2:'ffn'};
+const normRoles={'ln-attn':'attention','ln-cross':'cross','ln-ffn':'ffn'};
+const updateRoles=Object.fromEntries([
+ ...['single-attention','two-head-attention','self-heads','masked-heads','attention'].map(k=>[k,'attention']),
+ ...['single-cross-attention','cross-heads'].map(k=>[k,'cross']),
+ ...['relu-ffn','silu-ffn','swiglu-ffn','original-ffn-block','ffnblock'].map(k=>[k,'ffn'])
+]);
+const roleCopy={
+ attention:{residual:L('一路接自注意力的计算结果，另一路接进入这一段的特征。不能用来代替 FFN 或交叉注意力的残差。','Connect a self-attention result and the features entering that stage. This does not replace an FFN or cross-attention residual.'),norm:L('只接 Attention 残差的输出。它属于自注意力这一段，不是 FFN 的归一化。','Accepts only the Attention residual output. It belongs to the self-attention stage, not the FFN stage.')},
+ cross:{residual:L('一路接交叉注意力的计算结果，另一路接发起查询的目标特征。','Connect a cross-attention result and the target features that supplied its queries.'),norm:L('只接交叉注意力残差的输出，不能借给自注意力或 FFN 使用。','Accepts only the cross-attention residual output, not a self-attention or FFN residual.')},
+ ffn:{residual:L('一路接 FFN 的计算结果，另一路接进入 FFN 前的特征。这个相加组件内部不包含 FFN。','Connect an FFN result and the features entering the FFN. This addition module does not contain an FFN.'),norm:L('只接 FFN 残差的输出，不能借给注意力使用。','Accepts only the FFN residual output; it cannot serve the attention stage.')}
+};
+I18n.prepare(roleCopy);
+L('组件用途不匹配：','Module role mismatch: ');L('组件用途不匹配','Module role mismatch');
+M.componentUse=kind=>{const role=normRoles[kind]||residualRoles[kind];return role?roleCopy[role][normRoles[kind]?'norm':'residual']:'';};
+function componentIssues(state){
+ const nodes=new Map(state.nodes.map(n=>[n.id,n])),sources=new Set(M.levels[state.levelId].sources);
+ const node=id=>nodes.get(id),kind=id=>M.nodeKind(node(id)),completeMemo=new Map();
+ function complete(id,seen=new Set()){
+  if(sources.has(id))return true;if(!id||seen.has(id)||!node(id))return false;
+  if(completeMemo.has(id))return completeMemo.get(id);
+  const next=new Set(seen);next.add(id);const done=node(id).links.every(from=>complete(from,next));completeMemo.set(id,done);return done;
+ }
+ function projectionSource(id,channel,seen=new Set()){
+  if(!id||seen.has(id))return null;seen.add(id);const n=node(id),k=kind(id);if(!n)return null;
+  if(k==='rope'+channel)return projectionSource(n.links[0],channel,seen);
+  return [channel,'original-'+channel,'masked-a-'+channel,'masked-b-'+channel].includes(k)?n.links[0]:null;
+ }
+ function scoreInputs(id,seen=new Set()){
+  if(!id||seen.has(id))return null;seen.add(id);const n=node(id),k=kind(id);if(!n)return null;
+  if(['softmax','mask'].includes(k))return scoreInputs(n.links[0],seen);
+  if(['original-weights','attentionweights'].includes(k))return n.links[0]?[n.links[0],n.links[0]]:null;
+  if(['score','original-score'].includes(k)){const q=projectionSource(n.links[0],'q'),key=projectionSource(n.links[1],'k');return q&&key?[q,key]:null;}
+  return null;
+ }
+ // Follow an expanded attention computation as well as packaged heads. This
+ // checks tensor provenance, not whether the player copied a reference graph.
+ function attentionInputs(id,seen=new Set()){
+  if(!id||seen.has(id))return null;seen.add(id);const n=node(id),k=kind(id);if(!n)return null;
+  if(updateRoles[k]==='attention'||['head-a','head-b'].includes(k))return n.links[0]?[n.links[0],n.links[0]]:null;
+  if(updateRoles[k]==='cross')return n.links.every(Boolean)?n.links.slice(0,2):null;
+  if(['output','original-output'].includes(k))return attentionInputs(n.links[0],seen);
+  if(['concat','wide-concat'].includes(k)){
+   const heads=n.links.map(from=>attentionInputs(from,new Set(seen)));
+   return heads.every(h=>h&&h[0]===heads[0]?.[0]&&h[1]===heads[0]?.[1])?heads[0]:null;
+  }
+  if(['aggregate','original-aggregate'].includes(k)){
+   const pair=scoreInputs(n.links[0]),v=projectionSource(n.links[1],'v');return pair&&v===pair[1]?pair:null;
+  }
+  return null;
+ }
+ function updateRole(id){
+  const k=kind(id);if(updateRoles[k])return updateRoles[k];
+  if(['output','original-output'].includes(k)){const pair=attentionInputs(id);return pair?(pair[0]===pair[1]?'attention':'cross'):null;}
+  if(k==='down'&&['relu','silu','multiply'].includes(kind(node(id).links[0])))return 'ffn';
+  return null;
+ }
+ const issues=[];
+ for(const n of state.nodes){
+  const k=M.nodeKind(n),role=normRoles[k]||residualRoles[k];if(!role)continue;
+  const mismatch=normRoles[k]?n.links[0]&&residualRoles[kind(n.links[0])]!==role:n.links.every(Boolean)&&n.links.every(id=>complete(id))&&!n.links.some(id=>updateRole(id)===role);
+  if(mismatch)issues.push({id:n.id,port:normRoles[k]?0:undefined,message:I18n.t('组件用途不匹配：')+M.nodeName(state,n.id)+' · '+M.componentUse(k)});
+ }
+ return issues;
+}
+M.componentIssues=componentIssues;
+const connectBeforeRoles=M.connect,evaluateBeforeRoles=M.evaluate;
+M.connect=(state,from,to,port)=>{
+ const next={...state,nodes:state.nodes.map(n=>({...n,links:[...n.links]}))},error=connectBeforeRoles(next,from,to,port);if(error)return error;
+ // Validate descendants too: wiring an upstream node last must not bypass a
+ // contract already connected farther downstream. Unfinished branches can wait.
+ const affected=new Set([to]);let changed=true;
+ while(changed){changed=false;for(const n of next.nodes)if(!affected.has(n.id)&&n.links.some(id=>affected.has(id))){affected.add(n.id);changed=true;}}
+ const issue=componentIssues(next).find(issue=>affected.has(issue.id));if(issue)return issue.message;
+ return connectBeforeRoles(state,from,to,port);
+};
+M.evaluate=(state,input)=>{
+ const ev=evaluateBeforeRoles(state,input);if(ev.error)return ev;
+ const used=new Set(),nodes=new Map(state.nodes.map(n=>[n.id,n])),visit=id=>{if(!id||used.has(id))return;used.add(id);nodes.get(id)?.links.forEach(visit);};visit(state.sink);
+ const issues=componentIssues(state),issue=ev.order.map(id=>issues.find(i=>i.id===id)).find(i=>i&&used.has(i.id));
+ if(issue){ev.error=issue.message;ev.bad={id:issue.id,port:issue.port};ev.componentIssue=issue;}
+ return ev;
+};
 M.moduleShape=(kind,dim)=>{
  if(['head-a','head-b','concat'].includes(kind)&&dim===3)return '3 × 1';
  return sequenceKind(kind)?({3:I18n.t('3 个 ID'),6:'3 × 2',9:'3 × 3',12:'3 × 4',18:'3 × 6'}[dim]||dim):dim;
@@ -691,7 +770,7 @@ M.original={relu,ln,position,embed,wide,project,vocabulary,classicFFN,sequenceFF
     if(['encoder-add','ffn-add'].includes(id)){
      c.english='RESIDUAL ADDITION';c.ability=L('把修改量加回这一段的输入','Add the update to this stage’s input');
      c.meaning=L('两个入口按同一个词、同一个特征对齐相加。例如 [1, 2] 加修改量 [0.3, −0.5]，得到 [1.3, 1.5]。这条旁路让原输入也参与结果，而不必全部经过支路的变换。','Align both inputs by token and feature, then add. For example, [1, 2] plus the update [0.3, −0.5] gives [1.3, 1.5]. This bypass lets the original input contribute directly without passing entirely through the branch transformation.');
-     c.purpose=L('两段使用相同的相加组件。第一段的输入是 X；第二段的输入已变成交流后的 X1。各自取本段输入与本段修改量相加，再归一化。卡片数值示例采用下面标出的输入。','Both stages use the same addition operator. The first stage starts with X; the second starts with X1, the features after exchange. Add each stage’s own input and update, then normalize. The worked example uses the inputs labeled below.');
+     c.purpose=L('两段都做相加，但分别使用 Attention 残差和 FFN 残差。第一段输入是 X；第二段输入是交流后的 X1。各自把本段修改量加回本段输入，再归一化。','Both stages add, but use their own Attention and FFN residual modules. The first starts with X; the second with X1, the features after exchange. Add each stage’s update back to its input, then normalize.');
     }else if(['ln-attn','ln-ffn'].includes(id)){
      c.english='LAYERNORM';c.ability=L('分别整理每个词的四个特征','Normalize each token’s four features');
      c.meaning=L('每个词单独取自己的 4 个特征，减去这 4 个数的均值，再除以标准差。例如 [1, 1, 3, 3] 约变成 [−1, −1, 1, 1]。三个词分别计算，不把不同词混在一起。','For each token, center its four features by their mean and divide by their standard deviation. For example, [1, 1, 3, 3] becomes approximately [−1, −1, 1, 1]. Process the three tokens separately.');

@@ -506,7 +506,8 @@ test('four-feature LayerNorm handles every token at the same pace and duplicate 
   });
  }});
  const M=app.c.NeuralPrologue;app.api.switchLevel('encoder-layer');const state=M.initial('encoder-layer');assert.ok(M.addNode(state,'ln-attn',-2.3,0));assert.ok(M.addNode(state,'ln-attn',2.3,0));
- assert.equal(M.connect(state,'R','ln-attn',0),null);assert.equal(M.connect(state,'ln-attn','ln-attn-2',0),null);assert.equal(M.connect(state,'ln-attn-2','sink',0),null);app.api.setState(state);app.api.getWorld().rebuild();await app.api.run();
+ // Historical invalid wiring still animates before the final role error. New connections reject it.
+ assert.match(M.connect(state,'R','ln-attn',0),/组件用途/);state.nodes[0].links=['R'];state.nodes[1].links=['ln-attn'];state.sink='ln-attn-2';app.api.setState(state);app.api.getWorld().rebuild();await app.api.run();
  for(const mark of ['ln-attn','ln-attn-2','already normalized'])assert.ok(seen.has(mark),mark);assert.equal(starts.size,6);
  // This deliberately incomplete encoder stops after the first sample fails,
  // but both modules must finish all three tokens before showing the verdict.
@@ -1366,6 +1367,39 @@ function noticeTimers(){
  return {callbacks,setTimeout(fn,delay){callbacks.push(fn);tasks.set(++id,{fn,at:now+delay});return id;},clearTimeout(id){tasks.delete(id);},
   tick(ms){now+=ms;for(const [id,t]of [...tasks])if(t.at<=now){tasks.delete(id);t.fn();}},get pending(){return tasks.size;}};
 }
+test('named sublayer cards and rejected connections explain their roles in both languages',async()=>{
+ const timers=noticeTimers(),app=await boot({timers}),doc=app.document,M=app.c.NeuralPrologue;
+ doc.querySelector('#welcome').close();app.api.switchLevel('decoder-layer');app.api.setState(M.solutions('decoder-layer'));app.api.getWorld().rebuild();
+ const saved=JSON.stringify(app.api.getState());
+ for(const language of ['zh','en']){
+  app.c.I18n.setPreference(language);
+  for(const kind of ['ln-attn','ln-cross','ln-ffn','encoder-add','cross-add','ffn-add']){
+   app.api.getWorld().focusShelf(kind);assert.equal(doc.querySelector('#card-purpose').textContent,M.componentUse(kind));
+   if(language==='en')assert.doesNotMatch(doc.querySelector('#card-purpose').textContent,/[\u3400-\u9fff]/);
+   doc.querySelector('#card-close').onclick();
+  }
+  app.api.chooseOutput('masked-heads');app.api.chooseInput('ln-ffn',0);
+  const toast=doc.querySelector('.connection-toast');assert.ok(toast);assert.match(toast.textContent,language==='en'?/Module role mismatch.*FFN/s:/组件用途不匹配.*FFN/s);
+  assert.equal(JSON.stringify(app.api.getState()),saved);timers.tick(3600);assert.equal(doc.querySelector('.connection-toast'),null);
+ }
+ assert.deepEqual([...app.c.I18n.missing],[]);
+});
+test('a borrowed sublayer normalizer animates before its dismissible local role verdict',async()=>{
+ let app,frames=0;
+ app=await boot({reduced:false,frameMs:1000,onFrame:({document})=>{
+  if(!app||!document.querySelector('.packet'))return;frames++;
+  assert.equal(app.api.getFault(),null);assert.equal(document.querySelector('.local-fault'),null);
+ }});
+ const doc=app.document,M=app.c.NeuralPrologue;doc.querySelector('#welcome').close();app.api.switchLevel('decoder-layer');
+ const state=M.solutions('decoder-layer'),borrowed=state.nodes.find(n=>n.id==='ln-attn');borrowed.id='ln-ffn-2';borrowed.kind='ln-ffn';
+ for(const n of state.nodes)n.links=n.links.map(id=>id==='ln-attn'?'ln-ffn-2':id);
+ app.api.setState(state);app.api.getWorld().rebuild();const saved=JSON.stringify(state);await app.api.run();
+ assert.ok(frames>0);assert.equal(JSON.stringify(state),saved);assert.ok(!doc.querySelector('#level-complete').open);
+ for(const selector of ['.local-fault','.fault-pin'])assert.equal(doc.querySelector(selector).dataset.owner,'ln-ffn-2');
+ assert.match(doc.querySelector('.local-fault').textContent,/组件用途不匹配.*FFN/s);assert.equal(doc.querySelectorAll('.packet').length,0);
+ doc.querySelector('[data-dismiss-result]').dispatchEvent(new app.window.Event('click',{bubbles:true}));
+ assert.equal(app.api.getFault(),null);assert.equal(doc.querySelector('.local-fault'),null);assert.ok(doc.querySelector('#test-results .fail'));
+});
 test('rejected clicks show a port-local toast, track the camera, and dismiss without changing the circuit',async()=>{
  const timers=noticeTimers(),app=await boot({timers}),doc=app.document,M=app.c.NeuralPrologue;
  doc.querySelector('#welcome').close();app.api.switchLevel('weighted-sum');app.api.setState(M.solutions('weighted-sum'));app.api.getWorld().rebuild();

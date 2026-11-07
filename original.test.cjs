@@ -202,26 +202,63 @@ test('a complete original encoder has two separate post-norm residual wrappers',
  differs('encoder-layer',s=>s.nodes.find(n=>n.id==='ffn-add').links[0]='R');
 });
 
-test('encoder shelf aliases share stock and build the same layer with repeated generic operators',()=>{
+test('named encoder wrappers have separate shelf entries and stock',()=>{
  const level=M.levels['encoder-layer'],s=M.solutions(level.id);
- const rename=id=>({'ffn-add':'encoder-add-2','ln-ffn':'ln-attn-2'})[id]||id;
- for(const n of s.nodes){n.kind=M.shelfKind(level,n.kind);n.id=rename(n.id);n.links=n.links.map(rename);}
- s.sink=rename(s.sink);
- for(const {v}of M.samplesFor(level.id)){
-  const ev=M.evaluate(s,v);assert.equal(ev.error,null);assert.ok(close(ev.output,M.reference(v,level.id)));
+ for(const kind of ['encoder-add','ffn-add','ln-attn','ln-ffn']){
+  assert.equal(M.shelfKind(level,kind),kind);assert.equal(M.stock(s,kind),1);
+  assert.equal(M.nodeName(s,kind),M.definitions[kind].name);
  }
- for(const [kind,alias]of [['encoder-add','ffn-add'],['ln-attn','ln-ffn']]){
-  assert.equal(M.stock(s,kind),0);assert.equal(M.stock(s,alias),0);assert.equal(M.canAdd(s,alias),false);
-  assert.notEqual(M.nodeName(s,kind),M.nodeName(s,kind+'-2'));
-  assert.ok(M.validNodeId(kind+'-2',kind));
-  assert.ok(M.removeNode(s,kind+'-2'));assert.equal(M.stock(s,kind),1);assert.equal(M.stock(s,alias),1);
+ assert.ok(M.removeNode(s,'ffn-add'));assert.equal(M.stock(s,'ffn-add'),2);assert.equal(M.stock(s,'encoder-add'),1);
+});
+
+function borrowKinds(state,replacements){
+ const counts={},ids={};
+ for(const n of state.nodes){const kind=replacements[n.kind]||n.kind,count=counts[kind]=(counts[kind]||0)+1;ids[n.id]=count===1?kind:kind+'-'+count;n.kind=kind;}
+ for(const n of state.nodes){n.id=ids[n.id];n.links=n.links.map(id=>ids[id]||id);}state.sink=ids[state.sink]||state.sink;return state;
+}
+test('equal numbers cannot pass with another sublayer’s named residual or LayerNorm',()=>{
+ for(const [level,replacements]of [
+  ['decoder-layer',{'ln-attn':'ln-ffn'}],
+  ['decoder-layer',{'encoder-add':'ffn-add','ln-attn':'ln-ffn'}],
+  ['decoder-layer',{'ln-cross':'ln-attn'}],
+  ['encoder-layer',{'ffn-add':'encoder-add','ln-ffn':'ln-attn'}],
+  ['block',{residual1:'residual2'}]
+ ]){
+  const s=borrowKinds(M.solutions(level),replacements),before=JSON.stringify(s);
+  for(const {v}of M.samplesFor(level)){
+   const ev=M.evaluate(s,v);assert.ok(close(ev.output,M.reference(v,level)),'the toy arithmetic is still equal');
+   assert.match(ev.error,/组件用途不匹配/);assert.ok(ev.componentIssue);assert.equal(ev.bad.id,ev.componentIssue.id);
+  }
+  assert.equal(JSON.stringify(s),before,'validation preserves the circuit');
  }
- const old=M.solutions(level.id);
- assert.equal(M.stock(old,'encoder-add'),0);assert.equal(M.stock(old,'ln-attn'),0);
- assert.equal(M.nodeName(old,'encoder-add'),'残差相加 · 1');assert.equal(M.nodeName(old,'ffn-add'),'残差相加 · 2');
- assert.equal(M.nodeName(old,'ln-attn'),'LayerNorm · 1');assert.equal(M.nodeName(old,'ln-ffn'),'LayerNorm · 2');
- assert.ok(M.removeNode(old,'ffn-add'));assert.equal(M.stock(old,'encoder-add'),1);
- const decoder=M.solutions('decoder-layer');assert.equal(M.stock(decoder,'encoder-add'),1,'other lessons retain their stock rules');
+});
+test('role checks support either residual input order and building a network from its outlet backwards',()=>{
+ for(const level of ['encoder-layer','decoder-self','decoder-layer','block']){
+  const reference=M.solutions(level),s=plain(reference);s.sink=null;s.nodes.forEach(n=>n.links=n.links.map(()=>null));
+  assert.equal(M.connect(s,reference.sink,'sink',0),null);
+  for(const n of [...reference.nodes].reverse())for(const [port,from]of [...n.links.entries()].reverse())assert.equal(M.connect(s,from,n.id,port),null,level+' '+n.id);
+  for(const n of s.nodes)if(M.definitions[n.kind].type==='residual')n.links.reverse();
+  for(const {v}of M.samplesFor(level)){const ev=M.evaluate(s,v);assert.equal(ev.error,null);assert.ok(close(ev.output,M.reference(v,level)));}
+ }
+});
+test('role errors reject the new edge without mutation, including upstream-last bypasses',()=>{
+ const s=M.solutions('decoder-layer'),before=JSON.stringify(s);
+ for(const [from,to,port]of [['encoder-add','ln-ffn',0],['masked-heads','ln-ffn',0],['masked-heads','cross-add',1]]){
+  assert.match(M.connect(s,from,to,port),/组件用途不匹配/);assert.equal(JSON.stringify(s),before);
+ }
+ const wrong=borrowKinds(M.solutions('decoder-layer'),{'encoder-add':'ffn-add','ln-attn':'ln-ffn'});
+ wrong.nodes.find(n=>n.kind==='masked-heads').links=[null];const partial=JSON.stringify(wrong);
+ assert.match(M.connect(wrong,'R','masked-heads',0),/组件用途不匹配/);assert.equal(JSON.stringify(wrong),partial);
+ const optional=M.solutions('decoder-layer');optional.nodes.push({id:'ln-ffn-2',kind:'ln-ffn',x:0,z:0,links:['masked-heads']});
+ assert.equal(M.evaluate(optional,M.samplesFor('decoder-layer')[0].v).error,null,'unused shelf experiments do not become hidden output goals');
+ const generic=M.solutions('layernorm');assert.equal(M.connect(generic,'R','layernorm2',0),null,'the introductory LayerNorm stays generic');
+});
+test('expanded attention retains its role without requiring a specific component ID or package',()=>{
+ for(const [level,residual,norm]of [['masked-multihead','encoder-add','ln-attn'],['cross-attention','cross-add','ln-cross']]){
+  const s=M.solutions(level),output=s.sink;
+  s.nodes.push({id:residual,kind:residual,x:0,z:0,links:['R',output]},{id:norm,kind:norm,x:0,z:0,links:[residual]});s.sink=norm;
+  assert.equal(M.evaluate(s,M.samplesFor(level)[0].v).error,null,level);
+ }
 });
 
 test('masked decoder attention cannot read future target positions',()=>{

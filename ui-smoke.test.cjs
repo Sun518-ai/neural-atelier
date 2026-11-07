@@ -31,6 +31,25 @@ test('QKV keeps saved V-only circuits and badges from before or during the tempo
   const before=app.eval('JSON.stringify(state)');assert.deepEqual(JSON.parse(before),JSON.parse(JSON.stringify(saved)));await app.eval('run()');assert.equal(app.eval('levelPassed()'),true);assert.equal(app.eval("progress.completed('qkv')"),true);assert.equal(app.eval('JSON.stringify(state)'),before);
  }
 });
+test('saved borrowed LayerNorm circuits retain their wiring but report a role error instead of a false numeric failure',async()=>{
+ const base=boot(),saved=JSON.parse(JSON.stringify(base.c.NeuralPrologue.solutions('decoder-layer')));
+ const borrowed=saved.nodes.find(n=>n.id==='ln-attn');borrowed.id='ln-ffn-2';borrowed.kind='ln-ffn';
+ for(const n of saved.nodes)n.links=n.links.map(id=>id==='ln-attn'?'ln-ffn-2':id);
+ for(const language of ['zh-CN','en-US']){
+  const storage=new Map([['neural-atelier-level-decoder-layer-v1',JSON.stringify(saved)],['neural-atelier-chapters-v1',JSON.stringify({current:'decoder-layer',completed:['decoder-self']})]]);
+  const app=boot(storage,'#decoder-layer',[language]),doc=app.document,before=app.eval('JSON.stringify(state)');let played=0;
+  assert.deepEqual(JSON.parse(before),saved);
+  app.c.observeRun=()=>{played++;assert.equal(app.eval('fault'),null);assert.equal(doc.querySelector('#run-report').hidden,true);};app.eval('world.animate=window.observeRun');
+  await app.eval('run()');assert.equal(played,1);assert.equal(app.eval('levelPassed()'),false);assert.ok(!doc.querySelector('#level-complete').open);
+  assert.equal(app.eval('current.componentIssue.id'),'ln-ffn-2');assert.equal(app.eval('JSON.stringify(state)'),before);assert.equal(app.eval("progress.completed('decoder-self')"),true);
+  assert.match(doc.querySelector('#run-report').textContent,language==='en-US'?/Module role mismatch.*FFN/s:/组件用途不匹配.*FFN/s);
+  assert.doesNotMatch(doc.querySelector('#run-report').textContent,/数值不匹配|Values do not match/);
+  if(language==='en-US')assert.doesNotMatch(doc.querySelector('#run-report').textContent,/[\u3400-\u9fff]/);
+  app.c.I18n.setPreference(language==='en-US'?'zh':'en');
+  assert.match(doc.querySelector('#run-report').textContent,language==='en-US'?/组件用途不匹配/:/Module role mismatch/);
+  assert.deepEqual([...app.c.I18n.missing],[]);
+ }
+});
 test('all levels automatically display their report beside the run controls',async()=>{
  const app=boot(),M=app.c.NeuralPrologue;
  for(const id of Object.keys(M.levels)){
@@ -415,8 +434,8 @@ test('the shelf remains usable after the placement tutorial and original lessons
 test('encoder groups old parts without hiding useful distractors or prewiring the challenge',()=>{
  const app=boot(new Map(),'#encoder-layer'),doc=app.document;
  const current=()=>[...doc.querySelectorAll('.shelf-current [data-add-module]')].map(e=>e.dataset.addModule);
- assert.deepEqual(current(),['self-heads','original-ffn-block','encoder-add','ln-attn','wide-position']);
- assert.equal(doc.querySelector('[data-add-module="ffn-add"]'),null);assert.equal(doc.querySelector('[data-add-module="ln-ffn"]'),null);
+ assert.deepEqual(current(),['self-heads','encoder-add','ln-attn','original-ffn-block','ffn-add','ln-ffn','wide-position']);
+ assert.ok(doc.querySelector('[data-add-module="ffn-add"]'));assert.ok(doc.querySelector('[data-add-module="ln-ffn"]'));
  assert.equal(doc.querySelector('[data-add-module="original-encoder"]'),null,'the answer package still requires a win');
  assert.equal(doc.querySelector('[data-earlier-parts]').hasAttribute('open'),false);
  assert.ok(doc.querySelector('.shelf-earlier [data-add-module="v"]'),'earlier learned choices remain inspectable and usable');
@@ -437,19 +456,19 @@ test('encoder groups old parts without hiding useful distractors or prewiring th
  app.eval("switchLevel('causal')");assert.equal(doc.querySelector('.encoder-primer'),null);assert.ok(doc.querySelector('[data-earlier-parts]'));assert.equal(doc.querySelector('[data-earlier-parts]').hasAttribute('open'),false);
 });
 
-test('encoder retains saved named copies, wiring and badges while grouped stock refunds correctly',async()=>{
+test('encoder retains saved named copies, wiring and badges with independent role stock',async()=>{
  const base=boot(),M=base.c.NeuralPrologue,old=M.solutions('encoder-layer');old.nodes[0].x=-3.19;
  const key='neural-atelier-level-encoder-layer-v1',meta='neural-atelier-chapters-v1';
  const storage=new Map([[key,JSON.stringify(old)],[meta,JSON.stringify({current:'encoder-layer',completed:['multihead','encoder-layer']})]]),app=boot(storage,'#encoder-layer');
  assert.equal(app.eval('JSON.stringify(state)'),JSON.stringify(old));assert.equal(app.eval("progress.completed('encoder-layer')"),true);
- assert.equal(app.document.querySelector('[data-add-module="encoder-add"] .stock-count').textContent,'0');
+ assert.equal(app.document.querySelector('[data-add-module="encoder-add"] .stock-count').textContent,'1');
  assert.ok(app.document.querySelector('.shelf-current [data-add-module="original-encoder"]'),'earned composite stays visible for collection');
  await app.eval('run()');assert.equal(app.eval('levelPassed()'),true);assert.equal(app.eval('JSON.stringify(state)'),JSON.stringify(old));
- app.eval("removeModule('ffn-add')");assert.equal(app.document.querySelector('[data-add-module="encoder-add"] .stock-count').textContent,'1');
+ app.eval("removeModule('ffn-add')");assert.equal(app.document.querySelector('[data-add-module="ffn-add"] .stock-count').textContent,'2');assert.equal(app.document.querySelector('[data-add-module="encoder-add"] .stock-count').textContent,'1');
  app.document.querySelector('#undo').onclick();assert.equal(app.eval('JSON.stringify(state)'),JSON.stringify(old));
  const extra=JSON.parse(JSON.stringify(old));extra.nodes.push({id:'encoder-add-2',kind:'encoder-add',x:6,z:3,links:[null,null]});
  const legacy=boot(new Map([[key,JSON.stringify(extra)]]),'#encoder-layer');
- assert.equal(legacy.eval('JSON.stringify(state)'),JSON.stringify(extra),'preexisting extra copies are kept, even beyond the new shared shelf quota');
+ assert.equal(legacy.eval('JSON.stringify(state)'),JSON.stringify(extra),'preexisting extra copies and their placement are kept');
  assert.equal(legacy.eval("M.stock(state,'encoder-add')"),0);
 });
 
