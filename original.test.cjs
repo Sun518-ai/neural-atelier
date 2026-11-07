@@ -233,6 +233,17 @@ test('masked decoder attention cannot read future target positions',()=>{
 test('cross-attention takes queries from targets and keys/values from independently supplied encoder memory',()=>{
  const s=M.solutions('cross-attention'),input=M.samplesFor('cross-attention')[0].v,ev=M.evaluate(s,input);
  assert.notDeepEqual(plain(ev.values.R),plain(ev.values.Z));
+ const prior=M.samplesFor('decoder-self');
+ for(const [i,sample]of M.samplesFor('cross-attention').entries()){
+  assert.ok(close(sample.v,M.reference(prior[i].v,'decoder-self')),'D is the preceding decoder sublayer output');
+  assert.ok(!close(sample.v,prior[i].v),'D is not the initial embedding and position input');
+ }
+ const target=M.samplesFor('decoder-layer')[0].v,full=M.evaluate(M.solutions('decoder-layer'),target);
+ assert.ok(close(input,full.values['ln-attn']),'the standalone lesson starts at the real cross-attention boundary');
+ assert.ok(close(ev.values.Z,full.values.Z));
+ assert.equal(M.extraCard('original-q','cross-attention').formula,'Q = D × Wq');
+ assert.equal(M.extraCard('original-k','cross-attention').formula,'K = E × Wk');
+ assert.equal(M.extraCard('original-v','cross-attention').formula,'V = E × Wv');
  assert.ok(close(ev.values['original-q'],O.project(input,O.wide.q)));assert.ok(close(ev.values['original-k'],O.project(ev.values.Z,O.wide.k)));assert.ok(close(ev.values['original-v'],O.project(ev.values.Z,O.wide.v)));
  const source1=O.embed([0,1,2],4),source2=[...source1.slice(0,8),-3,2,.5,-.8];
  assert.ok(!close(O.singleAttention(input,source1).slice(0,2),O.singleAttention(input,source2).slice(0,2)),'every target may read the last source position');

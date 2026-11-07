@@ -433,13 +433,14 @@ test('cross-attention uses separate four-feature source racks and distinct trave
   for(const el of document.querySelectorAll('.packet')){
    if(el.hidden)continue;
    if(el.dataset.from==='Z'){seen.add('source');assert.equal(el.querySelector('.packet-title').textContent,'Source sequence');}
-   if(el.dataset.from==='R'){seen.add('target');assert.equal(el.querySelector('.packet-title').textContent,'Target prefix');}
+   if(el.dataset.from==='R'){seen.add('target');assert.equal(el.querySelector('.packet-title').textContent,'Target features');}
   }
  }});
  const M=app.c.NeuralPrologue;app.api.switchLevel('cross-attention');
  assert.equal(app.document.querySelector('#sample-value').textContent,'3 positions × 4 features');
  const groups={R:[],Z:[]};app.scenes.at(-1).traverse(o=>{if(o.userData.sourceId)groups[o.userData.sourceId].push(o);});
  assert.equal(groups.R.length,3);assert.equal(groups.Z.length,3);assert.ok(Math.min(...groups.R.map(o=>o.position.z))>Math.max(...groups.Z.map(o=>o.position.z)));
+ assert.ok([...app.document.querySelectorAll('.source-label')].some(el=>/Target features D/.test(el.textContent)&&/previous LayerNorm/.test(el.textContent)));
  assert.match(app.document.querySelector('[data-output="R"]').textContent,/D · 3 × 4/);assert.match(app.document.querySelector('[data-output="Z"]').textContent,/E · 3 × 4/);
  app.api.setState(M.solutions('cross-attention'));app.api.getWorld().rebuild();await app.api.run();assert.deepEqual([...seen].sort(),['source','target']);
  app.api.getWorld().focus('original-k');assert.match(app.document.querySelector('#card-formula').textContent,/E/);

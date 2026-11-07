@@ -789,6 +789,12 @@ test('every playable lesson has a bilingual structure location, valid focus and 
  assert.equal(map.get('causal').flow,'causal');assert.equal(map.get('causal').exit,'softmax');assert.match(map.get('causal').output,/weights A/);
  assert.equal(map.get('qkv').exit,'qkv');assert.match(map.get('qkv').output,/only V/);
  assert.equal(map.get('cross-attention').exit,'wo');assert.match(map.get('cross-attention').output,/before residual/);
+ app.eval("switchLevel('cross-attention')");
+ app.document.querySelector('[data-open-structure]').dispatchEvent(new app.window.Event('click',{bubbles:true}));
+ const branches=app.document.querySelectorAll('[data-map-flow="cross"] .map-branch-pair>ol');
+ assert.equal(branches.length,2);assert.match(branches[0].textContent,/LayerNorm → D/);assert.match(branches[0].textContent,/D → Q projection → Q/);assert.match(branches[1].textContent,/E → K \/ V projections/);
+ assert.equal(map.get('cross-attention').focus.includes('prepared'),false,'the preceding lesson is context, not required again on this board');
+ app.document.querySelector('#structure-close').onclick();
  assert.equal(map.get('decoder-self').exit,'norm1');assert.equal(map.get('encoder-layer').exit,'norm2');assert.equal(map.get('decoder-layer').exit,'norm3');
  assert.match(map.get('ffn').where,/half/);assert.match(map.get('ffn').next,/attention half is absent/);
  assert.match(map.get('encoder-decoder').output,/logits/);assert.match(map.get('autoregressive').note,/fixed transition table/);
