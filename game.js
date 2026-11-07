@@ -1,5 +1,5 @@
-import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=readout-motion-1';
-import {createProgress} from './level-progress.js?v=readout-motion-1';
+import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=token-reveal-1';
+import {createProgress} from './level-progress.js?v=token-reveal-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -365,14 +365,14 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=readout-motion-1');
+ const {createSceneArt}=await import('./scene-art.js?v=token-reveal-1');
  function scenePalette(){
   if(typeof getComputedStyle!=='function')return {};
   const css=getComputedStyle(document.body),read=name=>css.getPropertyValue(name).trim();
   return {surface:read('--group-bg'),edge:read('--group-border'),accent:read('--group-accent')};
  }
  const art=createSceneArt(T,scene,colors,{anisotropy:renderer.capabilities.getMaxAnisotropy()});art.surroundings(samples(),stage(),scenePalette());
- let fusionEffect=null;
+ let fusionEffect=null,tokenPreview=null;
  const assembly=new T.Group(),wires=new T.Group();scene.add(assembly,wires);const neuronGeo=new T.SphereGeometry(.115,16,12);let elements=[],curves=[],packets=[],drag=null,preview=null,yaw=.05,pitch=.8,zoom=stage().zoom,lastDepth=-1;
  const cameraTarget=new T.Vector3();let focusId=null,shelfFocus=null,shelfModel=null,overview=null,cameraFrame=0,transitioning=false,lastTap=null;
  const ray=new T.Raycaster(),cursor=new T.Vector2(),plane=new T.Plane(new T.Vector3(0,1,0),0);
@@ -417,7 +417,7 @@ try{
  function neuralModule(n){art.module(assembly,n,definition(n.id),M.weights);}
  function rebuild(){if(focusId)leaveFocus();clearPreview();dispose(assembly);dispose(wires);art.resetUnits();curves=[];state.nodes.forEach(neuralModule);state.nodes.forEach(n=>n.links.forEach((id,i)=>{if(id)wire(id,n.id,i);}));if(state.sink)wire(state.sink,'sink',0);labels();}
  function addLabel(tag,klass,html,attrs,pos){const el=document.createElement(tag);el.className=klass;const owner=attrs['data-owner']||attrs['data-node']||attrs['data-output']||attrs['data-input']?.split(':')[0];el.innerHTML=String(html);for(const [k,v]of Object.entries(attrs))el.setAttribute(k,v);if(owner)el.dataset.owner=owner;overlay.appendChild(el);elements.push({el,pos});return el;}
- function labels(){art.sync(current?.values,current?.depths||{},level,selected,sample,results,busy,stage(),current?.output);overlay.querySelectorAll('.node-label,.port,.source-label,.node-value,.local-fault,.fault-pin,.device-badge,.row-marker,.wire-actions').forEach(el=>el.remove());elements=[];
+ function labels(){art.sync(current?.values,current?.depths||{},level,selected,sample,results,busy,stage(),current?.output,tokenPreview);overlay.querySelectorAll('.node-label,.port,.source-label,.node-value,.local-fault,.fault-pin,.device-badge,.row-marker,.wire-actions').forEach(el=>el.remove());elements=[];
   const edge=selectedWire&&curves.find(c=>c.to===selectedWire.to&&c.index===selectedWire.index&&c.from===selectedWire.from);
   if(edge&&!busy&&!focusId)addLabel('div','wire-actions',`<span>${outputName(edge.from)} → ${edge.to==='sink'?stage().outputTitle:nodeName(edge.to)}</span><button type="button" data-delete-wire>${I18n.t("删除连线")}</button><button type="button" data-close-wire aria-label="${I18n.t("关闭")}">×</button>`,{},()=>edge.curve.getPoint(.5));
   const removable=stage().buildable&&state.nodes.find(n=>n.id===actionNode);
@@ -705,12 +705,14 @@ try{
    effect.frame=requestAnimationFrame(tick);
   });
  }
- function clearPackets(){finishFusion(false);packets.forEach(p=>{p.el.remove();p.calculation?.remove();p.outputLabels?.forEach(({el})=>el.remove());for(const mesh of [p.mesh,p.otherMesh,p.outputMesh].filter(Boolean)){scene.remove(mesh);mesh.traverse(o=>{o.geometry?.dispose();o.material?.map?.dispose();o.material?.dispose();});}});packets=[];art.clearProcessing();render();}
+ function clearPackets(){finishFusion(false);tokenPreview=null;packets.forEach(p=>{p.el.remove();p.calculation?.remove();p.outputLabels?.forEach(({el})=>el.remove());for(const mesh of [p.mesh,p.otherMesh,p.outputMesh].filter(Boolean)){scene.remove(mesh);mesh.traverse(o=>{o.geometry?.dispose();o.material?.map?.dispose();o.material?.dispose();});}});packets=[];art.clearProcessing();render();}
  const normalizationFrame=(time,centering)=>art[centering?'layerNormFrame':'rmsFrame'](time,stage().sequence?3:1);
  function animate(ev,ms,id){
   clearPackets();lastDepth=-1;const reduced=matchMedia('(prefers-reduced-motion:reduce)').matches;if(reduced)ms=70;
   let previous=animationTime(),elapsed=0;
   const seq=!!stage().sequence,readyNodes=state.nodes.filter(n=>ev.values[n.id]);
+  // Preview only the picker actually wired to the outlet, never an unused branch.
+  const tokenSink=seq&&stage().tokenOutput&&ev.output&&readyNodes.find(n=>n.id===state.sink&&definition(n.id).type==='pick');
   const pairedNode=id=>!seq&&['multiply','add'].includes(definition(id)?.type);
   const mixingNode=id=>definition(id)?.type==='mix';
   const projectionNode=id=>definition(id)?.type==='linear'||definition(id)?.type==='vocabulary'&&!!weightsFor(id);
@@ -888,6 +890,11 @@ try{
    const t=Math.min(max,elapsed/ms);level=0;while(level<lastWave&&t>=ends[level+1])level++;
    if(t>=max){clearPackets();labels();renderShelf();resolve();return;}
    if(level!==lastDepth){lastDepth=level;labels();renderShelf();}
+   if(tokenSink){
+    const values=ev.values[tokenSink.id],timing=art.selectionFrame(t-starts[ev.depths[tokenSink.id]],definition(tokenSink.id).ins[0]/values.length,values.length);
+    const ready=Math.max(0,Math.min(values.length,Math.floor((t-starts[ev.depths[tokenSink.id]]-timing.ready)/timing.rowDuration)+1));
+    if(ready!==(tokenPreview?.length||0)){tokenPreview=values.slice(0,ready);labels();}
+   }
    art.pulseSource(reduced?1:t);
    packets.forEach(p=>{
     const tt=t-p.start,timing=p.selection?art.selectionFrame(tt,p.input.length/p.output.length,p.output.length):p.sequenceProjection?art.sequenceProjectionFrame(tt,p.columns):p.tokenOperation?art.tokenFrame(tt,p.tokenOperation):p.normalizing?normalizationFrame(tt,p.centering):p.worked?art.projectionFrame(tt,p.output.length):null,progress=timing?timing.phase:clamp(tt/(p.motion==='wire'?travelDuration:1));
@@ -938,11 +945,11 @@ try{
      if(p.selection){
       p.el.hidden=!visible||(progress>.04&&progress<.9);p.mesh.visible=visible&&tt<timing.end;
       art.routeSelectionInput(p.node.id,p.mesh,tt,p.p,p.path.getPoint(.04));
-      art.routeSelectionOutput(p.node.id,p.outputMesh,tt,p.p);p.outputMesh.visible=visible&&tt>=timing.finish+.27;
+      art.routeSelectionOutput(p.node.id,p.outputMesh,tt,p.p);p.outputMesh.visible=visible&&tt>=timing.ready;
       p.portFade=visible?ramp(progress,.04,.12):0;p.focus=visible?timing.focus:0;
       p.updateSelection(timing);p.calculation.hidden=!visible||timing.rowTime<.36||timing.rowTime>=timing.rowDuration-.02;
       p.calculation.style.opacity=String(ramp(timing.rowTime,.36,.4)*(1-ramp(timing.rowTime,timing.rowDuration-.08,timing.rowDuration)));
-      p.outputLabels.forEach(({el},j)=>{const ready=j*timing.rowDuration+timing.finish+.27,alpha=ramp(tt,ready,ready+.03)*(1-ramp(progress,.9,.98));el.hidden=!visible||alpha<=0;el.style.opacity=String(alpha);});
+      p.outputLabels.forEach(({el},j)=>{const ready=j*timing.rowDuration+timing.ready,alpha=ramp(tt,ready,ready+.03)*(1-ramp(progress,.9,.98));el.hidden=!visible||alpha<=0;el.style.opacity=String(alpha);});
      }
      if(p.tokenOperation){
       p.el.hidden=!visible||(progress>.12&&progress<.88);p.mesh.visible=visible&&tt<timing.end;

@@ -395,7 +395,7 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   }
   return active;
  }
- function sync(values,depths,depth,selected,activeSample,results,busy,layout={},output=null){
+ function sync(values,depths,depth,selected,activeSample,results,busy,layout={},output=null,tokenPreview=null){
   if(!busy)clearProcessing();
   for(const [id,u]of units){const completed=values?.[id]&&(depths[id]||0)<=depth,active=busy&&depths[id]===depth,sel=id===selected;
    u.glow.material.emissiveIntensity=active?1.6:sel?.9:completed?.45:.12;
@@ -412,12 +412,12 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   rows.forEach((r,i)=>{
    const active=busy&&(seq||i===activeSample);r.g.userData.active=active;r.stripe.material.emissiveIntensity=active?1.3:.1;
    const result=seq?results[activeSample]:results[i],offset=seq?i*r.cells.length:0;
-   const actual=result?.actual;
+   const actual=result?.actual||(layout.tokenOutput?tokenPreview:null);
    const rowPass=result&&(seq?actual&&r.cells.every((_,j)=>Number.isFinite(actual[offset+j])&&Math.abs(actual[offset+j]-result.expected[offset+j])<(layout.engine?(layout.limits?.error||.06):1e-9)):result.pass);
    const tone=!result?'#558974':rowPass?'#397c61':'#a14d3d';
    r.panel.material.color.set(!result?0xc8d9c5:rowPass?0xbcd8c4:0xe6c1ac);
    r.status.write(!result?'·':rowPass?'✓':'×',tone);
-   r.cells.forEach((cell,j)=>{const value=actual?.[offset+j];cell.write(layout.tokenOutput&&Number.isInteger(value)?window.NeuralPrologue.math.vocab[value]??'?':Number.isFinite(value)?Number(value.toFixed(2)).toString():result?'—':'·',tone);});
+   r.cells.forEach((cell,j)=>{const value=actual?.[offset+j];cell.write(layout.tokenOutput?(Number.isInteger(value)?window.NeuralPrologue.math.vocab[value]??'?':''):Number.isFinite(value)?Number(value.toFixed(2)).toString():result?'—':'·',tone);});
   });
 
  }
@@ -446,7 +446,7 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
  }
  function selectionFrame(time,columns=6,count=3){
   const timing=sequenceProjectionFrame(time,columns,count),finish=.67+(columns-1)*timing.step;
-  return {...timing,finish,stage:timing.rowTime<.4?'arrive':timing.rowTime<finish?'compare':'emit'};
+  return {...timing,finish,ready:finish+.27,stage:timing.rowTime<.4?'arrive':timing.rowTime<finish?'compare':'emit'};
  }
  function selectionChoice(scores,column){
   let previous=0;for(let j=1;j<column;j++)if(scores[j]>scores[previous])previous=j;
@@ -502,7 +502,7 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   mesh.userData.gather=gather;mesh.userData.routing=gather<1;
   mesh.children.forEach((o,i)=>{
    if(o.userData.packetTray){o.material.opacity=ramp(timing.phase,.8,.94);return;}
-   const row=o.userData.feature??o.userData.featurePad,home=mesh.userData.outputHomes[i],ready=row*timing.rowDuration+timing.finish+.27,alpha=ramp(time,ready,ready+.03);
+   const row=o.userData.feature??o.userData.featurePad,home=mesh.userData.outputHomes[i],ready=row*timing.rowDuration+timing.ready,alpha=ramp(time,ready,ready+.03);
    o.visible=alpha>0;o.material.opacity=alpha;const start=u.selectionRows[row].output.getWorldPosition(new T.Vector3()).add(new T.Vector3(0,home.y,0));
    o.position.copy(start.lerp(origin.clone().add(home),gather).sub(origin));Object.assign(o.userData,{selectedRow:row});
   });

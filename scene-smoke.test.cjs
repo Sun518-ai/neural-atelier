@@ -3,7 +3,7 @@ const {parseHTML}=require('linkedom');
 async function boot({reduced=true,frameMs=1000,onFrame=()=>{},languages=['zh-CN'],timers={setTimeout,clearTimeout}}={}){
  const Three=await import('./vendor/three.module.js');
  const {document,window}=parseHTML(fs.readFileSync(__dirname+'/index.html','utf8'));const native=document.createElement.bind(document);
- document.createElement=function(name){const el=native(name);if(name==='canvas')el.getContext=()=>({fillRect(){},fillText(){},measureText(t){return {width:String(t).length*60}}});return el;};
+ document.createElement=function(name){const el=native(name);if(name==='canvas')el.getContext=()=>({fillRect(){},fillText(t){el.drawnText=String(t);},measureText(t){return {width:String(t).length*60}}});return el;};
  for(const el of document.querySelectorAll('dialog')){el.showModal=function(){this.open=true};el.close=function(){this.open=false};}
  for(const el of document.querySelectorAll('*')){Object.defineProperty(el,'clientWidth',{get:()=>el.id==='scene'?1400:100});Object.defineProperty(el,'clientHeight',{get:()=>el.id==='scene'?760:60});el.focus=()=>{};el.scrollIntoView=()=>{};}
  let view,renderedCamera;const scenes=[];class Renderer{constructor(){this.domElement=native('canvas');this.shadowMap={};this.capabilities={getMaxAnisotropy:()=>8};}setPixelRatio(){}setClearColor(){}setSize(){}render(scene,camera){renderedCamera=camera;view={position:camera.position.toArray(),width:camera.right-camera.left};scenes.push(scene);scene.updateMatrixWorld();camera.updateMatrixWorld();scene.traverse(o=>{if(o.isMesh)assert.ok(o.matrixWorld.elements.every(Number.isFinite),'nonfinite transform '+o.type);});}}
@@ -384,6 +384,36 @@ test('vocabulary projections show real weights and biases; selection compares ev
  assert.equal(columns.size,54);assert.equal(pauseFrames,3);assert.deepEqual([...flags].sort(),['IDs gather','bias shown','matrix focus','winner flies']);
  const first=M.samplesFor('vocabulary')[1].word;for(let column=1;column<6;column++){const delta=times.get([first,0,column].join('|'))-times.get([first,0,column-1].join('|'));assert.ok(Math.abs(delta-1040)<=200,'column '+column+' starts after '+delta+' ms');}
  app.c.I18n.setPreference('en');app.api.getWorld().focusShelf('original-head');assert.doesNotMatch(app.document.querySelector('#card-meaning').textContent,/[\u3400-\u9fff]/);app.document.querySelector('#card-close').onclick();
+ assert.deepEqual([...app.c.I18n.missing],[]);
+});
+test('token outlet reveals completed selections one at a time and clears them on stop or restart',async()=>{
+ let app,mode='complete',paused=false,pauseFrames=0,stopped=false;const seen=new Set();
+ const outlet=()=>{const out=[];app.scenes.at(-1).traverse(o=>{if(o.userData.sinkRow!=null){const text=o.children.filter(c=>c.material?.map).map(c=>c.material.map.image.drawnText);out[o.userData.sinkRow]={word:text.at(-1),status:text.at(-2)};}});return out;};
+ app=await boot({reduced:false,frameMs:80,onFrame:({document})=>{
+  if(!app)return;const M=app.c.NeuralPrologue,sample=M.samplesFor('vocabulary').find(s=>s.word===document.querySelector('#sample-name').textContent),ev=M.evaluate(app.api.getState(),sample.v);
+  let selection;app.scenes.at(-1).traverse(o=>{if(o.userData.node==='pick-2')selection=o.userData.selection;});
+  if(!selection||selection.stage!=='compare')return;
+  const displayed=outlet();
+  if(mode==='disconnected'){assert.deepEqual(displayed.map(r=>r.word),['','','']);seen.add('unwired picker stays private');return;}
+  assert.deepEqual(displayed.map(r=>r.word),[0,1,2].map(i=>i<selection.row?M.math.vocab[ev.output[i]]:''),'only earlier completed positions are visible');
+  assert.ok(displayed.every(r=>r.status==='·'),'no correctness verdict before the whole trial finishes');
+  seen.add(sample.word+'|'+selection.row);
+  if(mode==='stop'&&selection.row===1){
+   stopped=true;mode='stopped';app.api.run();assert.deepEqual(outlet().map(r=>r.word),['','','']);return;
+  }
+  if(mode==='complete'&&selection.row===1&&!paused){paused=true;app.api.togglePause();}
+  if(paused&&pauseFrames<3){
+   if(++pauseFrames===2)app.c.I18n.setPreference('en');
+   if(pauseFrames===3){assert.equal(outlet().filter(r=>r.word).length,1);app.c.I18n.setPreference('zh');app.api.togglePause();}
+  }
+ }});
+ const M=app.c.NeuralPrologue,doc=app.document;doc.querySelector('#welcome').close();app.api.switchLevel('vocabulary');const state=M.solutions('vocabulary');
+ state.nodes.find(n=>n.id==='pick').id='pick-2';state.sink='pick-2';app.api.setState(state);app.api.getWorld().rebuild();const saved=JSON.stringify(state);
+ assert.deepEqual(outlet().map(r=>r.word),['','','']);await app.api.run();assert.equal(JSON.stringify(state),saved);
+ for(const sample of M.samplesFor('vocabulary'))for(let i=0;i<3;i++)assert.ok(seen.has(sample.word+'|'+i));
+ assert.deepEqual(outlet().map(r=>r.word),Array.from(M.evaluate(state,M.samplesFor('vocabulary').at(-1).v).output,id=>M.math.vocab[id]));assert.ok(outlet().every(r=>r.status==='✓'));assert.equal(pauseFrames,3);
+ mode='stop';const run=app.api.run();assert.deepEqual(outlet().map(r=>r.word),['','',''],'a replay clears the previous words immediately');await run;assert.ok(stopped);assert.deepEqual(outlet().map(r=>r.word),['','','']);
+ mode='disconnected';state.sink=null;app.api.getWorld().rebuild();await app.api.run();assert.ok(seen.has('unwired picker stays private'));assert.deepEqual(outlet().map(r=>r.word),['','','']);
  assert.deepEqual([...app.c.I18n.missing],[]);
 });
 test('moving trays preserve feature columns and sequence rows through projection',async()=>{
