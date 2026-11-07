@@ -51,6 +51,29 @@ test('demo generation uses actual outputs, retains text, and clears it on replay
  assert.equal(doc.querySelectorAll('#demo-transcript .seed-token').length,3);assert.equal(doc.querySelectorAll('#demo-transcript .generated-token').length,3);assert.equal(app.eval('levelPassed()'),true);
  doc.querySelector('#complete-replay').onclick();assert.equal(app.eval('busy'),false);assert.equal(doc.querySelectorAll('#demo-transcript .generated-token').length,0);
 });
+test('demo fullscreen preserves playback and saves, follows Escape, and localizes its live state',async()=>{
+ const app=boot(new Map(),'#transformer-demo'),doc=app.document,game=doc.querySelector('#game'),button=doc.querySelector('#demo-fullscreen');
+ const before=app.eval('JSON.stringify(state)'),stored=JSON.stringify([...app.storage]);
+ const change=()=>doc.dispatchEvent(new app.window.Event('fullscreenchange'));
+ game.requestFullscreen=async options=>{assert.equal(options.navigationUI,'hide');doc.fullscreenElement=game;change();};doc.exitFullscreen=async()=>{doc.fullscreenElement=null;change();};
+ assert.equal(button.hidden,false);assert.equal(button.previousElementSibling.id,'demo-follow');
+ app.eval('busy=true;paused=true;setPlaybackSpeed(.5,false)');
+ await button.onclick();assert.equal(doc.fullscreenElement,game);assert.equal(button.textContent,'退出全屏');assert.equal(button.getAttribute('aria-pressed'),'true');assert.equal(button.dataset.fullscreenMode,'native');
+ assert.ok(game.contains(doc.querySelector('#run'))&&game.contains(doc.querySelector('#pause'))&&game.contains(doc.querySelector('#playback-speed')));
+ app.c.I18n.setPreference('en');assert.equal(button.textContent,'Exit fullscreen');
+ await doc.exitFullscreen();assert.equal(button.textContent,'Fullscreen');assert.equal(button.getAttribute('aria-pressed'),'false');
+ await button.onclick();await button.onclick();assert.equal(doc.fullscreenElement,null);assert.equal(button.disabled,false);
+ assert.equal(app.eval('busy&&paused&&playbackSpeed===.5'),true);assert.equal(app.eval('JSON.stringify(state)'),before);
+ assert.equal(JSON.stringify([...app.storage].filter(([k])=>k!=='neural-atelier-language-v1')),stored);
+ app.eval("busy=false;paused=false;switchLevel('wire')");assert.equal(button.hidden,true);assert.deepEqual([...app.c.I18n.missing],[]);
+});
+test('embedded browsers fall back to page fullscreen and Escape preserves the run',async()=>{
+ const app=boot(new Map(),'#transformer-demo'),doc=app.document,button=doc.querySelector('#demo-fullscreen');
+ doc.querySelector('#game').requestFullscreen=async()=>{throw new Error('denied');};
+ app.eval('busy=true');await button.onclick();assert.equal(button.disabled,false);assert.equal(button.getAttribute('aria-pressed'),'true');assert.equal(doc.querySelector('#game').classList.contains('demo-expanded'),true);assert.equal(app.eval('busy'),true);
+ const e=new app.window.Event('keydown');e.key='Escape';doc.dispatchEvent(e);assert.equal(button.getAttribute('aria-pressed'),'false');assert.equal(doc.querySelector('#game').classList.contains('demo-expanded'),false);assert.equal(app.eval('busy'),true);
+ await button.onclick();app.eval("busy=false;switchLevel('wire')");assert.equal(doc.body.classList.contains('demo-fullscreen'),false);
+});
 test('QKV passes with only V placed or with Q/K left disconnected, while wrong outlet values fail',async()=>{
  const app=boot();app.eval("switchLevel('qkv');state=M.initial('qkv');M.addNode(state,'v',0,0);M.connect(state,'R','v',0);M.connect(state,'v','sink',0)");
  let played=0;app.c.worldForTest={async animate(){played++;assert.equal(app.eval('fault'),null);assert.ok(app.document.querySelector('#run-report').hidden);}};

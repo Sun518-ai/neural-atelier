@@ -79,6 +79,28 @@ function togglePause(){
  refreshPauseControl();
 }
 $('#pause').onclick=togglePause;
+let fullscreenPending=false,fullscreenFallback=false;
+function syncFullscreen(){
+ const active=fullscreenFallback||document.fullscreenElement===$('#game'),button=$('#demo-fullscreen');
+ button.dataset.fullscreenMode=active?(fullscreenFallback?'page':'native'):'off';
+ $('#game').classList.toggle('demo-expanded',active);document.body.classList.toggle('demo-fullscreen',active);
+ button.textContent=I18n.t(active?'退出全屏':'全屏');button.setAttribute('aria-pressed',String(active));
+ button.title=I18n.t(active?'退出全屏（Esc）':'全屏查看，保留运行与调速');
+ button.disabled=fullscreenPending;
+}
+$('#demo-fullscreen').onclick=async()=>{
+ if(fullscreenPending)return;
+ fullscreenPending=true;syncFullscreen();
+ try{
+  if(fullscreenFallback)fullscreenFallback=false;
+  else if(document.fullscreenElement===$('#game'))await document.exitFullscreen();
+  else if($('#game').requestFullscreen)await $('#game').requestFullscreen({navigationUI:'hide'});
+  else fullscreenFallback=true;
+ }catch(error){console.warn('Fullscreen request failed; using page view.',error);fullscreenFallback=document.fullscreenElement!==$('#game');}
+ finally{fullscreenPending=false;syncFullscreen();}
+};
+document.addEventListener('fullscreenchange',syncFullscreen);
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&fullscreenFallback){fullscreenFallback=false;syncFullscreen();}});
 let engineReport=null;
 const levelPassed=()=>results.length===stage().sampleCount&&results.every(r=>r.pass)&&(!stage().engine||engineReport?.pass);
 function closeCompletion(){if($('#level-complete').open)$('#level-complete').close();}
@@ -148,6 +170,9 @@ function maskedHeadsPrimer(){
 function stageChrome(){
  closeHint();
  const c=stage();document.body.classList.toggle('demo-level',!!c.demonstration);
+ if(!c.floating)fullscreenFallback=false;
+ $('#demo-fullscreen').hidden=!c.floating;syncFullscreen();
+ if(!c.floating&&document.fullscreenElement===$('#game'))document.exitFullscreen().catch(()=>{});
  $('#scene').setAttribute('aria-label',I18n.t(c.floating?'拖动旋转 · Shift / 右键拖动平移 · 滚轮缩放':c.demonstration?'拖动转动视角 · 双击查看基础组件':'拖动空白转动视角，拖动模块重新摆放'));
  $('#demo-follow').hidden=!c.floating;$('#demo-follow-next').hidden=!c.floating;$('#demo-follow-view').hidden=!c.floating;$('#demo-pan').hidden=!c.floating;$('#demo-views').hidden=!c.demonstration;$('#demo-views').innerHTML=(c.demoViews||[]).map(view=>`<button type="button" data-demo-view="${view.key}">${view.label}</button>`).join('');
  document.body.dataset.stageColor=stageColor(c);renderStructureMap();document.body.classList.toggle('engine-level',!!c.engine);$('#device-docks').hidden=!c.engine;resetReport();$('#engine-controls').hidden=!c.engine;engineControls();$('.scene-legend').hidden=c.nodes.length===0;$('.scene-identity .chip').textContent=c.demonstration?I18n.t('完整演示'):I18n.t('自由接线');$('#scene-help').textContent=c.floating?I18n.t('拖动旋转 · Shift / 右键拖动平移 · 滚轮缩放'):c.demonstration?I18n.t('拖动转动视角 · 双击查看基础组件'):c.nodes.length?I18n.t("拖模块摆放 · 点连线删除 · 双击查看模块卡"):I18n.t("圆口出，方口进 · 拖动空白转动视角");$('#pass-count').textContent='0 / '+c.sampleCount;document.title=I18n.t("神经工坊 · ")+c.title;$('.chapter span').textContent=c.chapter;$('.chapter strong').textContent=c.title;

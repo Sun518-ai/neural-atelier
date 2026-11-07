@@ -25,6 +25,7 @@ test('the ready-to-run full Transformer renders and completes every basic operat
  await app.api.run();
  assert.equal(app.api.getFault(),null);assert.equal(app.document.querySelector('#level-complete').open,true);
  assert.equal(app.document.querySelectorAll('#test-results .pass').length,3);
+ assert.deepEqual(Array.from(app.document.querySelectorAll('#demo-transcript .generated-token'),el=>el.textContent),['你','爱','狗']);
  assert.equal(JSON.stringify(app.api.getState()),before);assert.equal(app.document.querySelectorAll('.packet:not([hidden])').length,0);
  app.document.querySelector('#complete-replay').onclick();assert.equal(app.document.querySelector('#level-complete').open,false);
  assert.equal(JSON.stringify(app.api.getState()),before);

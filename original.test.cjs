@@ -5,7 +5,7 @@ const M=ctx.NeuralPrologue,O=M.original;
 vm.runInContext(fs.readFileSync(__dirname+'/module-cards.js','utf8').replaceAll('export ',''),ctx,{filename:'module-cards.js'});
 const plain=x=>JSON.parse(JSON.stringify(x));
 const close=(a,b,tol=1e-9)=>a?.length===b.length&&a.every((x,i)=>Number.isFinite(x)&&Math.abs(x-b[i])<tol);
-test('the prepared Transformer expands every operator and matches the packed encoder-decoder',()=>{
+test('the prepared Transformer matches the encoder-decoder with its own fixed vocabulary projection',()=>{
  const id='transformer-demo',l=M.levels[id],s=M.initial(id),d=M.demo;
  assert.equal(l.demonstration,true);assert.equal(l.sampleCount,3);assert.equal(l.buildable,false);
  assert.equal(M.routes.main.ids.at(-1),id);assert.equal(M.levels.autoregressive.next,id);
@@ -15,10 +15,11 @@ test('the prepared Transformer expands every operator and matches the packed enc
  assert.ok(s.nodes.every(n=>used.has(n.id)),'every displayed operator feeds the output');
  assert.deepEqual(plain(s),plain(M.initial(id)),'fixed deterministic placement');
  for(const target of [[0,1,2],[3,4,5],[2,0,1],[0,5,3]]){
-  const ev=M.evaluate(s,target),sources=M.sourceValues(s,target),packed=M.operations['original-transformer']([target,O.sourceIds]);
+  const ev=M.evaluate(s,target),sources=M.sourceValues(s,target),decoded=O.decoder(O.position(O.embed(target,4)),O.encoder(O.position(O.embed(O.sourceIds,4)))),packed=O.project(decoded,M.weights['demo-head']);
   assert.equal(ev.error,null);assert.deepEqual(plain(sources.Z),plain(O.sourceIds));
   assert.ok(close(ev.values[d.encoder],O.encoder(O.position(O.embed(O.sourceIds,4)))));
-  assert.ok(close(ev.values[d.logits],packed),'unfolding preserves the original model scores');
+  assert.ok(close(ev.values[d.decoded],decoded),'unfolding preserves every encoder-decoder operation');
+  assert.ok(close(ev.values[d.logits],packed),'scores come from the visible fixed vocabulary matrix');
   for(const row of M.math.rows(ev.values[d.prob],6)){assert.ok(Math.abs(row.reduce((a,b)=>a+b,0)-1)<1e-12);assert.ok(row.every(x=>x>0&&x<1));}
   assert.ok(close(ev.output,M.operations.pick([packed])));assert.ok(close(ev.output,M.reference(target,id)));
   for(const n of s.nodes.filter(n=>n.kind==='mask'))for(let r=0;r<3;r++)for(let c=r+1;c<3;c++)assert.equal(ev.values[n.id][r*3+c],-Infinity);
@@ -29,12 +30,20 @@ test('the prepared Transformer expands every operator and matches the packed enc
 test('demonstration rounds feed the last prediction into a rolling three-token window',()=>{
  const rounds=M.samplesFor('transformer-demo'),s=M.initial('transformer-demo');
  assert.equal(rounds.length,3);
+ assert.deepEqual(plain(rounds.map(t=>M.evaluate(s,t.v).output.at(-1))),[3,1,5],'the real readout continues with you / love / dogs');
  for(let i=0;i<rounds.length;i++){
   const e=M.evaluate(s,rounds[i].v);assert.equal(e.error,null);
   assert.deepEqual(plain(M.sourceValues(s,rounds[i].v).Z),plain(O.sourceIds),'source sentence stays unchanged');
   if(i+1<rounds.length)assert.deepEqual(plain(rounds[i+1].v),[...rounds[i].v.slice(1),e.output.at(-1)]);
  }
  assert.deepEqual(plain(M.demo.nextInput([0,1,2],[4,5,3])),[1,2,3],'only the last position is a new token');
+});
+test('demo readout is input-dependent and does not alter earlier lessons or their weights',()=>{
+ const original=plain(M.weights['original-head']);
+ assert.notDeepEqual(plain(M.reference([0,1,2],'transformer-demo')),plain(M.reference([3,4,5],'transformer-demo')));
+ for(const v of M.samplesFor('transformer-demo').map(t=>t.v))assert.ok(close(M.operations['original-transformer']([v,O.sourceIds]),O.vocabulary(O.decoder(O.position(O.embed(v,4)),O.encoder(O.position(O.embed(O.sourceIds,4)))))));
+ assert.deepEqual(plain(M.weights['original-head']),original);
+ assert.equal(M.extraCard('demo-head','transformer-demo').formula,'L = DWvocab');
 });
 test('QKV accepts only V at the outlet and ignores optional Q/K branches',()=>{
  const state=M.initial('qkv');assert.ok(M.addNode(state,'v',0,0));assert.equal(M.connect(state,'R','v',0),null);assert.equal(M.connect(state,'v','sink',0),null);
