@@ -333,6 +333,59 @@ test('four-feature readout lessons animate their actual feature and score widths
  }
  assert.ok(widths.has(4),'decoder features retain all four coordinates');assert.ok(widths.has(6),'projection carries all six candidate scores');
 });
+test('vocabulary projections show real weights and biases; selection compares every candidate and carries the winning IDs',async()=>{
+ let app,level='vocabulary',paused=false,pauseFrames=0,frozen;const columns=new Set(),candidates=new Set(),flags=new Set(),times=new Map();
+ app=await boot({reduced:false,frameMs:100,onFrame:({now,document})=>{
+  if(!app)return;const M=app.c.NeuralPrologue,state=app.api.getState(),sample=M.samplesFor(level).find(s=>s.word===document.querySelector('#sample-name').textContent);if(!sample)return;
+  const ev=M.evaluate(state,sample.v),scene=app.scenes.at(-1);
+  scene.traverseVisible(unit=>{
+   const id=unit.userData.node,n=state.nodes.find(n=>n.id===id);if(!n)return;
+   const kind=M.nodeKind(n),projection=unit.userData.sequenceProjection;
+   if(kind==='original-head'&&projection){
+    const {row,column}=projection,key=[sample.word,row,column].join('|');columns.add(key);
+    assert.deepEqual([...projection.input],[...ev.values[n.links[0]]]);
+    assert.equal(unit.children.filter(o=>o.userData.matrixColumn!=null).length,48);
+    const formula=document.querySelector('.projection-calculation[data-node="'+id+'"]');
+    if(!formula.hidden){
+     const bias=formula.querySelector('.projection-bias');assert.equal(Number(bias.dataset.value),M.definitions[kind].bias[column]);
+     assert.match(formula.textContent,new RegExp(M.math.vocab[column]));
+     if(column===2||column===5){assert.ok(formula.textContent.includes('(-0.75)'));flags.add('bias shown');}
+     if(!times.has(key))times.set(key,now);
+    }
+    if(unit.userData.calculationHighlight>.999){
+     for(const cell of unit.children.filter(o=>o.userData.matrixColumn!=null))assert.ok(cell.userData.matrixColumn===column?cell.material.opacity>.999:cell.material.opacity<.35);
+     assert.equal(document.querySelector('.node-label[data-node="'+id+'"]').hidden,true);flags.add('matrix focus');
+    }
+   }
+   const selection=unit.userData.selection;if(!selection)return;
+   const scores=ev.values[n.links[0]].slice(selection.row*6,(selection.row+1)*6);
+   assert.deepEqual([...selection.scores],[...scores]);assert.equal(selection.best,scores.slice(0,selection.column+1).indexOf(Math.max(...scores.slice(0,selection.column+1))));
+   if(selection.stage==='compare')candidates.add([level,sample.word,selection.row,selection.column].join('|'));
+   for(const carrier of unit.children.filter(o=>o.userData.selectionWinner&&o.visible)){
+    const {row,winner}=carrier.userData;assert.equal(winner,ev.values[id][row]);flags.add('winner flies');
+   }
+   if(level==='vocabulary'&&selection.column===2&&selection.stage==='compare'&&!paused){app.api.togglePause();paused=true;frozen=JSON.stringify(selection);return;}
+   if(paused&&pauseFrames<3){assert.equal(JSON.stringify(selection),frozen,'pausing freezes comparisons');if(++pauseFrames===3)app.api.togglePause();}
+   const out=scene.children.find(o=>o.userData.processingOutput===id);
+   if(out?.visible&&out.userData.gather>0){
+    assert.deepEqual(out.children.filter(o=>o.userData.feature!=null).map(o=>o.userData.value),[...ev.values[id]]);flags.add('IDs gather');
+   }
+  });
+ }});
+ const M=app.c.NeuralPrologue;
+ for(level of ['vocabulary','autoregressive']){
+  app.api.switchLevel(level);const state=M.solutions(level);
+  if(level==='vocabulary'){const rename=id=>id==='original-head'?'original-head-2':id==='pick'?'pick-2':id;state.nodes.forEach(n=>{n.id=rename(n.id);n.links=n.links.map(rename);});state.sink=rename(state.sink);}
+  app.api.setState(state);app.api.getWorld().rebuild();const before=JSON.stringify(state);await app.api.run();assert.equal(JSON.stringify(state),before);
+  assert.equal(app.document.querySelectorAll('#test-results .pass').length,3);assert.equal(app.document.querySelectorAll('.selection-calculation,.projection-result,.packet').length,0);
+  for(const sample of M.samplesFor(level))for(let row=0;row<3;row++)for(let column=0;column<6;column++)assert.ok(candidates.has([level,sample.word,row,column].join('|')));
+  app.scenes.at(-1).traverse(unit=>assert.equal(unit.userData.selection,undefined));
+ }
+ assert.equal(columns.size,54);assert.equal(pauseFrames,3);assert.deepEqual([...flags].sort(),['IDs gather','bias shown','matrix focus','winner flies']);
+ const first=M.samplesFor('vocabulary')[1].word;for(let column=1;column<6;column++){const delta=times.get([first,0,column].join('|'))-times.get([first,0,column-1].join('|'));assert.ok(Math.abs(delta-1040)<=200,'column '+column+' starts after '+delta+' ms');}
+ app.c.I18n.setPreference('en');app.api.getWorld().focusShelf('original-head');assert.doesNotMatch(app.document.querySelector('#card-meaning').textContent,/[\u3400-\u9fff]/);app.document.querySelector('#card-close').onclick();
+ assert.deepEqual([...app.c.I18n.missing],[]);
+});
 test('moving trays preserve feature columns and sequence rows through projection',async()=>{
  let app;const checked=new Set();
  app=await boot({reduced:false,frameMs:100,onFrame:()=>{

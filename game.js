@@ -1,5 +1,5 @@
-import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=readout-order-1';
-import {createProgress} from './level-progress.js?v=readout-order-1';
+import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=readout-motion-1';
+import {createProgress} from './level-progress.js?v=readout-motion-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -365,7 +365,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=readout-order-1');
+ const {createSceneArt}=await import('./scene-art.js?v=readout-motion-1');
  function scenePalette(){
   if(typeof getComputedStyle!=='function')return {};
   const css=getComputedStyle(document.body),read=name=>css.getPropertyValue(name).trim();
@@ -538,19 +538,19 @@ try{
     const scale=w/width/60;
     p.equationVisible=art.detailsVisible();
     p.calculation.dataset.detail=p.equationVisible?'full':'abstract';p.calculation.style.setProperty('--calculation-scale',String(scale));
-    const anchor=p.tokenOperation?art.tokenAnchor(p.node.id,p.tokenRow,p.input,p.progress??0):p.centering?art.layerNormAnchor(p.node.id,p.rmsRow,p.progress??0):p.normalizing?art.rmsAnchor(p.node.id,p.rmsRow):art.projectionOutlet(p.node.id,p.column);
+    const anchor=p.selection?art.selectionAnchor(p.node.id,p.selectionRow,p.progress??0):p.tokenOperation?art.tokenAnchor(p.node.id,p.tokenRow,p.input,p.progress??0):p.centering?art.layerNormAnchor(p.node.id,p.rmsRow,p.progress??0):p.normalizing?art.rmsAnchor(p.node.id,p.rmsRow):art.projectionOutlet(p.node.id,p.column);
     const [cx,cy]=project(anchor),cw=(p.equationVisible?(p.calculation.offsetWidth||p.equation.textContent.length*7+14):24)*scale;
-    const radius=(p.normalizing||p.tokenOperation?.2:art.projectionRadius(p.node.id,p.column))*w/width,offset=radius+9*scale,side=cx+offset+cw<w-12?'right':'left';
+    const radius=(p.normalizing||p.tokenOperation||p.selection?.2:art.projectionRadius(p.node.id,p.column))*w/width,offset=radius+9*scale,side=cx+offset+cw<w-12?'right':'left';
     p.calculation.dataset.side=side;
     p.calculation.style.left=(side==='right'?cx+offset:cx-offset)+'px';p.calculation.style.top=cy+'px';
-    const accent=colorHex(p.tokenOperation?art.rowColor(p.tokenRow):p.centering&&!stage().sequence?p.color:p.normalizing?art.rowColor(p.rmsRow):p.paired||p.sequenceProjection?nodeColor(p.node.id):art.projectionColor);
+    const accent=colorHex(p.selection?art.rowColor(p.selectionRow):p.tokenOperation?art.rowColor(p.tokenRow):p.centering&&!stage().sequence?p.color:p.normalizing?art.rowColor(p.rmsRow):p.paired||p.sequenceProjection?nodeColor(p.node.id):art.projectionColor);
     p.calculation.style.setProperty('--calculation-color',accent);p.calculation.style.setProperty('--calculation-halo',accent+'33');
     p.calculation.style.setProperty('--calculation-focus',String(p.focus||0));
     for(const {el,bar}of p.outputLabels){
      const [rx,ry]=project(bar.getWorldPosition(new T.Vector3()));
      if(p.sequenceProjection){el.style.left=rx+'px';el.style.top=(ry-12*scale)+'px';el.style.setProperty('--calculation-scale',String(scale));el.style.visibility=p.equationVisible?'':'hidden';continue;}
      const [sx,sy]=project(art.projectionOutlet(p.node.id,bar.userData.feature)),g=p.outputMesh.userData.gather;
-     const aligned=p.tokenOperation||p.centering;
+     const aligned=p.tokenOperation||p.centering||p.selection;
      el.style.left=((sx+(aligned?0:28)*scale)*(1-g)+(rx-(aligned?0:7)*scale)*g)+'px';el.style.top=((sy-(aligned?16:0)*scale)*(1-g)+(ry-12*scale)*g)+'px';
      el.style.setProperty('--calculation-scale',String(scale));el.style.visibility=p.equationVisible?'':'hidden';
     }
@@ -713,6 +713,7 @@ try{
   const seq=!!stage().sequence,readyNodes=state.nodes.filter(n=>ev.values[n.id]);
   const pairedNode=id=>!seq&&['multiply','add'].includes(definition(id)?.type);
   const mixingNode=id=>definition(id)?.type==='mix';
+  const projectionNode=id=>definition(id)?.type==='linear'||definition(id)?.type==='vocabulary'&&!!weightsFor(id);
   const handledSecondary=id=>pairedNode(id)||mixingNode(id)||definition(id)?.type==='concat'&&definition(id)?.out===4;
   const wordsFrom=source=>{
    let from=source;const visited=new Set();
@@ -725,7 +726,7 @@ try{
   for(let depth=1;depth<=lastWave;depth++){
    const durations=readyNodes.filter(n=>ev.depths[n.id]===depth).map(n=>{
     const d=definition(n.id),tokenOperation=art.tokenOperation(d);
-    return tokenOperation?art.tokenFrame(0,tokenOperation).duration:['norm','layernorm'].includes(d.type)?normalizationFrame(0,d.type==='layernorm').duration:seq&&['linear','mix'].includes(d.type)?art.sequenceProjectionFrame(0,d.type==='mix'?d.out/3:weightsFor(n.id)[0].length).duration:!seq&&['linear','multiply','add'].includes(d.type)?art.projectionFrame(0,ev.values[n.id].length).duration:1;
+    return d.type==='pick'?art.selectionFrame(0,d.ins[0]/d.out,d.out).duration:tokenOperation?art.tokenFrame(0,tokenOperation).duration:['norm','layernorm'].includes(d.type)?normalizationFrame(0,d.type==='layernorm').duration:seq&&(projectionNode(n.id)||d.type==='mix')?art.sequenceProjectionFrame(0,d.type==='mix'?d.out/3:weightsFor(n.id)[0].length).duration:!seq&&(projectionNode(n.id)||['multiply','add'].includes(d.type))?art.projectionFrame(0,ev.values[n.id].length).duration:1;
    });
    starts[depth]=ends[depth-1]+travelDuration;ends[depth]=starts[depth]+Math.max(1,...durations);
   }
@@ -737,10 +738,10 @@ try{
    const el=document.createElement('span');el.className='packet';el.hidden=true;el.dataset.motion=motion;el.dataset.row=seq?'sequence':sample<3?String(sample):'validation';el.dataset.from=from;el.dataset.to=to;el.style.setProperty('--row-color',colorHex(color));
    const title=document.createElement('b');title.className='packet-title';title.textContent=packetIdentity(from);el.appendChild(title);
    const cells=document.createElement('span');cells.className='packet-values';
-   cells.textContent=seq?shape(values.length):vector(values);
+   cells.textContent=motion==='wire'&&definition(from)?.type==='pick'?M.readTokens(values):seq?shape(values.length):vector(values);
    el.appendChild(document.createTextNode(' '));el.appendChild(cells);overlay.appendChild(el);
    const mesh=art.packet(values,color,{sequence:seq});Object.assign(mesh.userData,{packet:motion==='wire',row:el.dataset.row,from,to});mesh.visible=false;scene.add(mesh);
-   return {el,cells,mesh,color,materials:fadeMaterials(mesh),p:new T.Vector3(),motion};
+   return {values,el,cells,mesh,color,materials:fadeMaterials(mesh),p:new T.Vector3(),motion};
   }
   // Give every depth enough processing time for all output columns. Shorter
   // operations hold their result; joins still wait for the final incoming branch.
@@ -755,12 +756,12 @@ try{
   readyNodes.forEach(n=>{
    const input=ev.values[n.links[0]],output=ev.values[n.id],p=movingPacket(input,n.id,n.id,'process');
    p.el.classList.add('processing-packet');p.el.dataset.node=n.id;p.mesh.userData.processing=n.id;
-   const operation=definition(n.id).type,mixing=operation==='mix',detailed=operation==='linear'||mixing,sequenceProjection=seq&&detailed,paired=pairedNode(n.id),gather=operation==='concat'&&output.length===4,worked=detailed||paired,other=paired||mixing||gather?ev.values[n.links[1]]:null;
+   const operation=definition(n.id).type,mixing=operation==='mix',selection=operation==='pick',vocabulary=operation==='vocabulary'&&projectionNode(n.id),detailed=projectionNode(n.id)||mixing,sequenceProjection=seq&&detailed,paired=pairedNode(n.id),gather=operation==='concat'&&output.length===4,worked=detailed||paired,other=paired||mixing||gather?ev.values[n.links[1]]:null;
    const tokenOperation=art.tokenOperation(definition(n.id)),centering=operation==='layernorm',normalizing=operation==='norm'||centering,pairTones=paired?art.pairColorsFor(n.id):null,operator=operation==='add'?'+':'×';
    const columns=mixing?output.length/3:detailed?weightsFor(n.id)[0].length:output.length,matrix=mixing?M.math.rows(other,columns):detailed?weightsFor(n.id):null;
-   Object.assign(p,{detailed,sequenceProjection,columns,matrix,mixing,paired,gather,worked,other,normalizing,centering,tokenOperation});
+   Object.assign(p,{selection,vocabulary,detailed,sequenceProjection,columns,matrix,mixing,paired,gather,worked,other,normalizing,centering,tokenOperation});
    if(mixing)p.valueWords=()=>wordsFrom(n.links[1]);
-   if(worked||tokenOperation||centering)art.prepareProjectionPacket(p.mesh,paired?()=>pairTones[0]:mixing?i=>art.rowColor(i%3):undefined);
+   if(worked||tokenOperation||centering||selection)art.prepareProjectionPacket(p.mesh,paired?()=>pairTones[0]:mixing?i=>art.rowColor(i%3):undefined);
    if(paired||mixing||gather){
     const otherMesh=art.packet(other,p.color,{sequence:mixing});otherMesh.userData={processingSecondary:n.id,row:p.el.dataset.row};otherMesh.visible=false;scene.add(otherMesh);
     art.prepareProjectionPacket(otherMesh,mixing?i=>art.rowColor(Math.floor(i/columns)):()=>gather?0x9b88c4:pairTones[1]);fadeMaterials(otherMesh);p.otherMesh=otherMesh;
@@ -772,16 +773,32 @@ try{
     tint(p.mesh,0x659bab);tint(p.otherMesh,0x9b88c4);tint(outputMesh,i=>i<2?0x659bab:0x9b88c4);
    }
    const morph=document.createElement('span');morph.className='packet-morph';p.cells.replaceWith(morph);morph.appendChild(p.cells);
-   const after=document.createElement('span');after.className='packet-values';after.textContent=seq?shape(output.length):vector(output);after.style.opacity='0';morph.appendChild(after);
+   const after=document.createElement('span');after.className='packet-values';after.textContent=selection?M.readTokens(output):seq?shape(output.length):vector(output);after.style.opacity='0';morph.appendChild(after);
    p.el.style.visibility='hidden';p.el.hidden=false;
    const beforeWidth=p.cells.offsetWidth||p.cells.textContent.length*6.6,afterWidth=after.offsetWidth||after.textContent.length*6.6;
    p.el.hidden=true;p.el.style.visibility='';morph.style.width=beforeWidth+'px';
-   if(worked||normalizing||tokenOperation){
+   if(worked||normalizing||tokenOperation||selection){
     art.prepareProjectionOutput(outputMesh);
     p.outputLabels=output.map((value,j)=>{
-     const el=document.createElement('span');el.className='projection-result'+(tokenOperation||centering||sequenceProjection?' token-result':'');el.hidden=true;el.textContent=fmt(value);el.dataset.node=n.id;el.dataset.column=String(j);el.dataset.row=p.el.dataset.row;overlay.appendChild(el);
+     const el=document.createElement('span');el.className='projection-result'+(tokenOperation||centering||sequenceProjection||selection?' token-result':'');el.hidden=true;el.textContent=selection?M.math.vocab[value]:fmt(value);el.dataset.node=n.id;el.dataset.column=String(j);el.dataset.row=p.el.dataset.row;overlay.appendChild(el);
      return {el,bar:outputMesh.children.find(o=>o.userData.feature===j)};
     });
+   }
+   if(selection){
+    const calculation=document.createElement('span');calculation.className='projection-calculation selection-calculation';calculation.hidden=true;calculation.dataset.node=n.id;calculation.dataset.operation='pick';
+    const equation=document.createElement('span');equation.className='projection-equation';
+    const token=document.createElement('b'),comparison=document.createElement('span'),result=document.createElement('b');equation.append(token,comparison,result);calculation.append(equation);
+    const abstract=document.createElement('span');abstract.className='projection-sum-symbol';abstract.textContent='max';calculation.append(abstract);overlay.append(calculation);p.words=()=>wordsFrom(n.links[0]);
+    const width=input.length/output.length,updateSelection=timing=>{
+     const key=I18n.language()+':'+timing.row+':'+timing.column+':'+timing.stage;if(p.selectionKey===key)return;p.selectionKey=key;
+     const row=timing.row,column=timing.column,scores=input.slice(row*width,(row+1)*width),choice=art.selectionChoice(scores,column),name=i=>M.math.vocab[i]+' '+fmt(scores[i]);
+     token.textContent=p.words()[row]+' · ';result.textContent='';
+     if(timing.stage==='emit'){comparison.textContent='max → ';result.textContent=name(output[row])+' · ID '+output[row];}
+     else if(choice.previous===null)comparison.textContent=name(column);
+     else{comparison.textContent=name(column)+(scores[column]>scores[choice.previous]?' > ':scores[column]===scores[choice.previous]?' = ':' < ')+name(choice.previous);result.textContent=' → '+M.math.vocab[choice.best];}
+     calculation.dataset.selectionRow=String(row);calculation.dataset.candidate=String(column);calculation.dataset.best=String(choice.best);p.selectionRow=row;
+    };
+    Object.assign(p,{calculation,equation,updateSelection,selectionRow:0});updateSelection(art.selectionFrame(0,width,output.length));
    }
    if(tokenOperation){
     // Follow the actual ID-producing input, including repeated/reordered IDs
@@ -845,13 +862,15 @@ try{
     const token=document.createElement('b');if(sequenceProjection){calculation.classList.add('sequence-projection-calculation');equation.append(token);p.words=()=>wordsFrom(n.links[0]);}
     if(mixing)calculation.classList.add('aggregation-calculation');
     (paired?[input,other]:input.slice(0,width)).forEach((_,i)=>{if(i)equation.appendChild(document.createTextNode(paired?' '+operator+' ':' + '));const term=document.createElement('span');term.style.color=colorHex(paired?pairTones[i]:mixing?art.rowColor(i):art.featureColor(i));equation.appendChild(term);terms.push(term);});
+    const bias=vocabulary?document.createElement('span'):null;if(bias){bias.className='projection-bias';bias.style.color=colorHex(0xb68036);equation.appendChild(document.createTextNode(' + '));equation.appendChild(bias);}
     const sum=document.createElement('b');sum.style.opacity='0';equation.appendChild(sum);overlay.appendChild(calculation);
     const updateEquation=(column,row=0)=>{
      const values=sequenceProjection?input.slice(row*width,(row+1)*width):input,result=output[row*p.columns+column];
      const operands=paired?[input[column],other[column]]:[...values,...matrix.map(w=>w[column])];
      terms.forEach((term,i)=>term.textContent=paired?factor(operands[i]):factor(values[i])+' × '+factor(matrix[i][column]));
+     if(bias){const value=definition(n.id).bias?.[column]||0;bias.textContent=factor(value);bias.dataset.value=String(value);}
      const rounded=[...operands,result].some(v=>Math.abs(v-Number(v.toFixed(2)))>1e-9);sum.textContent=(rounded?' ≈ ':' = ')+fmt(result);
-     if(sequenceProjection){token.textContent=(mixing?'O · ':'')+p.words()[row]+' · ';calculation.dataset.projectionRow=String(row);}
+     if(sequenceProjection){token.textContent=(mixing?'O · ':'')+p.words()[row]+(vocabulary?' → '+M.math.vocab[column]:'')+' · ';calculation.dataset.projectionRow=String(row);}
     };
     updateEquation(0);Object.assign(p,{calculation,equation,sum,updateEquation,column:0,projectionRow:0});
    }
@@ -871,7 +890,7 @@ try{
    if(level!==lastDepth){lastDepth=level;labels();renderShelf();}
    art.pulseSource(reduced?1:t);
    packets.forEach(p=>{
-    const tt=t-p.start,timing=p.sequenceProjection?art.sequenceProjectionFrame(tt,p.columns):p.tokenOperation?art.tokenFrame(tt,p.tokenOperation):p.normalizing?normalizationFrame(tt,p.centering):p.worked?art.projectionFrame(tt,p.output.length):null,progress=timing?timing.phase:clamp(tt/(p.motion==='wire'?travelDuration:1));
+    const tt=t-p.start,timing=p.selection?art.selectionFrame(tt,p.input.length/p.output.length,p.output.length):p.sequenceProjection?art.sequenceProjectionFrame(tt,p.columns):p.tokenOperation?art.tokenFrame(tt,p.tokenOperation):p.normalizing?normalizationFrame(tt,p.centering):p.worked?art.projectionFrame(tt,p.output.length):null,progress=timing?timing.phase:clamp(tt/(p.motion==='wire'?travelDuration:1));
     if(p.motion==='process'){
      p.progress=tt;
      const visible=tt>=0&&t<p.end&&(!focusId||focusId===p.node.id),blend=ramp(progress,p.worked?.76:.55,p.worked?.9:.83);
@@ -915,6 +934,15 @@ try{
       });
       p.calculation.dataset.column=String(timing.column);
       if(p.column!==timing.column||p.sequenceProjection&&p.projectionRow!==timing.row){p.column=timing.column;p.projectionRow=timing.row||0;p.updateEquation(p.column,p.projectionRow);}
+     }
+     if(p.selection){
+      p.el.hidden=!visible||(progress>.04&&progress<.9);p.mesh.visible=visible&&tt<timing.end;
+      art.routeSelectionInput(p.node.id,p.mesh,tt,p.p,p.path.getPoint(.04));
+      art.routeSelectionOutput(p.node.id,p.outputMesh,tt,p.p);p.outputMesh.visible=visible&&tt>=timing.finish+.27;
+      p.portFade=visible?ramp(progress,.04,.12):0;p.focus=visible?timing.focus:0;
+      p.updateSelection(timing);p.calculation.hidden=!visible||timing.rowTime<.36||timing.rowTime>=timing.rowDuration-.02;
+      p.calculation.style.opacity=String(ramp(timing.rowTime,.36,.4)*(1-ramp(timing.rowTime,timing.rowDuration-.08,timing.rowDuration)));
+      p.outputLabels.forEach(({el},j)=>{const ready=j*timing.rowDuration+timing.finish+.27,alpha=ramp(tt,ready,ready+.03)*(1-ramp(progress,.9,.98));el.hidden=!visible||alpha<=0;el.style.opacity=String(alpha);});
      }
      if(p.tokenOperation){
       p.el.hidden=!visible||(progress>.12&&progress<.88);p.mesh.visible=visible&&tt<timing.end;
@@ -990,6 +1018,6 @@ try{
  $('#camera-reset').onclick=()=>{if(focusId){const n=shelfFocus?{x:0,z:0}:state.nodes.find(n=>n.id===focusId);transition(new T.Vector3(n.x,.72,n.z),Math.max(4.1,3.5*host.clientWidth/host.clientHeight)/23,.32,.92);}else{yaw=.05;pitch=.8;zoom=stage().zoom;cameraTarget.set(0,0,0);render();}};
  function beforeStage(){clearConnectionError();if(focusId)leaveFocus();cancelAnimationFrame(cameraFrame);transitioning=false;host.setAttribute('aria-busy','false');drag=lastTap=null;clearPreview();clearPlacement();clearPackets();elements=[];overlay.replaceChildren();}
  function setStage(){art.surroundings(samples(),stage(),scenePalette());yaw=.05;pitch=.8;zoom=stage().zoom;cameraTarget.set(0,0,0);rebuild();}
- function relocalize(){clearConnectionError();art.surroundings(samples(),stage(),scenePalette());rebuild();packets.forEach(p=>{p.el.querySelector('.packet-title').textContent=packetIdentity(p.el.dataset.from);if(p.sequenceProjection)p.updateEquation(p.column,p.projectionRow);if(p.normalizing&&p.progress!=null)p.updateRMS(normalizationFrame(p.progress,p.centering));if(p.tokenOperation&&p.progress!=null)p.updateToken(art.tokenFrame(p.progress,p.tokenOperation));if(p.motion==='process'&&p.progress!=null)art.processing(p.node.id,p.progress,p.input,p.output,p.color,{sequence:!!stage().sequence,detailed:p.detailed,paired:p.paired,other:p.other,words:p.words?.(),valueWords:p.valueWords?.()});});render();}
+ function relocalize(){clearConnectionError();art.surroundings(samples(),stage(),scenePalette());rebuild();packets.forEach(p=>{p.el.querySelector('.packet-title').textContent=packetIdentity(p.el.dataset.from);if(p.sequenceProjection)p.updateEquation(p.column,p.projectionRow);if(p.motion==='wire'&&definition(p.el.dataset.from)?.type==='pick')p.cells.textContent=M.readTokens(p.values);if(p.selection&&p.progress!=null){p.after.textContent=M.readTokens(p.output);p.updateSelection(art.selectionFrame(p.progress,p.input.length/p.output.length,p.output.length));p.outputLabels.forEach(({el},j)=>el.textContent=M.math.vocab[p.output[j]]);}if(p.normalizing&&p.progress!=null)p.updateRMS(normalizationFrame(p.progress,p.centering));if(p.tokenOperation&&p.progress!=null)p.updateToken(art.tokenFrame(p.progress,p.tokenOperation));if(p.motion==='process'&&p.progress!=null)art.processing(p.node.id,p.progress,p.input,p.output,p.color,{sequence:!!stage().sequence,detailed:p.detailed,paired:p.paired,other:p.other,words:p.words?.(),valueWords:p.valueWords?.()});});render();}
  new ResizeObserver(render).observe(host);world={relocalize,labels,rebuild,animate,fuse,skipFusion:()=>finishFusion(true),clearPackets,showConnectionError,clearConnectionError,clearPreview,clearPlacement,previewAt,previewPlacement,focus,focusShelf,focused:()=>focusId,beforeStage,setStage,syncShelf:()=>syncPlacementGuide(host.clientWidth,host.clientHeight)};$('#loading').hidden=true;rebuild();refresh();
 }catch(e){$('#loading').innerHTML=I18n.t("<strong>3D 台面没有加载成功，请刷新重试。</strong>");say(I18n.t("页面尚未开始运行。"),'error');console.error(e);}

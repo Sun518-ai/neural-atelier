@@ -118,10 +118,10 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   const glow=box(g,1.6,.035,.055,0,.41,1.13,color,{emissive:color,emissiveIntensity:.18});
   const border=new T.Group();g.add(border);[[[-.96,.49,-1.12],[-.96,.49,-.78]],[[-.96,.49,-1.12],[-.62,.49,-1.12]],[[.96,.49,1.12],[.96,.49,.78]],[[.96,.49,1.12],[.62,.49,1.12]]].forEach(points=>tube(border,points,color,.018));
   backdrop(glow,.2);backdrop(border,.1);
-  let outputs=[],inputs=[],connections=[],weightCells=[],activationChannels=[],columnCues=[],projectionRows=[],pairChannels=[],normalizationStages=[],rmsRows=[],lnRows=[],tokenRows=[],lookupRows=[],positionWaves=[],valueLabels=[];
+  let outputs=[],inputs=[],connections=[],weightCells=[],biasCells=[],selectionRows=[],activationChannels=[],columnCues=[],projectionRows=[],pairChannels=[],normalizationStages=[],rmsRows=[],lnRows=[],tokenRows=[],lookupRows=[],positionWaves=[],valueLabels=[];
   const tokenKind=tokenOperation(d),tokenWidth=d.out/3;
-  const mixing=d.type==='mix';
-  if(d.type==='linear'||mixing){
+  const mixing=d.type==='mix',vocabulary=d.type==='vocabulary'&&!!weights[n.kind||n.id],matrixProjection=d.type==='linear'||vocabulary||mixing;
+  if(matrixProjection){
    // A × V uses the same dot-product choreography, but V is a live second
    // input rather than a learned weight matrix. Its cells start unfilled.
    const w=mixing?Array.from({length:3},()=>Array(d.out/3).fill(0)):weights[n.kind||n.id],a=w.length,b=w[0].length,cw=1.5/b,ch=1.5/a;
@@ -130,6 +130,12 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
     const active=()=>g.userData.activeColumn===j?g.userData.calculationHighlight:0;
     tile.userData.matrixColumn=face.userData.matrixColumn=j;
     backdrop(tile,.22,active);backdrop(face,.32,active);
+   }
+   if(vocabulary)for(let j=0;j<b;j++){
+    const x=(j-(b-1)/2)*cw,value=d.bias?.[j]||0,active=()=>g.userData.activeColumn===j?g.userData.calculationHighlight:0;
+    backdrop(textTile(g,window.NeuralPrologue.math.vocab[j],cw*.94,.21,x,.6,-1.01,{size:78}).mesh,.3,active);
+    const face=textTile(g,(value<0?'':'+')+value,cw*.94,.23,x,.58,1.01,{size:76,color:'#876732',bg:'#f2e7c7'});
+    face.mesh.userData.vocabularyBias={column:j,value};backdrop(face.mesh,.3,active);biasCells.push({face:face.mesh,j,value});
    }
    if(mixing){
     textTile(g,'V',.32,.23,0,.55,.97,{size:78,color:'#367e68'});
@@ -153,15 +159,35 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
    }
    const count=d.out/b;
    if(count>1)for(let row=0;row<count;row++){
-    const bank=new T.Group(),z=(row-(count-1)/2)*.48;bank.visible=false;bank.userData.projectionBank=row;g.add(bank);
-    backdrop(box(bank,1.86,.025,.39,0,1.83,z,rowColor(row),{transparent:true,opacity:.14,depthWrite:false}),.12);
-    const label=textTile(bank,'·',.33,.22,-.77,1.86,z,{size:65,color:'#496253'});
+    const bank=new T.Group(),z=(row-(count-1)/2)*(vocabulary?.84:.48),bankWidth=vocabulary?3.45:1.86;bank.visible=false;bank.userData.projectionBank=row;g.add(bank);
+    backdrop(box(bank,bankWidth,.025,vocabulary?.68:.39,0,1.83,z,rowColor(row),{transparent:true,opacity:.14,depthWrite:false}),.12);
+    const label=textTile(bank,'·',.33,.22,-bankWidth/2+.16,1.86,z,{size:65,color:'#496253'});
     const active=()=>g.userData.sequenceProjection?.row===row;
     backdrop(label.mesh,.35,active);
-    const sockets=Array.from({length:b},(_,j)=>neuron(bank,.14+(j-(b-1)/2)*.34,1.92,z,rowColor(row)));
+    const sockets=Array.from({length:b},(_,j)=>neuron(bank,.14+(j-(b-1)/2)*(vocabulary?.52:.34),1.92,z,rowColor(row)));
     sockets.forEach(socket=>socketBackdrop(socket,.12,active));
     sockets.forEach(o=>o.scale.setScalar(.62));projectionRows.push({row,g:bank,label,outputs:sockets});
    }
+  }else if(d.type==='pick'){
+   const model=window.NeuralPrologue,width=d.ins[0]/d.out;
+   for(let j=0;j<width;j++)textTile(g,model.math.vocab[j],.29,.22,(j-(width-1)/2)*.3,.59,-1.02,{size:82});
+   for(let row=0;row<d.out;row++){
+    const z=(row-(d.out-1)/2)*.58,tone=rowColor(row),cells=[];
+    const word=textTile(g,'·',.34,.23,-.96,1.43,z,{size:76});
+    for(let j=0;j<width;j++){
+     const x=(j-(width-1)/2)*.3,tile=box(g,.265,.045,.44,x,.53,z,tone,{transparent:true,opacity:.22});
+     const face=textTile(g,'·',.26,.34,x,.558,z,{size:74}),cue=ring(g,.14,x,.59,z,projectionColor,.016),best=ring(g,.125,x,.62,z,0x368d77,.023);
+     cue.visible=best.visible=false;tile.userData.selectionCell=face.mesh.userData.selectionCell={row,column:j};
+     const active=()=>g.userData.selection?.row===row;
+     backdrop(tile,.16,active);backdrop(face.mesh,.22,active);
+     cells.push({j,tile,face,cue,best,point:new T.Vector3(x,.65,z)});
+    }
+    const output=neuron(g,.54,1.5,z,tone);outputs.push(output);
+    const carrier=new T.Mesh(sharedSphere,mat(tone,{emissive:tone,emissiveIntensity:1.5,transparent:true,depthWrite:false}));carrier.visible=false;carrier.userData.selectionWinner=true;g.add(carrier);
+    backdrop(word.mesh,.25,()=>g.userData.selection?.row===row);
+    selectionRows.push({row,z,tone,cells,word,output,carrier});
+   }
+   textTile(g,'max → ID',1.25,.22,0,.53,1.03,{size:70,color:'#367e68'});
   }else if(d.type==='activation'){
    g.userData.activation=d.activation||'silu';
    const panel=backdrop(box(g,1.5,.025,1.7,0,.57,0,0xe4cc9d,{transparent:true,opacity:.34,depthWrite:false}),.12);
@@ -338,9 +364,10 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   }else{
    for(let i=0;i<2;i++){const z=(i-.5)*.65;neuron(g,-.6,.78,z,0x6b9fb1);neuron(g,-.3,1.25,z,0xb7a17d);outputs.push(neuron(g,.68,1.08,z,color));tube(g,[[-.6,.78,z],[.02,.96,z],[.68,1.08,z]],0x6b9fb1,.027);tube(g,[[-.3,1.25,z],[.02,.96,z],[.68,1.08,z]],color,.027);ring(g,.18,.06,.94,z,color);}
   }
-  inputs.forEach(socket=>socketBackdrop(socket,d.type==='linear'||mixing?.12:.3));
+  inputs.forEach(socket=>socketBackdrop(socket,matrixProjection?.12:.3));
   outputs.forEach((socket,i)=>socketBackdrop(socket,.14,()=>{
-   if(d.type==='linear'||mixing)return g.userData.activeColumn===i?g.userData.calculationHighlight:0;
+   if(matrixProjection)return g.userData.activeColumn===i?g.userData.calculationHighlight:0;
+   if(selectionRows.length)return g.userData.selection?.row===i;
    if(pairOperation)return g.userData.activePair===i?g.userData.calculationHighlight:0;
    const flow=g.userData.tokenFlow||g.userData.layerNorm||g.userData.rms;
    return flow?Math.floor(i/(outputs.length/(d.out>4?3:1)))===flow.row:true;
@@ -351,7 +378,7 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   d.ins.forEach((dim,i)=>{const z=d.ins.length===2?(i?.55:-.55):0;backdrop(box(g,.21,.17,.27,-1.08,.58,z,0x6e887c));for(let j=0;j<Math.min(dim,4);j++)backdrop(box(g,.12,.02,.035,-1.08,.68,z+(j-(Math.min(dim,4)-1)/2)*.055,0xc6d7c3));});
   const sock=new T.Mesh(new T.CylinderGeometry(.15,.15,.18,20),mat(color));sock.rotation.z=Math.PI/2;sock.position.set(1.05,.68,0);g.add(sock);
   backdrop(sock);
-  if(register)units.set(n.id,{g,glow,outputs,inputs,connections,weightCells,activationChannels,columnCues,projectionRows,pairChannels,pairTones,pairOperation,normalizationStages,rmsRows,lnRows,tokenKind,tokenWidth,tokenRows,lookupRows,positionWaves,mixing,valueLabels,backdrops,focusAmount:0,links:n.links,color});return g;
+  if(register)units.set(n.id,{g,glow,outputs,inputs,connections,weightCells,biasCells,selectionRows,vocabulary,activationChannels,columnCues,projectionRows,pairChannels,pairTones,pairOperation,normalizationStages,rmsRows,lnRows,tokenKind,tokenWidth,tokenRows,lookupRows,positionWaves,mixing,valueLabels,backdrops,focusAmount:0,links:n.links,color});return g;
  }
  // Moving values stay clear. Matrix columns regain opacity with their own
  // calculation highlight; the surrounding context fades for the whole operation.
@@ -416,6 +443,69 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   const phase=time<start?time/start*.18:time<end?.18+(time-start)/(count*step)*.62:.8+(time-end)/.3*.2;
   const stage=kind==='mask'?(local<.28?'arrive':local<.53?'restrict':local<.84?'replace':'ready'):kind==='lookup'?(local<.3?'address':local<.58?'read':local<.84?'copy':'ready'):(local<.28?'scale':local<.56?'position':local<.84?'add':'ready');
   return {row,local,start,step,end,duration,stage,phase:Math.max(0,Math.min(1,phase))};
+ }
+ function selectionFrame(time,columns=6,count=3){
+  const timing=sequenceProjectionFrame(time,columns,count),finish=.67+(columns-1)*timing.step;
+  return {...timing,finish,stage:timing.rowTime<.4?'arrive':timing.rowTime<finish?'compare':'emit'};
+ }
+ function selectionChoice(scores,column){
+  let previous=0;for(let j=1;j<column;j++)if(scores[j]>scores[previous])previous=j;
+  const best=column===0||scores[column]>scores[previous]?column:previous;
+  return {previous:column?previous:null,best};
+ }
+ function processingSelection(u,time,input,output,words){
+  const width=input.length/output.length,timing=selectionFrame(time,width,output.length),active=time>=0&&time<timing.duration;
+  u.g.userData.processing=active;if(!active){clearSelection(u);return;}
+  u.glow.material.emissiveIntensity=.4+timing.focus;
+  for(const row of u.selectionRows){
+   const clock=time-row.row*timing.rowDuration,current=clock>=0&&clock<timing.rowDuration,done=clock>=timing.finish,scores=input.slice(row.row*width,(row.row+1)*width);
+   const checked=Math.max(0,Math.min(width,Math.floor((clock-.61)/timing.step)+1)),best=checked?selectionChoice(scores,checked-1).best:null;
+   row.word.write(words[row.row]||'·');
+   for(const cell of row.cells){
+    const scanning=current&&cell.j===timing.column&&timing.stage==='compare',winner=best===cell.j;
+    cell.face.write(clock>=.3?String(Number(scores[cell.j].toFixed(2))):'·');
+    Object.assign(cell.tile.userData.selectionCell,{value:scores[cell.j],checked:cell.j<checked,best:winner});
+    cell.tile.material.emissive.set(winner?0x368d77:projectionColor);cell.tile.material.emissiveIntensity=scanning?1.05:winner?.65:0;
+    cell.face.mesh.material.color.set(winner?0xb7efd0:0xffffff);
+    cell.cue.visible=scanning;cell.cue.scale.setScalar(1+timing.focus*.16);cell.cue.material.emissive.set(projectionColor);cell.cue.material.emissiveIntensity=scanning?1:0;
+    cell.best.visible=winner;cell.best.material.emissive.set(0x368d77);cell.best.material.emissiveIntensity=current?.8:.25;
+   }
+   row.output.material.emissiveIntensity=done?.7:.08;
+   const transfer=ramp(clock,timing.finish,timing.finish+.27),winner=output[row.row];
+   row.carrier.visible=current&&clock>=timing.finish&&clock<timing.finish+.3;
+   row.carrier.position.copy(row.cells[winner].point).lerp(row.output.position,transfer);row.carrier.position.y+=Math.sin(Math.PI*transfer)*.3;
+   row.carrier.material.opacity=ramp(clock,timing.finish,timing.finish+.035)*(1-ramp(clock,timing.finish+.24,timing.finish+.3));
+   Object.assign(row.carrier.userData,{row:row.row,winner,value:scores[winner],transfer});
+  }
+  const scores=input.slice(timing.row*width,(timing.row+1)*width),choice=selectionChoice(scores,timing.column);
+  u.g.userData.selection={row:timing.row,rowTime:timing.rowTime,column:timing.column,stage:timing.stage,scores:[...scores],...choice};
+ }
+ function clearSelection(u){
+  delete u.g.userData.selection;
+  for(const row of u.selectionRows){row.word.write('·');row.carrier.visible=false;for(const cell of row.cells){cell.face.write('·');cell.face.mesh.material.color.set(0xffffff);cell.tile.material.emissiveIntensity=0;cell.cue.visible=cell.best.visible=false;}}
+ }
+ function selectionAnchor(id,row,time){
+  const u=units.get(id),timing=selectionFrame(time,u.selectionRows[0].cells.length,u.selectionRows.length),r=u.selectionRows[row];
+  return (timing.stage==='emit'?r.output.position:r.cells[timing.column].point).clone().add(new T.Vector3(0,.35,0)).add(u.g.position);
+ }
+ function routeSelectionInput(id,mesh,time,origin,anchor){
+  const u=units.get(id),width=u.selectionRows[0].cells.length,timing=selectionFrame(time,width,u.selectionRows.length);
+  mesh.userData.routing=time>0;mesh.children.find(o=>o.userData.packetTray).material.opacity=1-ramp(time,0,.2);
+  for(const {bar,pad,label,home,padHome,labelHome}of mesh.userData.featureRoutes){
+   const index=bar.userData.feature,row=Math.floor(index/width),column=index%width,clock=time-row*timing.rowDuration,fan=ramp(clock,.02,.3),alpha=1-ramp(clock,.3,.4),target=u.selectionRows[row].cells[column].point.clone().add(u.g.position);
+   for(const [object,start]of [[bar,home],[pad,padHome],[label,labelHome]]){object.position.copy(anchor).add(start).lerp(target.clone().add(new T.Vector3(0,object===label?.2:start.y,0)),fan).sub(origin);object.material.opacity=alpha;}
+   label.visible=alpha>0&&fan>0&&detailModes[detailScope];Object.assign(bar.userData,{selectionInput:true,row,column,value:bar.userData.value});
+  }
+ }
+ function routeSelectionOutput(id,mesh,time,origin){
+  const u=units.get(id),timing=selectionFrame(time,u.selectionRows[0].cells.length,u.selectionRows.length),gather=ramp(timing.phase,.8,.97);
+  mesh.userData.gather=gather;mesh.userData.routing=gather<1;
+  mesh.children.forEach((o,i)=>{
+   if(o.userData.packetTray){o.material.opacity=ramp(timing.phase,.8,.94);return;}
+   const row=o.userData.feature??o.userData.featurePad,home=mesh.userData.outputHomes[i],ready=row*timing.rowDuration+timing.finish+.27,alpha=ramp(time,ready,ready+.03);
+   o.visible=alpha>0;o.material.opacity=alpha;const start=u.selectionRows[row].output.getWorldPosition(new T.Vector3()).add(new T.Vector3(0,home.y,0));
+   o.position.copy(start.lerp(origin.clone().add(home),gather).sub(origin));Object.assign(o.userData,{selectedRow:row});
+  });
  }
  function processingToken(u,time,input,output,words){
   if(u.tokenKind==='mask'){processingMask(u,time,input,output,words);return;}
@@ -579,8 +669,9 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
  function processing(id,progress,input,output,color,{sequence=false,detailed=false,paired=false,other=null,words=[],valueWords=[]}={}){
   const u=units.get(id);if(!u)return;
   if(u.mixing){sequence=true;detailed=true;}
-  const duration=u.lnRows.length?layerNormFrame(progress,u.lnRows.length).duration:u.tokenKind?tokenFrame(progress,u.tokenKind).duration:u.rmsRows.length?rmsFrame(progress,sequence?3:1).duration:detailed&&u.projectionRows.length?sequenceProjectionFrame(progress,u.outputs.length,u.projectionRows.length).duration:detailed||paired?projectionFrame(progress,output.length).duration:1;
+  const duration=u.selectionRows.length?selectionFrame(progress,6,u.selectionRows.length).duration:u.lnRows.length?layerNormFrame(progress,u.lnRows.length).duration:u.tokenKind?tokenFrame(progress,u.tokenKind).duration:u.rmsRows.length?rmsFrame(progress,sequence?3:1).duration:detailed&&u.projectionRows.length?sequenceProjectionFrame(progress,u.outputs.length,u.projectionRows.length).duration:detailed||paired?projectionFrame(progress,output.length).duration:1;
   u.focusAmount=ramp(progress,0,.12)*(1-ramp(progress,duration-.18,duration));
+  if(u.selectionRows.length){processingSelection(u,progress,input,output,words);return;}
   if(u.lnRows.length){processingLayerNorm(u,progress,input,output,color);return;}
   if(u.tokenKind){processingToken(u,progress,input,output,words);return;}
   if(u.rmsRows.length){processingRMS(u,progress,input,output,sequence);return;}
@@ -625,6 +716,7 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
    if(spark.visible){const tone=detailed?inputTone(i):contribution<0?0xd6a578:color;spark.material.color.set(tone);spark.material.emissive.set(tone);spark.material.opacity=ramp(clock,start,start+.025)*(1-ramp(clock,end-.025,end));spark.scale.setScalar(.48+Math.min(2,Math.abs(contribution))*.15);spark.position.copy(mesh.geometry.parameters.path.getPoint(ramp(clock,start,end)));}
   }
   for(const {tile,face,i,j,weight} of u.weightCells){const contribution=sequence?weight:input[i]*weight,lit=active&&(detailed||Math.abs(contribution)>1e-9),highlight=detailed?(j===timing.column?focus:0):pulse,tone=detailed?accent:color;tile.material.emissive.set(lit?tone:0);tile.material.emissiveIntensity=lit?highlight*.35:0;face.material.color.set(0xffffff);if(lit)face.material.color.lerp(new T.Color(tone),highlight*.4);}
+  for(const {face,j,value}of u.biasCells){const strength=active&&j===timing?.column?ramp(progress-j*timing.step,.56,.61)*(1-ramp(progress-j*timing.step,.7,.76)):0;face.material.color.set(0xffffff).lerp(new T.Color(projectionColor),strength*.5);face.userData.vocabularyBias.active=strength>0;}
   for(const {channel,gate,spark,i} of u.activationChannels){
    const from=input[i],to=output[i],isReLU=u.g.userData.activation==='relu',sigmoid=isReLU?(from>0?1:0):1/(1+Math.exp(-from)),travel=ramp(p,.16,.84),transform=ramp(p,.35,.7),value=from+(to-from)*transform,tone=from<0?0xd6a578:color;
    gate.scale.setScalar(1-(1-(.22+.78*sigmoid))*pulse);gate.material.emissive.set(tone);gate.material.emissiveIntensity=active?pulse*.85:0;
@@ -655,7 +747,7 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
    for(const f of row.features){f.label.write('x');f.square.visible=f.scaled.visible=false;f.squarePath.material.opacity=f.scalePath.material.opacity=.2;f.input.scale.setScalar(1);f.output.scale.setScalar(1);f.input.material.emissiveIntensity=f.output.material.emissiveIntensity=.08;}
   }
  }
- function clearProcessing(){for(const u of units.values()){u.focusAmount=0;u.g.userData.calculationHighlight=0;clearRMS(u);clearToken(u);clearLayerNorm(u);clearAggregation(u);delete u.g.userData.sequenceProjection;u.projectionRows.forEach(row=>row.g.visible=false);u.g.userData.processing=false;u.g.userData.activeColumn=u.g.userData.activePair=null;delete u.g.userData.normalization;u.normalizationStages.forEach(tile=>tile.material.emissiveIntensity=0);u.columnCues.forEach(({cue})=>cue.visible=false);u.outputs.forEach(o=>{o.material.emissive.set(u.color);o.material.emissiveIntensity=.08;});if(u.connections.length)u.inputs.forEach(o=>{o.material.color.set(0x6c9eb1);o.material.emissive.set(0x6c9eb1);o.material.emissiveIntensity=.08;});u.connections.forEach(c=>{c.spark.visible=false;c.mesh.material.opacity=c.weight===0?.2:.8;c.mesh.material.depthWrite=true;});u.activationChannels.forEach(({spark,gate,channel})=>{spark.visible=false;gate.scale.setScalar(1);gate.material.emissiveIntensity=0;channel.material.emissiveIntensity=0;});u.pairChannels.forEach(({left,right,leftPath,rightPath,outPath,gate,carrier})=>{carrier.visible=false;gate.scale.setScalar(1);[leftPath,rightPath,outPath,gate].forEach(o=>o.material.emissiveIntensity=0);[left,right].forEach(o=>{o.scale.setScalar(1);o.material.emissiveIntensity=.08;});});u.weightCells.forEach(({tile,face})=>{tile.material.emissiveIntensity=0;face.material.color.set(0xffffff);});}}
+ function clearProcessing(){for(const u of units.values()){u.focusAmount=0;u.g.userData.calculationHighlight=0;clearRMS(u);clearToken(u);clearLayerNorm(u);clearAggregation(u);clearSelection(u);delete u.g.userData.sequenceProjection;u.projectionRows.forEach(row=>row.g.visible=false);u.g.userData.processing=false;u.g.userData.activeColumn=u.g.userData.activePair=null;delete u.g.userData.normalization;u.normalizationStages.forEach(tile=>tile.material.emissiveIntensity=0);u.columnCues.forEach(({cue})=>cue.visible=false);u.outputs.forEach(o=>{o.material.emissive.set(u.color);o.material.emissiveIntensity=.08;});if(u.connections.length)u.inputs.forEach(o=>{o.material.color.set(0x6c9eb1);o.material.emissive.set(0x6c9eb1);o.material.emissiveIntensity=.08;});u.connections.forEach(c=>{c.spark.visible=false;c.mesh.material.opacity=c.weight===0?.2:.8;c.mesh.material.depthWrite=true;});u.activationChannels.forEach(({spark,gate,channel})=>{spark.visible=false;gate.scale.setScalar(1);gate.material.emissiveIntensity=0;channel.material.emissiveIntensity=0;});u.pairChannels.forEach(({left,right,leftPath,rightPath,outPath,gate,carrier})=>{carrier.visible=false;gate.scale.setScalar(1);[leftPath,rightPath,outPath,gate].forEach(o=>o.material.emissiveIntensity=0);[left,right].forEach(o=>{o.scale.setScalar(1);o.material.emissiveIntensity=.08;});});u.weightCells.forEach(({tile,face})=>{tile.material.emissiveIntensity=0;face.material.color.set(0xffffff);});u.biasCells.forEach(({face})=>face.material.color.set(0xffffff));}}
  // A single colour pulse identifies the departing row without moving its tray.
  function pulseSource(progress=1){
   const pulse=Math.pow(1-Math.min(1,Math.max(0,progress)/.65),2);
@@ -905,5 +997,5 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   };
  }
  function resetUnits(){units.clear();}
- return {surroundings,module,sync,fusionVisual,focusCalculations,updateDetail,detailsVisible:()=>detailModes[detailScope],pulseSource,layerNormFrame,layerNormStats,layerNormAnchor,routeLayerNormInput,routeLayerNormOutput,tokenOperation,tokenFrame,tokenAnchor,routeTokenInput,routeTokenOutput,projectionFrame,sequenceProjectionFrame,routeSequenceProjectionInput,routeSequenceProjectionOutput,routeAggregationValues,rmsFrame,rmsAnchor,routeRMSOutput,projectionColor,pairColorsFor:id=>units.get(id)?.pairTones||pairColors,processing,clearProcessing,packet,prepareProjectionPacket,routeProjectionPacket,routePairedPacket,projectionOutlet,projectionRadius,prepareProjectionOutput,routeProjectionOutput,featureColor,rowColor,rowZ,sourceOffset,resetUnits,focus(active){context.visible=!active;floor.visible=!active;detailScope=active?'card':'board';if(active)detailModes.card=true;}};
+ return {selectionFrame,selectionChoice,selectionAnchor,routeSelectionInput,routeSelectionOutput,surroundings,module,sync,fusionVisual,focusCalculations,updateDetail,detailsVisible:()=>detailModes[detailScope],pulseSource,layerNormFrame,layerNormStats,layerNormAnchor,routeLayerNormInput,routeLayerNormOutput,tokenOperation,tokenFrame,tokenAnchor,routeTokenInput,routeTokenOutput,projectionFrame,sequenceProjectionFrame,routeSequenceProjectionInput,routeSequenceProjectionOutput,routeAggregationValues,rmsFrame,rmsAnchor,routeRMSOutput,projectionColor,pairColorsFor:id=>units.get(id)?.pairTones||pairColors,processing,clearProcessing,packet,prepareProjectionPacket,routeProjectionPacket,routePairedPacket,projectionOutlet,projectionRadius,prepareProjectionOutput,routeProjectionOutput,featureColor,rowColor,rowZ,sourceOffset,resetUnits,focus(active){context.visible=!active;floor.visible=!active;detailScope=active?'card':'board';if(active)detailModes.card=true;}};
 }

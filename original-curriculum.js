@@ -30,7 +30,8 @@ const embed=(ids,width=2)=>flat(ids.map(i=>(width===4?wide.embedding:M.math.emb)
 const unmaskedWeights=x=>probabilities(scores(mat(x,M.weights.q),mat(x,M.weights.k)));
 const scoreWide=(q,k)=>flat(rows(q,4).map(a=>rows(k,4).map(b=>a.reduce((s,x,i)=>s+x*b[i],0)/2)));
 const mixWide=(a,v)=>flat(rows(a,3).map(r=>[0,1,2,3].map(j=>r.reduce((s,p,i)=>s+p*rows(v,4)[i][j],0))));
-const vocabulary=v=>flat(rows(v,4).map(r=>M.linear(r,wide.vocabulary).map((x,i)=>x+[0,0,-.75,0,0,-.75][i])));
+const vocabularyBias=[0,0,-.75,0,0,-.75];
+const vocabulary=v=>flat(rows(v,4).map(r=>M.linear(r,wide.vocabulary).map((x,i)=>x+vocabularyBias[i])));
 const singleAttention=(qSource,kvSource=qSource)=>qSource.length===12?project(mixWide(probabilities(scoreWide(project(qSource,wide.q),project(kvSource,wide.k))),project(kvSource,wide.v)),wide.output):mat(mix(probabilities(scores(mat(qSource,M.weights.q),mat(kvSource,M.weights.k))),mat(kvSource,M.weights.v)),M.weights.output);
 function head(qSource,kvSource,index,masked=false){
  const width=qSource.length/3,headWidth=width/2,w=width===4?wide:M.weights;
@@ -109,6 +110,7 @@ Object.assign(M.definitions,{
  'modern-block':def(L('现代解码器层','Modern decoder layer'),[6],6,'decoder',L('包含 RMSNorm、带 RoPE 的因果 Attention、SwiGLU 和两次残差。每段先归一化，再把更新加回自己的输入；三个 token 各保留两个特征。','Contains RMSNorm, causal attention with RoPE, SwiGLU and both residuals. Each sublayer normalizes first, then adds its update to its own input. All three tokens retain two features each.'),{glyphs:['Norm / Attn','+','Norm / FFN','+']})
 });
 M.weights['original-head']=wide.vocabulary;
+M.definitions['original-head'].bias=vocabularyBias;
 Object.assign(M.operations,{
  relu:([x])=>x.map(relu),layernorm2:([x])=>ln(x),'relu-ffn':([x])=>classicFFN(x),position:([x])=>position(x),
  'original-weights':([x])=>unmaskedWeights(x),'single-attention':([x])=>singleAttention(x),'two-head-attention':([x])=>multi(x),'single-cross-attention':([q,kv])=>singleAttention(q,kv),'head-a':([x])=>head(x,x,0),'head-b':([x])=>head(x,x,1),concat:([a,b])=>concat(a,b),
@@ -306,6 +308,9 @@ lesson('vocabulary',L('从分数中选出词','Select tokens from scores'),['ori
  L('取最高分与取 Softmax 后的最大概率会选中同一个词，所以本关直接按分数选择。手工教学权重不保证预测有语言意义，也不要求输出等于输入；三个位置都要按实际分数正确选词。','The largest logit and largest Softmax probability select the same token, so this lesson selects directly from scores. The hand-written teaching weights do not guarantee meaningful predictions or a copy of the input. Select the correct candidate at all three positions.'),
  {'original-head':['R'],pick:['original-head'],'wide-invert':['R'],sink:'pick'},v=>M.operations.pick([vocabulary(v)]),{sourceDim:12,sinkDim:3,wide:true,sourceTitle:L('解码器输出 D','Decoder output D'),sourceNote:L('与第 17、18 关相同的解码器特征','The same decoder features as levels 17 and 18'),outputTitle:L('预测 Token ID','Predicted token IDs'),shape:'3 × 4 → 3 × 6 → 3 ID',tokenOutput:true,buildable:true,maxModules:5,saveAliases:{lmhead:'original-head',invert:'wide-invert'}});
 for(const id of ['vocabulary-scores','vocabulary'])Object.assign(added[id],{sourceNames:{R:added[id].sourceTitle},sourcePorts:{R:'D'}});
+const readoutWidthNote=L('FFN 内部的 4 → 8 → 4，是把临时展开的特征收回模型宽度。这里的 4 → 6 则是为六个词各算一个分数：4 是每个位置的特征数，6 是词表大小，前面的 3 个位置始终不变。','Inside the FFN, 4 → 8 → 4 returns expanded features to the model width. Here, 4 → 6 computes one score for each of six tokens: 4 is the feature count per position, 6 is the vocabulary size, and the three positions stay unchanged.');
+const withReadoutWidth=text=>L(text+' '+readoutWidthNote,globalThis.AtelierEnglish[text]+' '+globalThis.AtelierEnglish[readoutWidthNote]);
+for(const id of ['vocabulary-scores','vocabulary'])added[id].rationale.text=withReadoutWidth(added[id].rationale.text);
 for(const id of ['vocabulary-scores','encoder-decoder'])Object.assign(added[id],{
  outputTitle:L('候选词分数 L','Candidate-token scores L'),
  outputNote:L('每个位置的六个候选词分数','Six candidate scores per position'),
@@ -685,8 +690,12 @@ cards['encoder-add'].formula='R = X + MHA(X)';cards['ffn-add'].formula='R = A + 
 cards['original-score'].formula='S = QKᵀ / √4';cards['original-aggregate'].formula='O = AV';cards['original-head'].formula='L = DW_vocab + b';
 cards['original-head'].ability=L('用四个特征，为六个候选词打分','Use four features to score six candidates');
 cards['original-head'].meaning=L('D 来自解码器最后一个 LayerNorm。每个目标位置的四个特征，分别与 W_vocab 的六列权重相乘求和，再加各列偏置；第 j 列的结果就是词表中第 j 个候选词的分数。','D comes from the decoder’s final LayerNorm. For each target position, take the dot product of its four features with each of the six W_vocab columns, then add that column’s bias. Column j produces the score for vocabulary candidate j.');
+cards['original-head'].meaning=withReadoutWidth(cards['original-head'].meaning);
 cards['original-head'].purpose=L('第 17 关单独练这一步，第 18 关把同一块放回完整模型，第 19 关再接取最高分。三个关卡使用同一套 4 × 6 权重和偏置；分数还不是概率或已经选出的词。','Practice this step in level 17, place the same module into the full model in 18, then add maximum selection in 19. All three use the same 4 × 6 weights and biases. Scores are not probabilities or selected tokens.');
 cards['wide-invert'].formula='Y = −D';
+cards.pick={...previousCard('pick'),seal:'max',ability:L('比较六个分数，留下得分最高的词','Compare six scores and keep the highest-scoring token'),
+ meaning:L('每个目标位置有六个候选分数，按“我、爱、猫、你、恨、狗”的词表顺序排列。逐个比较并保留当前最高分，最后输出获胜候选的词表 ID；三个位置分别比较，不会把不同位置的分数混起来。','Each target position has six candidate scores, ordered I, Love, Cat, You, Hate and Dog. Compare them while retaining the current maximum, then output the winning candidate’s vocabulary ID. Compare the three positions separately.'),
+ purpose:L('例如 [1, 0, 0.25, −1, 0, −1.75] 中最高分是 1，对应“我”，因此输出它的 ID 0。输出的是候选编号，不是最高分本身；并列时保留词表中先出现的候选。取 Softmax 后再找最大值会选中同一个词，本关直接比较分数。','For [1, 0, 0.25, −1, 0, −1.75], the maximum is 1 for I, so the output is its ID 0. Output the candidate ID, not the score itself; ties keep the earlier vocabulary entry. Taking the maximum after Softmax would select the same token, so this lesson compares scores directly.')};
 cards['original-q'].formula='Q = DWq';cards['original-k'].formula='K = EWk';cards['original-v'].formula='V = EWv';cards['original-output'].formula='Y = OWo';
 cards['original-q'].meaning=L('从目标 D 的四个特征产生查询 Q，用来决定当前目标位置想从源句取什么信息。','Project queries Q from the target D’s four features to select source information for each target position.');
 for(const id of ['original-k','original-v'])cards[id].meaning=L('从编码器输出 E 的四个特征产生键或值，供目标侧查询匹配和读取。Q 来自目标，K/V 来自源句。','Project keys or values from encoder E’s four features. Target queries match and read them: Q comes from the target, K/V from the source.');
