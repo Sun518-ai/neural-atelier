@@ -865,7 +865,7 @@ try{
    const p=movingPacket(ev.values[edge.from],edge.from,edge.to,'wire');
    const perRow=!seq&&sample<3,departure=perRow&&['R','Z'].includes(edge.from)?new T.LineCurve3(rowEndpoint('source'),edge.curve.getPoint(0)):null,arrival=perRow&&edge.to==='sink'?new T.LineCurve3(edge.curve.getPoint(1),rowEndpoint('sink')):null;
    const start=timings.get(edge.from)?.end||0,processStart=timings.get(edge.to)?.start??null;
-   Object.assign(p,{edge,departure,arrival,start,processStart,end:processStart==null?start+travelDuration:processStart+(edge.index>0&&!handledSecondary(edge.to)?.25:0)});
+   Object.assign(p,{edge,departure,arrival,start,travelEnd:start+travelDuration,processStart,end:processStart==null?start+travelDuration:processStart+(edge.index>0&&!handledSecondary(edge.to)?.25:0)});
    p.p=departure?.getPoint(0)||edge.curve.getPoint(0);p.mesh.position.copy(p.p);packets.push(p);
   });
   readyNodes.forEach(n=>{
@@ -1149,9 +1149,13 @@ try{
    followedPacket=next||active.find(p=>p.motion==='process')||active[0];
   }
   if(followedPacket)return [followedPacket];
-  const work=active.filter(p=>p.motion==='process'),candidates=work.length?work:active;
+  // Keep transfers in the same model section as its operators. Choosing work
+  // globally first briefly jumped to decoder work between encoder operators.
+  // Inputs already parked at a join (especially residuals) are not moving work.
+  const candidates=active.filter(p=>p.motion!=='wire'||playbackTimeline?.time<p.travelEnd);
   const sectionOf=p=>M.demo.sections[p.node?.id||p.edge?.to],section=['encoder','masked','cross','readout'].find(section=>candidates.some(p=>sectionOf(p)===section));
-  return candidates.filter(p=>!section||sectionOf(p)===section);
+  const local=candidates.filter(p=>!section||sectionOf(p)===section),work=local.filter(p=>p.motion==='process');
+  return work.length?work:local;
  }
  function followFraming(tracking){
   if(!tracking.length)return null;

@@ -11,7 +11,7 @@ async function boot({reduced=true,frameMs=1000,onFrame=()=>{},languages=['zh-CN'
  for(const f of ['locales/en.js','i18n.js','music.js','shell.js','model.js','campaign.js','engine-model.js','original-curriculum.js','transformer-demo.js','cloud-curriculum.js','structure-map.js'])vm.runInContext(fs.readFileSync(__dirname+'/'+f,'utf8'),c,{filename:f});
  for(const f of ['module-cards.js','level-progress.js','scene-art.js'])vm.runInContext(fs.readFileSync(__dirname+'/'+f,'utf8').replaceAll('export ',''),c,{filename:f});
  let src=fs.readFileSync(__dirname+'/game.js','utf8').replace(/^import .*\n/gm,'').replace("const T=await import('./vendor/three.module.js');",'const T=window.T;').replace(/const \{createSceneArt\}=await import\('\.\/scene-art\.js\?v=[^']+'\);/,'');
- src=src.replace('world={relocalize','world={inspectFollow:()=>({packet:followedPacket,target:cameraTarget.clone(),active:activeFollowPackets(),seed:followSeed,zoom,followZoom,gliding:!!followFlight}),relocalize');
+ src=src.replace('world={relocalize','world={inspectTracking:()=>followTracking(),inspectFollow:()=>({packet:followedPacket,target:cameraTarget.clone(),active:activeFollowPackets(),seed:followSeed,zoom,followZoom,gliding:!!followFlight}),relocalize');
  src+='\nwindow.testAPI={switchLevel,run,togglePause,refresh,select,assignDevice,chooseOutput,chooseInput,chooseModule,placeModule,getState:()=>state,setState:s=>state=s,getWorld:()=>world,getFault:()=>fault};';
  await vm.runInContext('(async()=>{'+src+'})()',c);
  assert.ok(c.testAPI.getWorld(),'3D boot failed');return {c,document,window,api:c.testAPI,scenes,time:()=>now,setFrameMs:value=>{frameMs=value;},view:()=>view,camera:()=>renderedCamera};
@@ -128,6 +128,31 @@ test('playback and zoom sliders keep the selected flow and viewing distance whil
  assert.equal(phase,4);assert.equal(JSON.stringify(app.api.getState()),saved);
  const profile=app.document.querySelector('#demo-follow-view');profile.value='close';profile.onchange({target:profile});assert.equal(app.api.getWorld().inspectFollow().followZoom,null,'explicit distance preset replaces the custom distance');
  app.api.switchLevel('wire');app.api.switchLevel('transformer-demo');assert.equal(app.api.getWorld().inspectFollow().followZoom,null);
+});
+
+test('automatic following stays with encoder transfers instead of detouring to decoder work or parked residuals',async()=>{
+ let app,watching=false,stopped=false;const transfers=new Set();
+ app=await boot({reduced:false,frameMs:100,onFrame:()=>{
+  if(!app||stopped)return;
+  const world=app.api.getWorld(),view=world.inspectFollow();
+  if(view.active.some(p=>p.node?.id==='softmax'))watching=true;
+  if(!watching)return;
+  const tracking=world.inspectTracking();
+  assert.ok(tracking.length);
+  for(const p of tracking){
+   assert.equal(app.c.NeuralPrologue.demo.sections[p.node?.id||p.edge?.to],'encoder','in-flight encoder data retains the camera while decoder operators run');
+   if(p.motion==='wire'){
+    assert.notEqual(p.edge.to,'demo-add','parked residual input must not pull the camera toward a future operation');
+    transfers.add(p.edge.from);
+   }
+  }
+  if(view.active.some(p=>p.node?.id==='original-output')){stopped=true;app.api.run();}
+ }});
+ app.api.switchLevel('transformer-demo');const saved=JSON.stringify(app.api.getState());
+ const speed=app.document.querySelector('#playback-speed');speed.value='1';speed.dispatchEvent(new app.window.Event('input'));
+ await app.api.run();assert.ok(stopped);
+ for(const id of ['softmax','softmax-2','aggregate','aggregate-2','wide-concat'])assert.ok(transfers.has(id),'followed transfer from '+id);
+ assert.equal(JSON.stringify(app.api.getState()),saved);
 });
 
 test('demo Softmax hands off while the independent masked branch still runs, and joins wait for their inputs',async()=>{
