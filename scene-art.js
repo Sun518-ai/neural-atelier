@@ -8,7 +8,7 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
  const pairColors=[0x8b6ea5,0x368d77];
  const additionColors=[0x397aa2,0xb68036];
  const rowZ=i=>-1.05+i*.96;
- const sourceOffset=(layout,id)=>layout.dualSource?(id==='Z'?-3:3):0;
+ const sourceOffset=(layout,id)=>layout.sourceOffsets?.[id]??(layout.dualSource?(id==='Z'?-3:3):0);
  const tokenOperation=d=>d.type==='mask'&&d.out===9?'mask':d.type==='embedding'&&d.ins[0]===3?'lookup':d.type==='position'&&d.ins[0]===d.out?'position':null;
  const positionalValue=(p,j,width)=>(j%2?Math.cos:Math.sin)(p/10000**(2*Math.floor(j/2)/width));
  sharedSphere.userData.shared=true;
@@ -192,9 +192,9 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
    g.userData.activation=d.activation||'silu';
    const panel=backdrop(box(g,1.5,.025,1.7,0,.57,0,0xe4cc9d,{transparent:true,opacity:.34,depthWrite:false}),.12);
    for(let i=0;i<d.out;i++){
-    const z=(i-(d.out-1)/2)*.42,pts=Array.from({length:33},(_,j)=>{const x=-3+j*6/32;return [x*.22,.92+.22*(d.activation==='relu'?Math.max(0,x):x/(1+Math.exp(-x))),z];});
+    const seqWidth=d.out===24?8:d.out,z=(i%seqWidth-(seqWidth-1)/2)*(d.out===24?.24:.42),rowY=d.out===24?Math.floor(i/8)*.5:0,pts=Array.from({length:33},(_,j)=>{const x=-3+j*6/32;return [x*.22,.92+rowY+.22*(d.activation==='relu'?Math.max(0,x):x/(1+Math.exp(-x))),z];});
     inputs.push(neuron(g,...pts[0],0xb6ab83));outputs.push(neuron(g,...pts[32],color));
-    const channel=tube(g,pts,0xb38649,.026),gate=ring(g,.19,0,.92,z,color,.025);
+    const channel=tube(g,pts,0xb38649,.026),gate=ring(g,d.out===24?.11:.19,0,.92+rowY,z,color,.025);
     const spark=new T.Mesh(sharedSphere,mat(color,{emissive:color,emissiveIntensity:1.6,transparent:true,depthWrite:false}));spark.visible=false;spark.userData={activationFeature:i};g.add(spark);
     activationChannels.push({channel,gate,spark,i});
    }
@@ -230,9 +230,9 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
    }
   }else if(['score','softmax','attention'].includes(d.type)){
    // Three rows correspond to positions; crossed threads depict information mixing.
-   for(let i=0;i<3;i++)for(let j=0;j<3;j++){
-    const c=d.type==='mask'&&j>i?0xc3b6a5:color,x=(j-1)*.47,z=(i-1)*.48;
-    box(g,.39,.06,.39,x,.52,z,c);textTile(g,d.type==='mask'?(j>i?'−∞':'✓'):d.type==='softmax'?'p':String(i)+','+String(j),.35,.32,x,.56,z,{size:56,bg:'#e2e9da',color:'#4e6b5a'});
+   for(let i=0;i<3;i++)for(let j=0;j<(d.columns||3);j++){
+    const c=d.type==='mask'&&j>i?0xc3b6a5:color,x=(j-((d.columns||3)-1)/2)*(d.columns===6?.28:.47),z=(i-1)*.48;
+    box(g,d.columns===6?.24:.39,.06,.39,x,.52,z,c);textTile(g,d.type==='mask'?(j>i?'−∞':'✓'):d.type==='softmax'?'p':String(i)+','+String(j),d.columns===6?.23:.35,.32,x,.56,z,{size:56,bg:'#e2e9da',color:'#4e6b5a'});
    }
    for(let i=0;i<3;i++){socketBackdrop(neuron(g,-.75,.96,(i-1)*.5,0x789abf));outputs.push(neuron(g,.75,1.05,(i-1)*.5,color));for(let j=0;j<3;j++)if(!d.causal||j<=i)backdrop(tube(g,[[-.75,.96,(j-1)*.5],[0,1.3,0],[.75,1.05,(i-1)*.5]],color,.012,.55),.1);}
   }else if(d.type==='rope'){

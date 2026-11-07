@@ -114,7 +114,7 @@ M.samplesFor=id=>refs[id]?M.samples:oldSamples(id);
 M.reference=(v,id)=>refs[id]?refs[id](v):oldRef(v,id);
 M.solutions=id=>{if(!links[id])return oldSolutions(id);const s=M.initial(id,{complete:true});for(const n of s.nodes)n.links=[...links[id][n.id]];s.sink=links[id].sink;return s;};
 M.extraCard=(kind,id)=>cards[kind]||oldCard?.(kind,id);
-M.extraExample=(kind,id)=>{if(!cards[kind])return oldExample?.(kind,id);const stage=Object.keys(links).find(l=>links[l][kind]),s=M.solutions(stage),input=M.samples[2].v,ev=M.evaluate(s,input),n=s.nodes.find(n=>n.id===kind);return {sampleIndex:2,exampleSource:['X',input],inputs:n.links.map(k=>[k==='R'?'X':M.definitions[k].name,ev.values[k]]),output:[M.definitions[kind].name,ev.values[kind]]};};
+M.extraExample=(kind,id,nodeId)=>{if(!cards[kind])return oldExample?.(kind,id,nodeId);const stage=Object.keys(links).find(l=>links[l][kind]),s=M.solutions(stage),input=M.samples[2].v,ev=M.evaluate(s,input),n=s.nodes.find(n=>n.id===kind);return {sampleIndex:2,exampleSource:['X',input],inputs:n.links.map(k=>[k==='R'?'X':M.definitions[k].name,ev.values[k]]),output:[M.definitions[kind].name,ev.values[kind]]};};
 M.cloud={weights:W,down:D,ids:definitions.map(d=>d[0])};
 I18n.prepare({cards,levels:Object.fromEntries(M.cloud.ids.map(id=>[id,M.levels[id]])),route:M.routes.cloud,definitions:Object.fromEntries(Object.keys(specs).map(id=>[id,M.definitions[id]]))});
 })(window.NeuralPrologue);

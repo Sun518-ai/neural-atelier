@@ -1,10 +1,31 @@
 const test=require('node:test'),assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs');
 const ctx={console,navigator:{languages:['zh-CN']}};ctx.window=ctx;vm.createContext(ctx);
-for(const file of ['locales/en.js','i18n.js','model.js','campaign.js','engine-model.js','original-curriculum.js','cloud-curriculum.js'])vm.runInContext(fs.readFileSync(__dirname+'/'+file,'utf8'),ctx,{filename:file});
+for(const file of ['locales/en.js','i18n.js','model.js','campaign.js','engine-model.js','original-curriculum.js','transformer-demo.js','cloud-curriculum.js'])vm.runInContext(fs.readFileSync(__dirname+'/'+file,'utf8'),ctx,{filename:file});
 const M=ctx.NeuralPrologue,O=M.original;
 vm.runInContext(fs.readFileSync(__dirname+'/module-cards.js','utf8').replaceAll('export ',''),ctx,{filename:'module-cards.js'});
 const plain=x=>JSON.parse(JSON.stringify(x));
 const close=(a,b,tol=1e-9)=>a?.length===b.length&&a.every((x,i)=>Number.isFinite(x)&&Math.abs(x-b[i])<tol);
+test('the prepared Transformer expands every operator and matches the packed encoder-decoder',()=>{
+ const id='transformer-demo',l=M.levels[id],s=M.initial(id),d=M.demo;
+ assert.equal(l.demonstration,true);assert.equal(l.sampleCount,1);assert.equal(l.buildable,false);
+ assert.equal(M.routes.main.ids.at(-1),id);assert.equal(M.levels.autoregressive.next,id);
+ assert.equal(s.nodes.length,67);assert.ok(s.nodes.every(n=>!M.packages[n.kind]),'no hidden packaged heads, FFNs, embedding/position pairs or layers');
+ assert.ok(s.nodes.every(n=>n.links.every(Boolean)));assert.equal(s.sink,d.picked);
+ const used=new Set(),visit=id=>{if(used.has(id))return;used.add(id);s.nodes.find(n=>n.id===id)?.links.forEach(visit);};visit(s.sink);
+ assert.ok(s.nodes.every(n=>used.has(n.id)),'every displayed operator feeds the output');
+ assert.deepEqual(plain(s),plain(M.initial(id)),'fixed deterministic placement');
+ for(const target of [[0,1,2],[3,4,5],[2,0,1],[0,5,3]]){
+  const ev=M.evaluate(s,target),sources=M.sourceValues(s,target),packed=M.operations['original-transformer']([target,O.sourceIds]);
+  assert.equal(ev.error,null);assert.deepEqual(plain(sources.Z),plain(O.sourceIds));
+  assert.ok(close(ev.values[d.encoder],O.encoder(O.position(O.embed(O.sourceIds,4)))));
+  assert.ok(close(ev.values[d.logits],packed),'unfolding preserves the original model scores');
+  for(const row of M.math.rows(ev.values[d.prob],6)){assert.ok(Math.abs(row.reduce((a,b)=>a+b,0)-1)<1e-12);assert.ok(row.every(x=>x>0&&x<1));}
+  assert.ok(close(ev.output,M.operations.pick([packed])));assert.ok(close(ev.output,M.reference(target,id)));
+  for(const n of s.nodes.filter(n=>n.kind==='mask'))for(let r=0;r<3;r++)for(let c=r+1;c<3;c++)assert.equal(ev.values[n.id][r*3+c],-Infinity);
+ }
+ const ev=M.evaluate(s,M.samplesFor(id)[0].v);
+ for(const n of s.nodes){const ex=M.extraExample(n.kind,id,n.id);assert.deepEqual(plain(ex.output[1]),plain(ev.values[n.id]),n.id+' card uses this instance');}
+});
 test('QKV accepts only V at the outlet and ignores optional Q/K branches',()=>{
  const state=M.initial('qkv');assert.ok(M.addNode(state,'v',0,0));assert.equal(M.connect(state,'R','v',0),null);assert.equal(M.connect(state,'v','sink',0),null);
  for(const sample of M.samplesFor('qkv')){const ev=M.evaluate(state,sample.v);assert.equal(ev.error,null);assert.ok(close(ev.output,M.reference(sample.v,'qkv')));assert.equal(ev.values.q,undefined);assert.equal(ev.values.k,undefined);}
@@ -17,23 +38,24 @@ test('QKV accepts only V at the outlet and ignores optional Q/K branches',()=>{
 const differs=(id,edit)=>{const s=M.solutions(id);edit(s);assert.ok(M.samplesFor(id).slice(0,M.levels[id].sampleCount).some(t=>{const e=M.evaluate(s,t.v);return e.error||!close(e.output,M.reference(t.v,id));}),id+' must reject this incorrect computation');};
 
 test('original concepts are completed before optional modern and engine tracks',()=>{
- assert.equal(M.routes.main.ids.length,30);assert.equal(M.routes.modern.ids.length,13);assert.equal(M.routes.engine.ids.length,9);
+ assert.equal(M.routes.main.ids.length,31);assert.equal(M.routes.modern.ids.length,13);assert.equal(M.routes.engine.ids.length,9);
  assert.deepEqual(plain(M.routes.main.ids.slice(0,7)),['wire','projection','relu','down-projection','original-ffn','residual','workshop']);
  for(const id of M.routes.main.ids){
   const l=M.levels[id];assert.equal(l.original,true);
   assert.ok(!l.nodes.some(k=>['gate','silu','norm','ropeq','ropek','ffnblock','attention','attentionweights'].includes(k)),id+' must not introduce a modern operator');
+  if(l.demonstration){assert.equal(id,'transformer-demo');continue;}
   const s=M.initial(id);assert.equal(s.sink,null);assert.ok(s.nodes.every(n=>n.links.every(x=>x===null)),id+' has no starting answer');
   if(M.routes.main.ids.indexOf(id)>=6){assert.equal(s.nodes.length,0,id+' begins with an empty workbench');assert.ok(l.buildable);}
  }
  for(const id of ['activation','plain-ffn','gating','ffn','rope','attention','block'])assert.equal(M.levels[id].track,'modern');
  for(const [earlier,later]of [['layernorm','add-norm'],['softmax','weighted-sum'],['self-attention','multihead'],['multihead','encoder-layer'],['causal','decoder-self'],['cross-attention','decoder-layer'],['decoder-layer','encoder-decoder']])assert.ok(M.routes.main.ids.indexOf(earlier)<M.routes.main.ids.indexOf(later));
- assert.equal(M.levels.autoregressive.next,null);assert.equal(M.levels.block.next,null);
+ assert.equal(M.levels.autoregressive.next,'transformer-demo');assert.equal(M.levels.block.next,null);
 });
 
 test('learned shelves accumulate in teaching order without exposing future operators or requiring distractors',()=>{
  const seen=new Set(),sequenceKind=k=>Math.max(...M.definitions[k].ins,M.definitions[k].out)>4;
  for(const route of [M.routes.main,M.routes.modern])for(const id of route.ids){
-  const l=M.levels[id];l.nodes.forEach(k=>seen.add(k));if(M.fusions[id])seen.add(M.fusions[id].kind);
+  const l=M.levels[id];if(l.demonstration)continue;l.nodes.forEach(k=>seen.add(k));if(M.fusions[id])seen.add(M.fusions[id].kind);
   if(l.practice)continue;
   const stock=M.inventory(l);
   for(const kind of seen)if(sequenceKind(kind)===!!l.sequence){
@@ -303,7 +325,7 @@ test('the encoder–decoder capstone keeps source and target streams separate al
  differs('encoder-decoder',s=>s.nodes.find(n=>n.id==='original-decoder').links.reverse());
 });
 test('vocabulary scoring is taught before model assembly using the decoder’s exact four-feature output',()=>{
- const ids=['decoder-layer','vocabulary-scores','encoder-decoder','vocabulary','autoregressive'],route=Array.from(M.routes.main.ids);
+ const ids=['decoder-layer','vocabulary-scores','encoder-decoder','vocabulary','autoregressive','transformer-demo'],route=Array.from(M.routes.main.ids);
  assert.deepEqual(route.slice(route.indexOf(ids[0])),ids);
  assert.deepEqual(plain(M.routes.main.groups.at(-1).ids),ids.slice(1));
  ids.forEach((id,i)=>{assert.equal(M.levels[id].chapter,'原版基础 / '+(16+i));assert.equal(M.levels[id].next,ids[i+1]||null);});

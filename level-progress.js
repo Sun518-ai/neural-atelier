@@ -49,6 +49,7 @@ export function createProgress(M,storage){
   });
  }
  function load(id){
+  if(M.levels[id]?.demonstration)return M.initial(id);
   const l=M.levels[id],raw=read(key(id)),upgraded=upgradeReadout(raw,id);
   // Keep an exact recovery copy before upgrading old two-feature modules.
   // Existing positions, wiring and completion badges are not reset.

@@ -8,7 +8,7 @@
 
 **[Play in your browser →](https://hacking.pub/games/neural-atelier/)** · [Run locally](#run-locally) · [How to play](#how-to-play)
 
-58 levels · Desktop / WebGL 2 · English + Chinese · No account required
+59 levels · Desktop / WebGL 2 · English + Chinese · No account required
 
 ## Inside the workshop
 
@@ -30,13 +30,13 @@ The **Cloud inference** track sits between modern models and on-device inference
 
 ## From the first wire to an inference engine
 
-The **30-level main track** teaches the original Transformer first. **13 modern extensions** then compare SiLU, SwiGLU, RMSNorm, Pre-LN, and RoPE. The **6-level cloud track** starts with one GPU and then introduces tensor parallelism before a separate **9-level bonus track** explores on-device inference inspired by Qwen 27B, Kapitsa, and Apple ANE. Choose a track from the level menu; finishing one does not automatically enter another.
+The **31-level main track** teaches the original Transformer first. **13 modern extensions** then compare SiLU, SwiGLU, RMSNorm, Pre-LN, and RoPE. The **6-level cloud track** starts with one GPU and then introduces tensor parallelism before a separate **9-level bonus track** explores on-device inference inspired by Qwen 27B, Kapitsa, and Apple ANE. Choose a track from the level menu; finishing one does not automatically enter another.
 
 | Stage | What you build and explore |
 | --- | --- |
 | **Prologue · 7 levels** | Route a vector, project, apply ReLU, down-project, assemble the original FFN, add a residual, and practice placing modules. |
-| **Original network · 20 levels** | Embeddings, sinusoidal positions, LayerNorm and Post-LN; Q/K/V, scores, Softmax, weighted aggregation, single-head and multi-head attention; a four-feature bridge, encoder, masked attention, cross-attention, decoder, and the complete encoder–decoder. Finish with vocabulary scores, selection and a separate generation-loop exercise. |
-| **Packaging bridges · 2 levels** | Rebuild the familiar ReLU FFN and Q/K scoring pipeline with a packaged module. Internal operations remain unchanged; the old modules remain available. |
+| **Original network · 21 levels** | Embeddings, sinusoidal positions, LayerNorm and Post-LN; Q/K/V, scores, Softmax, weighted aggregation, single-head and multi-head attention; a four-feature bridge, encoder, masked attention, cross-attention, decoder, and the complete encoder–decoder. Learn vocabulary scores, selection and a separate generation loop, then run the fully expanded model. |
+| **Packaging bridges · 3 levels** | Collect the familiar ReLU FFN, Q/K scoring pipeline and two-head masked attention as modules. Internal operations remain unchanged; the old modules remain available. |
 | **Modern extensions · 13 levels** | Compare SiLU, single-branch and gated FFNs, SwiGLU, RMSNorm, Pre-LN, RoPE and a modern decoder block. |
 | **On-device inference · 9 levels** | Place work on CPU, GPU, and ANE; explore tensor layouts, batching, KV caching, quantization, fusion, parallel execution, and prefix reuse. |
 
@@ -69,9 +69,9 @@ The left shelf starts in its smallest size. Use **− / +** to resize it, **Hide
 
 In **[Build one original encoder layer](https://hacking.pub/games/neural-atelier/#encoder-layer)**, diagrams distinguish exchanging information between tokens from processing each token with the FFN. The shelf groups four-feature operators together, including familiar alternatives, and keeps earlier parts in an expandable section. Residual addition and LayerNorm each use one shelf entry with two copies; previously saved positional names and wiring remain valid.
 
-The first six prologues provide fixed modules with **no wires connected**. Prologue 07, **[Take a module](https://hacking.pub/games/neural-atelier/#workshop)**, starts with an **empty table**: drag in one familiar projection and wire it yourself. From Prologue 07 onward, the shelf remains available in every track. Every subsequent Original-track lesson also starts with an empty table, even when its shelf has only one module. Drag the required components in, then wire them. Modern and engine lessons retain their prepared starts. Previously auto-filled Original boards with no connections are archived before opening an empty table; **Restore previous solution** recovers that layout. Connected boards and completed saves continue as before. Open construction levels allow multiple copies, each with independent connections. The shelf shows remaining stock and the table limit: **8** modules for the FFN, **12** for Attention, and **7** for the Transformer block. Each module type has two copies, except the FFN's four linear projections, which combine the formerly identical linear and content projection stocks. Returning a module restores its stock. Existing saves keep all copies, positions, and wires after the merge.
+The first six prologues provide fixed modules with **no wires connected**. Prologue 07, **[Take a module](https://hacking.pub/games/neural-atelier/#workshop)**, starts with an **empty table**: drag in one familiar projection and wire it yourself. From Prologue 07 onward, building lessons keep the shelf available. Every subsequent Original-track puzzle starts with an empty table, even when its shelf has only one module. Drag the required components in, then wire them. Modern and engine lessons retain their prepared starts. Previously auto-filled Original boards with no connections are archived before opening an empty table; **Restore previous solution** recovers that layout. Connected boards and completed saves continue as before. Open construction levels allow multiple copies, each with independent connections. The shelf shows remaining stock and the table limit: **8** modules for the FFN, **12** for Attention, and **7** for the Transformer block. Each module type has two copies, except the FFN's four linear projections, which combine the formerly identical linear and content projection stocks. Returning a module restores its stock. Existing saves keep all copies, positions, and wires after the merge.
 
-After completing a prologue, reopening or reloading it starts a fresh challenge. **Restore previous solution** brings back your last completed layout and wiring without running it. Unfinished attempts continue where you left off, including attempts at a level you have beaten before. **Replay level** in the completion dialog stays on your current board without resetting or running it. Original network, modern extension, and engine levels continue to load their saved circuits directly.
+After completing a prologue, reopening or reloading it starts a fresh challenge. **Restore previous solution** brings back your last completed layout and wiring without running it. Unfinished attempts continue where you left off, including attempts at a level you have beaten before. **Replay level** in the completion dialog stays on your current board without resetting or running it. Original network puzzles, modern extensions, and engine levels continue to load saved circuits directly. The final **[Run the complete original Transformer](https://hacking.pub/games/neural-atelier/#transformer-demo)** demonstration always opens with all 67 basic operators placed and wired. Just press Run: one encoder layer, one decoder layer, two heads, four model features, ReLU FFNs, vocabulary probabilities and selection. Region buttons, camera controls and double-click cards let you inspect the unfolded model; no wiring is required.
 
 At composition milestones such as **[Self-attention](https://hacking.pub/games/neural-atelier/#self-attention)**, a successful network gathers into one component and flies into the left shelf before the completion dialog appears. The collected component performs the same calculation and can be dragged into compatible building lessons. Your original layout stays saved. The animation can be paused or skipped and respects reduced-motion preferences.
 
@@ -126,6 +126,7 @@ Neural Atelier is a **static frontend** written in HTML, CSS, and JavaScript, wi
 | `campaign.js` | Later levels and miniature Transformer calculations |
 | `engine-model.js` | Teaching cost model for scheduling, memory, and quantization |
 | `scene-art.js`, `module-cards.js` | 3D module artwork and illustrated cards |
+| `transformer-demo.js` | Prepared, fully expanded original model demonstration |
 | `original-curriculum.js` | Original operators, bilingual lessons, encoder–decoder arithmetic and modern-track separation |
 | `level-progress.js` | Local progress and circuit saves |
 | `i18n.js`, `locales/en.js` | Browser-language detection and Chinese / English text |

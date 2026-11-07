@@ -8,13 +8,44 @@ async function boot({reduced=true,frameMs=1000,onFrame=()=>{},languages=['zh-CN'
  for(const el of document.querySelectorAll('*')){Object.defineProperty(el,'clientWidth',{get:()=>el.id==='scene'?1400:100});Object.defineProperty(el,'clientHeight',{get:()=>el.id==='scene'?760:60});el.focus=()=>{};el.scrollIntoView=()=>{};}
  let view,renderedCamera;const scenes=[];class Renderer{constructor(){this.domElement=native('canvas');this.shadowMap={};this.capabilities={getMaxAnisotropy:()=>8};}setPixelRatio(){}setClearColor(){}setSize(){}render(scene,camera){renderedCamera=camera;view={position:camera.position.toArray(),width:camera.right-camera.left};scenes.push(scene);scene.updateMatrixWorld();camera.updateMatrixWorld();scene.traverse(o=>{if(o.isMesh)assert.ok(o.matrixWorld.elements.every(Number.isFinite),'nonfinite transform '+o.type);});}}
  const storage=new Map();let now=0;const c={document,console,navigator:{languages},T:{...Three,WebGLRenderer:Renderer},devicePixelRatio:2,ResizeObserver:class{observe(){}},requestAnimationFrame:cb=>setImmediate(()=>{now+=frameMs;onFrame({now,document,window});cb(now);}),cancelAnimationFrame:clearImmediate,performance:{now:()=>now},matchMedia:()=>({matches:reduced}),setTimeout:timers.setTimeout,clearTimeout:timers.clearTimeout,localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)}};c.window=c;vm.createContext(c);
- for(const f of ['locales/en.js','i18n.js','music.js','shell.js','model.js','campaign.js','engine-model.js','original-curriculum.js','cloud-curriculum.js','structure-map.js'])vm.runInContext(fs.readFileSync(__dirname+'/'+f,'utf8'),c,{filename:f});
+ for(const f of ['locales/en.js','i18n.js','music.js','shell.js','model.js','campaign.js','engine-model.js','original-curriculum.js','transformer-demo.js','cloud-curriculum.js','structure-map.js'])vm.runInContext(fs.readFileSync(__dirname+'/'+f,'utf8'),c,{filename:f});
  for(const f of ['module-cards.js','level-progress.js','scene-art.js'])vm.runInContext(fs.readFileSync(__dirname+'/'+f,'utf8').replaceAll('export ',''),c,{filename:f});
  let src=fs.readFileSync(__dirname+'/game.js','utf8').replace(/^import .*\n/gm,'').replace("const T=await import('./vendor/three.module.js');",'const T=window.T;').replace(/const \{createSceneArt\}=await import\('\.\/scene-art\.js\?v=[^']+'\);/,'');
  src+='\nwindow.testAPI={switchLevel,run,togglePause,refresh,select,assignDevice,chooseOutput,chooseInput,chooseModule,placeModule,getState:()=>state,setState:s=>state=s,getWorld:()=>world,getFault:()=>fault};';
  await vm.runInContext('(async()=>{'+src+'})()',c);
  assert.ok(c.testAPI.getWorld(),'3D boot failed');return {c,document,window,api:c.testAPI,scenes,time:()=>now,view:()=>view,camera:()=>renderedCamera};
 }
+test('the ready-to-run full Transformer renders and completes every basic operator without editing',async()=>{
+ const app=await boot({frameMs:1000}),M=app.c.NeuralPrologue;
+ app.api.switchLevel('transformer-demo');const before=JSON.stringify(app.api.getState());
+ assert.equal(app.document.querySelectorAll('.node-label').length,67);
+ assert.equal(app.document.querySelectorAll('.demo-section-label').length,4);
+ app.api.chooseOutput('R');app.api.chooseInput('sink',0);assert.equal(JSON.stringify(app.api.getState()),before);
+ await app.api.run();
+ assert.equal(app.api.getFault(),null);assert.equal(app.document.querySelector('#level-complete').open,true);
+ assert.equal(app.document.querySelectorAll('#test-results .pass').length,1);
+ assert.equal(JSON.stringify(app.api.getState()),before);assert.equal(app.document.querySelectorAll('.packet:not([hidden])').length,0);
+ app.document.querySelector('#complete-replay').onclick();assert.equal(app.document.querySelector('#level-complete').open,false);
+ assert.equal(JSON.stringify(app.api.getState()),before);
+ app.c.I18n.setPreference('en');assert.deepEqual([...app.c.I18n.missing],[]);
+ app.api.switchLevel('wire');assert.equal(app.document.querySelectorAll('.demo-section-label').length,0);assert.equal(app.document.querySelector('#demo-views').hidden,true);
+});
+test('demonstration cards show the selected instance and return to observation controls',async()=>{
+ const app=await boot(),M=app.c.NeuralPrologue,doc=app.document;
+ app.api.switchLevel('transformer-demo');const s=app.api.getState(),saved=JSON.stringify(s),ev=M.evaluate(s,M.samplesFor(s.levelId)[0].v);
+ for(const language of ['zh','en']){
+  app.c.I18n.setPreference(language);
+  for(const id of ['demo-up','demo-up-2']){
+   app.api.getWorld().focus(id);
+   const values=[...doc.querySelectorAll('#card-example-values .result i')].map(el=>Number(el.textContent));
+   assert.deepEqual(values,Array.from(ev.values[id],x=>Number(x.toFixed(2))));
+   assert.equal(doc.querySelector('.card-path').hidden,true,'do not imply that all 67 parallel operators form one serial chain');
+   assert.doesNotMatch(doc.querySelector('#card-return').textContent,/搭建|building/);
+   doc.querySelector('#card-close').onclick();assert.doesNotMatch(doc.querySelector('#scene-help').textContent,/摆放|删除|move modules|delete/);
+  }
+ }
+ assert.equal(JSON.stringify(app.api.getState()),saved);assert.deepEqual([...app.c.I18n.missing],[]);
+});
 test('a solved network gathers into its matching component and flies into the shelf before completion',async()=>{
  let app,root,assembly,originalDisposals=0,temporaryDisposals=0,landed=false;const phases=new Set();
  const resources=group=>{const set=new Set();group.traverse(o=>{if(o.geometry)set.add(o.geometry);for(const material of o.material?(Array.isArray(o.material)?o.material:[o.material]):[]){set.add(material);if(material.map)set.add(material.map);}});return set;};
