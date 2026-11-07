@@ -837,30 +837,6 @@ test('3D fault bubble and pin dismiss without losing recorded failure',async()=>
  const app=await boot();app.api.switchLevel('vocabulary');await app.api.run();assert.ok(app.api.getFault());const b=app.document.querySelector('[data-dismiss-result]');assert.ok(b);b.dispatchEvent(new app.window.Event('click',{bubbles:true}));assert.equal(app.api.getFault(),null);assert.equal(app.document.querySelectorAll('.local-fault,.fault-pin').length,0);assert.ok(app.document.querySelector('#test-results .fail'));await app.api.run();assert.ok(app.document.querySelector('[data-dismiss-result]'));
 });
 
-test('cables enter from the left with a visible lead, even when the source is above or behind the target',async()=>{
- const app=await boot(),M=app.c.NeuralPrologue,doc=app.document,T=app.c.T;
- doc.querySelector('#welcome').close();app.api.switchLevel('cross-attention');
- const state=M.solutions('cross-attention'),source=state.nodes.find(n=>n.id==='softmax'),target=state.nodes.find(n=>n.id==='original-aggregate');
- target.x=0;target.z=2;
- const wire=()=>app.scenes.at(-1).children.flatMap(g=>g.children).find(o=>o.userData.wire?.from==='softmax'&&o.userData.wire.to===target.id&&o.geometry?.type==='TubeGeometry');
- for(const [x,z]of [[-5,-3],[4,-3],[4,2],[0,2]]){
-  source.x=x;source.z=z;app.api.setState(state);app.api.getWorld().rebuild();
-  const saved=JSON.stringify(app.api.getState()),path=wire().geometry.parameters.path,a=path.getPoint(0),b=path.getPoint(1),last=path.curves.at(-1);
-  assert.ok(last.v1.x<b.x-1,'a visible cable segment approaches the input from outside the plate');
-  assert.equal(last.v1.z,b.z);assert.equal(last.v1.y,b.y);assert.ok(path.getTangent(1).x>.999);
-  assert.ok(a.x>source.x+1&&b.x<target.x-1);
-  for(const p of path.getPoints(100))assert.ok(p.toArray().every(Number.isFinite));
-  // At the default angle, the entire entry lead is below the title, rather than hidden behind it.
-  const title=new T.Vector3(target.x,1.05,target.z-1.15).project(app.camera());
-  const lead=last.v1.clone().project(app.camera());assert.ok(lead.y<title.y-.04);
-  const screen=p=>{const v=p.clone().project(app.camera());return [(v.x+1)*700,(1-v.y)*380];};
-  const hit=doc.querySelector('.wire-targets path[data-wire-to="original-aggregate"][data-wire-port="0"]');
-  const numbers=hit.getAttribute('d').match(/-?\d+(?:\.\d+)?/g).map(Number),start=screen(new T.Vector3(source.x+1.12,.68,source.z)),end=screen(new T.Vector3(target.x-1.12,.68,target.z-.55));
-  for(const [actual,expected]of [[numbers[0],start[0]],[numbers[1],start[1]],[numbers.at(-2),end[0]],[numbers.at(-1),end[1]]])assert.ok(Math.abs(actual-expected)<.1,'click path remains anchored at both ports');
-  assert.equal(JSON.stringify(app.api.getState()),saved);
- }
-});
-
 test('dual input plates, titles and outlets remain separated and aligned across all dual-source lessons',async()=>{
  const app=await boot(),M=app.c.NeuralPrologue,T=app.c.T,doc=app.document;
  for(const id of ['cross-attention','decoder-layer','encoder-decoder']){

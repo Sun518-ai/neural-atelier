@@ -114,6 +114,112 @@ for(const id of ['quantization','session','kv-cache'])lessons[id].regions=['memo
 for(const data of [copy,flows,lessons])prepare(data);
 function get(id){const entry=lessons[id];if(!entry)throw new Error('Missing structure map for '+id);return {...entry,steps:flows[entry.flow],shape:M.levels[id].tokenOutput?M.levels[id].sinkDim+' '+copy.ids:(M.levels[id].sequence?'3 × '+M.levels[id].sinkDim/3:'1 × '+M.levels[id].sinkDim)};}
 const esc=s=>String(tr(s)).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
+function drilldown(title,steps,note=''){
+ return `<details class="architecture-drilldown"><summary>${esc(title)}</summary><ol>${steps.map(text=>`<li>${esc(text)}</li>`).join('')}</ol>${note?`<p>${esc(note)}</p>`:''}</details>`;
+}
+function attentionInside({cross=false,causal=false,rope=false}={}){
+ return drilldown(L('展开 Attention 内部','Expand Attention'),[
+  cross?'Q = DWq; K = EWk; V = EWv':'Q = XWq; K = XWk; V = XWv',
+  ...(rope?[L('RoPE：按位置旋转 Q 和 K，V 不旋转','RoPE: rotate Q and K by position; leave V unchanged')]:[]),
+  L('S = QKᵀ / √dₖ；dₖ 是每个头的 Q/K 特征数','S = QKᵀ / √dₖ; dₖ is the Q/K feature count per head'),
+  ...(causal?[L('因果遮罩：未来位置的分数置为 −∞','Causal mask: set future-position scores to −∞')]:[]),
+  'A = Softmax(S)',
+  L('A × V：按 A 的比例汇合各位置的 V','A × V: sum V across positions using the proportions in A'),
+  L('多个头先拼接，再乘输出投影 Wo','Concatenate multiple heads, then apply output projection Wo')
+ ],L('Wq / Wk / Wv / Wo 是模型参数；A 是根据本次输入算出的读取比例，每次输入都可能不同。','Wq / Wk / Wv / Wo are model parameters; A contains reading proportions computed from this input and can change with every input.'));
+}
+function ffnInside(kind='relu'){
+ const gated=kind==='gate'||kind==='swiglu';
+ return drilldown(L('展开 FFN 内部','Expand FFN'),gated?[
+  L('同一份输入 Z 分成并行两路：U = ZWup，G = ZWgate','Split the same Z into parallel branches: U = ZWup, G = ZWgate'),
+  kind==='swiglu'?'S = SiLU(G); H = U ⊙ S':'H = U ⊙ G',
+  'F = HWdown'
+ ]:['H = XWup + bup',kind==='silu'?'A = SiLU(H)':'A = ReLU(H)','F = AWdown + bdown'],L('每个位置独立使用同一套权重；FFN 加工特征，不在词之间汇合信息。残差在 FFN 外面相加。','Each position independently uses the same weights. The FFN transforms features without mixing tokens; residual addition is outside the FFN.'));
+}
+function normInside(rms=false,title=null){
+ return drilldown(title||(rms?L('展开 RMSNorm','Expand RMSNorm'):L('展开残差与 LayerNorm','Expand residual and LayerNorm')),rms?[
+  'r = √(mean(x²) + ε)','z = (x / r) ⊙ γ'
+ ]:[L('先相加：r = 本段输入 + 本段计算结果','First add: r = stage input + stage result'),'μ = mean(r); σ² = mean((r − μ)²)','z = ((r − μ) / √(σ² + ε)) ⊙ γ + β'],L('均值与尺度都在当前词的特征维度上计算；γ、β 是模型参数，RMSNorm 只使用 γ。','Means and scales are computed over one token’s feature dimensions. γ and β are model parameters; RMSNorm uses only γ.'));
+}
+// Keep model hierarchy separate from the operator-level route below it.
+function originalArchitecture(entry){
+ const e=esc,focus=new Set(),all=['encoder-attention','encoder-ffn','decoder-self','decoder-cross','decoder-ffn'];
+ if(entry.flow==='classicFFN')focus.add('encoder-ffn').add('decoder-ffn');
+ if(entry.flow==='attention')focus.add('encoder-attention');
+ if(entry.flow==='causal')focus.add('decoder-self');
+ if(entry.flow==='cross')focus.add('decoder-cross');
+ if(entry.flow==='encoder')focus.add('encoder-attention').add('encoder-ffn');
+ if(entry.flow==='decoder')for(const [name,steps]of [['decoder-self',['attention','add1','norm1']],['decoder-cross',['cross','add2','norm2']],['decoder-ffn',['ffn','add3','norm3']]])if(steps.some(id=>entry.focus.includes(id)))focus.add(name);
+ if(entry.flow==='input')focus.add('encoder-input').add('decoder-input');
+ if(entry.flow==='generation')for(const key of entry.focus.includes('layers')?all:['readout'])focus.add(key);
+ const active=key=>focus.has(key)?' architecture-focus':'';
+ const addNorm=L('加回本段输入 → LayerNorm','Add this stage’s input → LayerNorm');
+ const stage=(key,label,role,extra='')=>`<div class="architecture-stage${active(key)}" data-architecture-node="${key}">${extra}<b>${e(label)}</b><span>${e(role)}</span>${key.endsWith('ffn')?ffnInside():attentionInside({cross:key==='decoder-cross',causal:key==='decoder-self'})}${key==='decoder-cross'&&entry.flow==='cross'?`<span class="architecture-boundary">${e(L('本关在 Wo 后结束；下面的残差与归一化在第 16 关接上。','This lesson ends after Wo; level 16 adds the residual and normalization below.'))}</span>`:''}<div class="architecture-addnorm${entry.flow==='residual'?' architecture-focus':''}">${normInside(false,addNorm)}</div></div>`;
+ const input=(key,label,example)=>`<div class="architecture-input" data-text-input="${key}"><b>${e(label)}</b><span>${e(example)}</span></div><div class="architecture-prep${active(key+'-input')}" data-architecture-node="${key}-input">${e(L('词向量 + 正弦位置编码','Embeddings + sinusoidal positions'))}</div>`;
+ return `<section class="architecture-detail" aria-label="${e(L('展开编码器与解码器','Inside the encoder and decoder'))}">
+ <div class="architecture-heading"><h4>${e(L('Attention 与 FFN 都在层里面','Attention and FFN live inside each layer'))}</h4><span>${e(L('着色部分是本关所在位置','Color marks this lesson’s location'))}</span></div>
+ <div class="architecture-columns">
+ <section class="architecture-lane" data-architecture-lane="encoder">
+ ${input('encoder',L('源句：用户要翻译的输入','Source: the user’s text to translate'),L('例如：我爱猫','Example: “J’aime les chats”'))}
+ <details class="architecture-layer" open><summary>${e(L('编码器 · 每一层','Encoder · each layer'))}</summary>
+ ${stage('encoder-attention',L('自注意力 · Self-Attention','Self-Attention'),L('让源句中的词互相读取信息','Source tokens read one another'))}
+ ${stage('encoder-ffn','FFN',L('线性展开 → ReLU → 线性压回','Linear up → ReLU → linear down'))}
+ </details><div class="architecture-memory"><b>${e(L('最后一层的输出 E','Final encoder output E'))}</b><span>${e(L('已经包含编码器的 Attention 和 FFN 计算','Includes the encoder’s Attention and FFN computations'))}</span></div>
+ </section>
+ <section class="architecture-lane" data-architecture-lane="decoder">
+ ${input('decoder',L('目标前缀：已经生成的那部分译文','Target prefix: the translation generated so far'),L('例如：I love（第一次只有起始标记）','Example: “I love” (only a start marker at the first step)'))}
+ <details class="architecture-layer" open><summary>${e(L('解码器 · 每一层','Decoder · each layer'))}</summary>
+ ${stage('decoder-self',L('因果自注意力 · Masked Self-Attention','Masked Self-Attention'),L('① 整理目标前文；第 14 关在 LayerNorm 后得到 D','① Process the target prefix; level 14 produces D after LayerNorm'))}
+ ${stage('decoder-cross',L('交叉注意力 · Cross-Attention','Cross-Attention'),L('② 用 D 查询源句，取回相关信息（第 15 关）','② Use D to retrieve relevant source information (level 15)'),`<div class="architecture-memory-link" data-architecture-edge="E-to-cross">${e(L('来自编码器的 E 提供 K / V；D 提供 Q','Encoder E supplies K / V; D supplies Q'))}</div>`)}
+ ${stage('decoder-ffn','FFN',L('③ 逐个加工融合后的目标特征（第 16 关接入）','③ Transform each combined target feature (added in level 16)'))}
+ </details><div class="architecture-readout${active('readout')}" data-architecture-node="readout"><b>${e(L('最后一层后：词表投影 → 选下一个词','After the final layer: vocabulary projection → next token'))}</b><span>${e(L('例如选出 cats，追加为 I love cats，再继续预测','For example, select “cats”, append it to “I love”, then predict again'))}</span>${readoutInside()}</div>
+ </section></div>
+ <p class="architecture-depth">${e(L('上图展开的是每一层；原版编码器与解码器分别堆叠多层。本游戏完整层用一层示范，E 送入各解码器层的交叉注意力。第 16 关会组装右侧完整的一层。','The diagram expands one layer; the original encoder and decoder each stack multiple layers. This game demonstrates one complete layer. E feeds cross-attention in every decoder layer; level 16 assembles the full layer on the right.'))}</p>
+ <div class="architecture-weights" data-model-weights><b>${e(L('模型权重在哪里？','Where are the model weights?'))}</b><p>${e(L('词向量表、各处的 Wq / Wk / Wv / Wo、FFN 矩阵和 LayerNorm 参数都是模型权重，加载在组件内部；源句、目标前缀以及中间的 D / E 是流经组件的数据。推理时权重固定，文本和中间特征随请求与生成步骤变化。','Embedding tables, Wq / Wk / Wv / Wo, FFN matrices and LayerNorm parameters are model weights loaded inside the modules. The source, target prefix and intermediate D / E are data flowing through them. Weights stay fixed during inference; text and features change with each request and generation step.'))}</p><small>${e(L('翻译句子只是含义示例；游戏的手写小矩阵没有训练成翻译模型。千问等 decoder-only 模型使用“用户输入 + 已生成文本”这一条序列，没有这里单独的编码器与交叉注意力支路。','The translation is an illustration; the game’s hand-written matrices are not a trained translator. Decoder-only models such as Qwen use one sequence of prompt plus generated text, without this separate encoder and cross-attention branch.'))}</small></div>
+ </section>`;
+}
+function readoutInside(){return drilldown(L('展开词表与生成循环','Expand vocabulary and generation'),[
+ L('最后位置的特征 × 词表权重 → 每个候选 token 的分数','Last-position features × vocabulary weights → a score for each candidate token'),
+ L('选下一个 token；按概率采样时先经过 Softmax','Select the next token; probability sampling first applies Softmax'),
+ L('把新 token 追加到已有文本，再运行同一个模型','Append the token to the existing text and run the same model again')]);}
+function modernArchitecture(entry){
+ const e=esc,layer=entry.flow==='modernLayer',ffn=['modernFFN','singleSiLU','pairwise'].includes(entry.flow),attn=entry.flow==='modernAttention';
+ const block=(key,label,role,inner,active)=>`<div class="architecture-stage${active?' architecture-focus':''}" data-architecture-node="${key}"><b>${e(label)}</b><span>${e(role)}</span>${inner}</div>`;
+ const kind=entry.flow==='singleSiLU'?'silu':entry.flow==='pairwise'?'gate':'swiglu';
+ return `<section class="architecture-detail"><div class="architecture-heading"><h4>${e(L('现代解码器：同一条文本序列，反复经过多层','Modern decoder: one text sequence through multiple layers'))}</h4></div><div class="architecture-input"><b>${e(L('用户输入 + 已生成的文本 → 词向量','User prompt + generated text → embeddings'))}</b><span>${e(L('模型权重存放在各组件内；新生成的词会追加回这条序列。','Model weights live inside the modules; new tokens are appended to this sequence.'))}</span></div>
+ <details class="architecture-layer modern-layer" open><summary>${e(L('展开一层：Attention → FFN，两段各有残差','One layer: Attention → FFN, each with its own residual'))}</summary>
+ ${block('modern-norm1','RMSNorm',L('先归一化，再进入 Attention','Normalize before Attention'),normInside(true),layer&&entry.focus.includes('norm1'))}
+ ${block('modern-attention',L('因果自注意力 · Attention','Causal Self-Attention'),L('Q/K 加入 RoPE；不读取未来位置','Apply RoPE to Q/K; never read future positions'),attentionInside({causal:true,rope:true}),attn||layer&&entry.focus.includes('attention'))}
+ ${block('modern-add1',L('加回 Attention 的输入','Add the Attention input'),'R₁ = X + Attention(RMSNorm(X))','',layer&&entry.focus.includes('add1'))}
+ ${block('modern-norm2','RMSNorm',L('先归一化，再进入 FFN','Normalize before the FFN'),normInside(true),layer&&entry.focus.includes('norm2'))}
+ ${block('modern-ffn',kind==='silu'?'SiLU FFN':kind==='gate'?L('门控 FFN · 尚未加 SiLU','Gated FFN · before adding SiLU'):'SwiGLU FFN',L('逐个加工目标词的特征','Transform each target token’s features'),ffnInside(kind),ffn||layer&&entry.focus.includes('ffn'))}
+ ${block('modern-add2',L('加回 FFN 的输入','Add the FFN input'),'Y = R₁ + FFN(RMSNorm(R₁))','',layer&&entry.focus.includes('add2'))}
+ </details><div class="architecture-readout"><b>${e(L('后续层 → 最终 RMSNorm → 词表投影 → 选词','Later layers → final RMSNorm → vocabulary projection → token selection'))}</b>${readoutInside()}</div><p class="architecture-depth">${e(L('这是现代扩展章节的参考结构。单支路 SiLU、裸门值相乘等早期练习会标出尚未补齐的部分；并非每关都已经是完整 SwiGLU 或完整解码器块。','This is the reference for the modern-extension lessons. Earlier exercises show their single SiLU branch or raw gate product explicitly; not every lesson is already a complete SwiGLU or decoder block.'))}</p></section>`;
+}
+function executionArchitecture(entry,id){
+ const e=esc,box=(key,label,inner,active=true)=>`<div class="architecture-stage${active?' architecture-focus':''}" data-architecture-node="${key}"><b>${e(label)}</b>${inner}</div>`;
+ let title,body;
+ if(entry.family==='cloud'){
+  title=L('同一段矩阵计算，放到哪些设备执行？','Where does the same matrix computation execute?');
+  if(entry.flow==='singleGPU'){
+   const steps=id==='single-upload'?['H = XW']:id==='single-fallback'?['H = XW',L('H 取回 CPU → ReLU → 再上传 GPU','Read H back to CPU → ReLU → upload to GPU'),'Y = ReLU(H)D']:['H = XW',L('ReLU 留在 GPU，特征不往返 CPU','Keep ReLU on the GPU; no intermediate CPU round trip'),'Y = ReLU(H)D'];
+   body=`<div class="execution-input">${e(L('CPU 输入 → 上传 GPU','CPU input → upload to GPU'))}</div>${box('single-gpu',id==='single-fallback'?L('GPU 投影 → CPU 激活 → GPU 投影','GPU projection → CPU activation → GPU projection'):'GPU',drilldown(L('展开本关的设备路径','Expand this lesson’s device path'),steps,L('W 和 D 是已驻留在 GPU 的权重。搬运特征不改变数值，改变的是它在哪块内存里。','W and D are weights already resident on the GPU. Copying features changes their memory location, not their values.')))}<div class="execution-input">${e(L('取回 CPU → 本关输出特征','Read back to CPU → lesson output features'))}</div>`;
+  }else{
+   const columns=id==='tp-columns',rows=id==='tp-rows';
+   const initial=rows?L('先算 H = XW，再分成前半 H₀ / 后半 H₁','Compute H = XW, then split it into H₀ / H₁'):L('两张 GPU 都读取完整输入 X','Both GPUs read the full input X');
+   body=`<div class="execution-input">${e(initial)}</div><div class="execution-parallel">${[0,1].map(i=>box('gpu'+i,'GPU '+i,drilldown(L('展开这张卡的计算','Expand this GPU’s computation'),columns?[`Y${i} = XW${i}`,L('只持有 W 的一部分列 → 得到一部分输出特征','Store some columns of W → produce some output features')]:rows?[`P${i} = H${i}D${i}`,L('只持有 D 的对应行 → 得到每个输出坐标的部分和','Store matching rows of D → produce a partial sum for each output coordinate')]:[`H${i} = XW${i}`,`A${i} = ReLU(H${i})`,`P${i} = A${i}D${i}`]))).join('')}</div>${box('merge',columns?'Gather · concat(Y₀, Y₁)':'Reduce · P₀ + P₁',drilldown(L('展开通信的含义','Expand the communication step'),[columns?L('两卡给出不同输出坐标，按顺序拼接','The GPUs produce different output coordinates; concatenate them in order'):L('两卡给出同一坐标的不同贡献，逐项相加','The GPUs contribute to the same output coordinates; add their partial values')],L('本关在出口收集一份结果；不是把结果再分发到每张卡的 All-Gather / All-Reduce。','This lesson collects one result at the outlet; it does not redistribute the result to every GPU as All-Gather / All-Reduce would.')))}`;
+  }
+  body+=`<p class="architecture-depth">${e(L('这些关卡只展开线性层或 ReLU FFN 的执行。完整 Transformer 的 Attention、外部残差和词表头不在本关棋盘里；设备数改变了分工，没有增加一种神经网络层。','These lessons expand execution of a linear layer or ReLU FFN. Attention, outer residuals and vocabulary heads are outside this board; more devices change the division of work, not the neural-network layers.'))}</p>`;
+ }else{
+  title=L('端侧：同一模型的两种运行阶段','On-device: two execution phases of the same model');
+  body=`${box('engine-memory',L('模型权重 ≠ KV 缓存','Model weights ≠ KV cache'),drilldown(L('展开两种存储','Expand both kinds of storage'),[L('权重：训练得到的矩阵，推理时固定，供各次计算读取','Weights: trained matrices, fixed during inference and read by repeated computations'),L('KV 缓存：这次文本在各层算出的 K / V，随前缀增长','KV cache: K / V computed for this text at each layer, growing with the prefix')]),entry.focus.includes('memory'))}
+  <div class="execution-parallel">${box('engine-prefill','Prefill',drilldown(L('展开提示词处理','Expand prompt processing'),[L('一起处理用户已给出的多个位置','Process the multiple positions already provided by the user'),L('每层算 Q/K/V → 因果 Attention → FFN','At each layer: Q/K/V → causal Attention → FFN'),L('保留这些位置的 K/V，为生成准备缓存','Keep these positions’ K/V to prepare the generation cache')]),entry.focus.includes('prefill'))}
+  ${box('engine-decode','Decode',drilldown(L('展开逐词生成','Expand token-by-token generation'),[L('每次处理一个新位置，仍使用同一套层和权重','Process one new position at a time using the same layers and weights'),L('新 Q 读取历史和当前 K/V；当前 K/V 追加到缓存','New Q reads past and current K/V; append current K/V to the cache'),L('经过 FFN 和后续层，词表头预测下一词','Pass through the FFN and later layers; the vocabulary head predicts the next token')]),entry.focus.includes('decode'))}</div>
+  ${box('engine-device','CPU / GPU / ANE',drilldown(L('展开设备分工与交接','Expand device placement and handoffs'),[L('CPU 负责调度；投影、Attention、FFN 按支持能力安排执行','The CPU schedules work; projections, Attention and FFN run on supported devices'),L('张量布局、同步与中间结果交接都有成本','Tensor layouts, synchronization and intermediate handoffs have costs'),L('本游戏只允许投影和 FFN 分担到 ANE；不是所有算子都能放上去','This game allows projections and FFN work on ANE; not every operator can be assigned there')]),!entry.focus.includes('memory'))}
+  <p class="architecture-depth">${e(L('上面解释真实推理阶段的含义；本关棋盘与成本数字是教学模型，数值出口仍是特征，未运行完整模型的词表生成。GPU 与 ANE 分工也不是某款硬件的实测保证。','The diagram explains real inference phases. This board and its costs are a teaching model: the numerical outlet still contains features, without full-model vocabulary generation. GPU/ANE placement is not a hardware benchmark guarantee.'))}</p>`;
+ }
+ return `<section class="architecture-detail execution-detail"><div class="architecture-heading"><h4>${e(title)}</h4></div>${body}</section>`;
+}
 function diagram(entry){
  const n=(id,x,y,zh,en)=>({id,x,y,label:L(zh,en)});
  let nodes,paths,height=122;
@@ -123,6 +229,9 @@ function diagram(entry){
  }else if(entry.family==='modern'){
   nodes=[n('input',3,4,'词向量','Embedding'),n('layers',81,4,'解码器层','Layers'),n('head',159,4,'Norm/词表','Norm/head'),n('selection',159,78,'选词','Select'),n('prefix',3,78,'更新前缀','New prefix')];
   paths=['M61 18H79m-4 -3l4 3 -4 3','M139 18H157m-4 -3l4 3 -4 3','M188 32V76m-3 -4l3 4 3 -4','M159 92H63m4 -3l-4 3 4 3','M32 78V34m-3 4l3 -4 3 4'];
+ }else if(entry.family==='cloud'&&entry.flow==='singleGPU'){
+  height=52;nodes=[n('cpu',3,12,'CPU 内存','CPU RAM'),n('gpu',81,12,'单张 GPU','One GPU'),n('result',159,12,'CPU 结果','CPU result')];
+  paths=['M61 26H79m-4 -3l4 3 -4 3','M139 26H157m-4 -3l4 3 -4 3'];
  }else if(entry.family==='cloud'){
   nodes=[n('cpu',3,41,'CPU 内存','CPU RAM'),n('gpu',81,4,'GPU 0','GPU 0'),n('gpu2',81,78,'GPU 1','GPU 1'),n('result',159,41,'完整结果','Full result')];
   paths=['M61 55H70V18H79m-4 -3l4 3 -4 3','M70 55V92H79m-4 -3l4 3 -4 3','M139 18H148V55H157m-4 -3l4 3 -4 3','M139 92H148V55'];
@@ -130,12 +239,12 @@ function diagram(entry){
   nodes=[n('memory',81,4,'权重 / KV','Weights/KV'),n('cpu',3,67,'CPU','CPU'),n('gpu',81,67,'GPU','GPU'),n('ane',159,67,'ANE','ANE')];
   paths=['M110 32V45H32V65m-3 -4l3 4 3 -4','M110 45V65m-3 -4l3 4 3 -4','M110 45H188V65m-3 -4l3 4 3 -4'];
  }
- return `<svg class="structure-overview" viewBox="0 0 220 ${height}" role="img" aria-label="${esc(copy[entry.family]+' · '+entry.where)}"><g class="structure-edges">${paths.map(d=>`<path d="${d}"/>`).join('')}</g>${nodes.map(n=>`<g data-map-region="${n.id}" class="${entry.regions.includes(n.id)?'map-region-active':''}"><rect x="${n.x}" y="${n.y}" width="58" height="28" rx="6"/><text x="${n.x+29}" y="${n.y+18}" text-anchor="middle">${esc(n.label)}</text></g>`).join('')}</svg>`;
+ return `<svg class="structure-overview" viewBox="0 0 220 ${height}" role="img" aria-label="${esc(copy[entry.family]+' · '+entry.where)}"><g class="structure-edges">${paths.map(d=>`<path d="${d}"/>`).join('')}</g>${nodes.map(n=>{const inside=entry.family==='original'&&['encoder','decoder'].includes(n.id)||entry.family==='modern'&&n.id==='layers';return `<g data-map-region="${n.id}" class="${entry.regions.includes(n.id)?'map-region-active':''}"><rect x="${n.x}" y="${n.y}" width="58" height="28" rx="6"/><text x="${n.x+29}" y="${n.y+(inside?11:18)}" text-anchor="middle">${esc(n.label)}</text>${inside?`<text class="structure-mini-inside" x="${n.x+29}" y="${n.y+22}" text-anchor="middle">Attention · FFN</text>`:''}</g>`;}).join('')}</svg>`;
 }
 function render(id,full=false){
  const entry=get(id),e=esc;
  const outlet=`<div class="structure-outlet"><small>${e(copy.exit)}</small><strong>${e(entry.output)}</strong><code>${e(entry.shape)}</code></div>`;
- if(!full)return `<details class="structure-compact" open><summary>${e(copy.title)}</summary><button type="button" data-open-structure aria-haspopup="dialog" aria-label="${e(copy.open)}"><div class="structure-mini-caption">${e(copy[entry.family])}<span aria-hidden="true">↗</span></div>${diagram(entry)}<span class="structure-location">${e(entry.where)}</span></button>${outlet}</details>`;
+ if(!full)return `<details class="structure-compact" open><summary>${e(copy.title)}</summary><button type="button" data-open-structure aria-haspopup="dialog" aria-label="${e(copy.open)}"><div class="structure-mini-caption">${e(copy[entry.family])}<span aria-hidden="true">↗</span></div>${diagram(entry)}<span class="structure-location">${e(entry.where)}</span><span class="structure-open-detail">${e(L('展开详细结构 →','Explore the detailed structure →'))}</span></button>${outlet}</details>`;
  const step=(n)=>`<li data-map-step="${n.id}" class="${entry.focus.includes(n.id)?'map-step-focus ':''}${entry.exit===n.id?'map-step-exit':''}"><span>${e(n.label)}</span>${entry.exit===n.id?`<b>${e(copy.exit)}</b>`:''}</li>`;
  let route=entry.steps.map(step).join('');
  if(entry.flow==='cross'){
@@ -147,7 +256,7 @@ function render(id,full=false){
   route=`<li class="map-branch-pair"><ol>${step(ns.up)}</ol><ol>${step(ns.gate)}${ns.silu?step(ns.silu):''}</ol></li>${step(ns.multiply)}${step(ns.down)}`;
  }
  const mapNote=entry.family==='original'?L('源句进入编码器；目标前缀与编码器 E 一起进入解码器。图中一个框可代表多层。','The encoder reads the source; the decoder reads the target prefix and encoder E. Each box can represent multiple layers.'):entry.family==='modern'?L('这里是解码器型扩展，没有原版的编码器交叉注意力支路。选出的新词会追加回前缀。','These are decoder-style extensions without the original encoder cross-attention branch. Selected tokens are appended to the prefix.'):L('设备位置图，不表示固定的算子先后顺序。数学结果与执行成本分别验收。','Device locations, not a fixed operator sequence. Mathematical results and execution costs are checked separately.');
- return `<div class="structure-context"><p class="structure-family">${e(copy[entry.family])}</p><h3>${e(entry.where)}</h3><p class="structure-reference">${e(copy.reference)}</p></div><div class="structure-expanded-grid"><section class="structure-global">${diagram(entry)}<p>${e(mapNote)}</p>${outlet}<div class="structure-next"><small>${e(copy.next)}</small><p>${e(entry.next)}</p></div></section><section class="structure-local"><h4>${e(copy.focus)}</h4><ol class="structure-flow" data-map-flow="${entry.flow}">${route}</ol><p class="structure-map-legend">${e(copy.legend)}</p>${entry.note?`<p class="structure-note">${e(entry.note)}</p>`:''}</section></div>`;
+ return `<div class="structure-context"><p class="structure-family">${e(copy[entry.family])}</p><h3>${e(entry.where)}</h3><p class="structure-reference">${e(copy.reference)}</p></div>${entry.family==='original'?originalArchitecture(entry):entry.family==='modern'?modernArchitecture(entry):executionArchitecture(entry,id)}<div class="structure-expanded-grid"><section class="structure-global">${entry.family==='original'?'':diagram(entry)}<p>${e(mapNote)}</p>${outlet}<div class="structure-next"><small>${e(copy.next)}</small><p>${e(entry.next)}</p></div></section><section class="structure-local"><h4>${e(copy.focus)}</h4><ol class="structure-flow" data-map-flow="${entry.flow}">${route}</ol><p class="structure-map-legend">${e(copy.legend)}</p>${entry.note?`<p class="structure-note">${e(entry.note)}</p>`:''}</section></div>`;
 }
 M.structureMap={copy,get,lessons,flows,render};
 })(window.NeuralPrologue);

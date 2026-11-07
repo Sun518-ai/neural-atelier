@@ -101,6 +101,10 @@ test('learning stages preserve level navigation and keep the other tracks separa
  assert.equal(doc.querySelectorAll('[data-level-group]').length,6);
  for(const [id,group]of [['multihead','attention'],['wider-features','encoder'],['encoder-layer','encoder'],['causal','decoder'],['cross-attention','decoder']])assert.equal(doc.querySelector(`#level-list [data-level="${id}"]`).closest('[data-level-group]').dataset.levelGroup,group);
  assert.equal(doc.querySelector('#level-list [data-level="wider-features"] .level-purpose').textContent,'Prepare input');
+ assert.deepEqual([...doc.querySelectorAll('.decoder-lesson-chain [data-level]')].map(e=>e.dataset.level),['decoder-self','cross-attention','decoder-layer']);
+ assert.match(doc.querySelector('[data-level="decoder-self"] .lesson-connection').textContent,/D.*15/);
+ assert.match(doc.querySelector('[data-level="cross-attention"] .lesson-connection').textContent,/14.*12.*16/);
+ assert.match(doc.querySelector('[data-level="decoder-layer"] .lesson-connection').textContent,/FFN.*inside the decoder/);
  assert.equal(doc.querySelectorAll('.level-dependencies').length,2);assert.doesNotMatch(doc.querySelector('#level-menu').textContent,/[\u3400-\u9fff]/);
  const before=app.eval('JSON.stringify(state)'),hash=app.location.hash;let scrolled=false;
  doc.querySelector('#level-group-main-decoder').scrollIntoView=()=>{scrolled=true;};
@@ -780,6 +784,7 @@ test('every playable lesson has a bilingual structure location, valid focus and 
    assert.ok(app.document.querySelector('#structure-dialog').open);
    assert.equal(app.document.querySelectorAll('.map-step-exit').length,1,id+' has one lesson outlet');
    assert.ok(app.document.querySelector('#structure-dialog-content').textContent.includes(entry.output));
+   assert.ok(app.document.querySelectorAll('#structure-dialog-content .architecture-drilldown').length>0,id+' has expandable internals');
    if(lang==='en')assert.doesNotMatch(app.document.querySelector('#structure-dialog-content').textContent+app.document.querySelector('#structure-map').textContent,/[\u3400-\u9fff]/,id);
    app.document.querySelector('#structure-close').onclick();assert.equal(app.document.querySelector('#structure-dialog').open,false);
    assert.equal(app.eval('JSON.stringify(state)'),saved);assert.equal(app.storage.get('neural-atelier-chapters-v1'),progress);
@@ -794,6 +799,19 @@ test('every playable lesson has a bilingual structure location, valid focus and 
  const branches=app.document.querySelectorAll('[data-map-flow="cross"] .map-branch-pair>ol');
  assert.equal(branches.length,2);assert.match(branches[0].textContent,/LayerNorm → D/);assert.match(branches[0].textContent,/D → Q projection → Q/);assert.match(branches[1].textContent,/E → K \/ V projections/);
  assert.equal(map.get('cross-attention').focus.includes('prepared'),false,'the preceding lesson is context, not required again on this board');
+ const architecture=app.document.querySelector('.architecture-detail');
+ for(const lane of ['encoder','decoder']){
+  const region=architecture.querySelector(`[data-architecture-lane="${lane}"]`);
+  assert.match(region.textContent,/Attention/);assert.match(region.textContent,/FFN/);
+  assert.ok(region.querySelector('.architecture-layer[open]'),'layer boundary starts expanded');
+ }
+ assert.deepEqual([...architecture.querySelectorAll('.architecture-stage.architecture-focus')].map(e=>e.dataset.architectureNode),['decoder-cross']);
+ assert.match(architecture.querySelector('[data-text-input="encoder"]').textContent,/user.*text to translate/);
+ assert.match(architecture.querySelector('[data-text-input="decoder"]').textContent,/generated so far/);
+ assert.match(architecture.querySelector('[data-model-weights]').textContent,/weights.*inside.*modules/);
+ assert.match(architecture.querySelector('[data-architecture-edge="E-to-cross"]').textContent,/E supplies K \/ V; D supplies Q/);
+ assert.match(architecture.querySelector('[data-architecture-node="decoder-cross"] .architecture-drilldown').textContent,/Q = DWq; K = EWk; V = EWv/);
+ assert.match(architecture.querySelector('.architecture-boundary').textContent,/ends after Wo/);
  app.document.querySelector('#structure-close').onclick();
  assert.equal(map.get('decoder-self').exit,'norm1');assert.equal(map.get('encoder-layer').exit,'norm2');assert.equal(map.get('decoder-layer').exit,'norm3');
  assert.match(map.get('ffn').where,/half/);assert.match(map.get('ffn').next,/attention half is absent/);
@@ -801,6 +819,30 @@ test('every playable lesson has a bilingual structure location, valid focus and 
  assert.match(map.get('placement').output,/features/);assert.match(map.get('placement').note,/not a real model/);
  assert.deepEqual(Array.from(map.flows.decoder,n=>n.id),['attention','add1','norm1','cross','add2','norm2','ffn','add3','norm3']);
  assert.deepEqual(Array.from(map.flows.modernLayer,n=>n.id),['norm1','attention','add1','norm2','ffn','add2']);
+});
+
+test('expanded modern and execution maps distinguish architecture, device count and cached data',()=>{
+ const app=boot(new Map(),'#block',['en-US']),map=app.c.NeuralPrologue.structureMap;
+ const tree=id=>parseHTML('<main>'+map.render(id,true)+'</main>').document;
+ const modern=tree('block');
+ assert.equal(modern.querySelector('[data-architecture-node="decoder-cross"]'),null);
+ assert.match(modern.querySelector('[data-architecture-node="modern-attention"]').textContent,/RoPE/);
+ assert.match(modern.querySelector('[data-architecture-node="modern-ffn"]').textContent,/SwiGLU.*parallel branches/s);
+ assert.deepEqual([...modern.querySelectorAll('.modern-layer>.architecture-stage')].map(e=>e.dataset.architectureNode),['modern-norm1','modern-attention','modern-add1','modern-norm2','modern-ffn','modern-add2']);
+ assert.match(tree('plain-ffn').querySelector('[data-architecture-node="modern-ffn"]').textContent,/SiLU FFN/);
+ assert.doesNotMatch(tree('pairwise').querySelector('[data-architecture-node="modern-ffn"] .architecture-drilldown').textContent,/SiLU\(G\)/);
+ for(const id of ['single-upload','single-fallback','single-resident']){
+  assert.equal(tree(id).querySelector('[data-map-region="gpu2"]'),null,id+' has only one GPU');
+  assert.ok(tree(id).querySelector('[data-architecture-node="single-gpu"] .architecture-drilldown'));
+ }
+ assert.match(tree('single-fallback').querySelector('.architecture-detail').textContent,/back to CPU → ReLU → upload/);
+ assert.match(tree('single-resident').querySelector('.architecture-detail').textContent,/no intermediate CPU round trip/);
+ for(const id of ['tp-columns','tp-rows','tp-ffn'])assert.equal(tree(id).querySelectorAll('.execution-parallel>.architecture-stage').length,2);
+ assert.match(tree('tp-columns').querySelector('[data-architecture-node="merge"]').textContent,/Gather.*concat/);
+ assert.match(tree('tp-rows').querySelector('[data-architecture-node="merge"]').textContent,/Reduce.*P₀ \+ P₁/);
+ const engine=tree('kv-cache');assert.ok(engine.querySelector('[data-architecture-node="engine-decode"].architecture-focus'));
+ assert.match(engine.querySelector('[data-architecture-node="engine-memory"]').textContent,/Model weights ≠ KV cache/);
+ assert.match(engine.querySelector('[data-architecture-node="engine-decode"]').textContent,/same layers and weights/);
 });
 
 test('structure map updates on hashes and language, remembers collapse and stays inspectable during a run',async()=>{

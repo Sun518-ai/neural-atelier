@@ -1,5 +1,5 @@
-import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=clear-entries-1';
-import {createProgress} from './level-progress.js?v=clear-entries-1';
+import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=expanded-maps-1';
+import {createProgress} from './level-progress.js?v=expanded-maps-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -172,12 +172,13 @@ function renderLevelMenu(){
  list.setAttribute('aria-labelledby','level-track-'+menuTrack);list.classList.toggle('grouped-levels',!!route.groups);
  const card=id=>{
   const c=M.levels[id],menu=c.menu;
-  return `<button type="button" class="level-choice ${id===stageId?'current':''} ${id===route.ids.at(-1)?'track-finale':''} ${menu?'lesson-kind-'+menu.kind:''}" data-level="${id}"><span class="level-choice-top"><span>${c.chapter}</span><span>${progress.completed(id)?I18n.t("✓ 已通过"):id===stageId?I18n.t("当前关卡"):''}</span></span>${menu?`<span class="level-purpose">${menu.label}</span>`:''}<strong>${c.title}</strong><span>${menu?.summary||c.summary}</span><small>${c.buildable?I18n.t('最多 ')+M.moduleLimit(c):c.nodes.length}${I18n.t(" 个计算模块 · ")}${c.engine?I18n.t("正确性 + 性能验收"):c.buildable?I18n.t("自行放置组件"):c.sampleCount+I18n.t(" 组输入")}</small></button>`;
+  return `<button type="button" class="level-choice ${id===stageId?'current':''} ${id===route.ids.at(-1)?'track-finale':''} ${menu?'lesson-kind-'+menu.kind:''}" data-level="${id}"><span class="level-choice-top"><span>${c.chapter}</span><span>${progress.completed(id)?I18n.t("✓ 已通过"):id===stageId?I18n.t("当前关卡"):''}</span></span>${menu?`<span class="level-purpose">${menu.label}</span>`:''}<strong>${c.title}</strong><span>${menu?.summary||c.summary}</span>${menu?.connection?`<span class="lesson-connection">${menu.connection}</span>`:''}<small>${c.buildable?I18n.t('最多 ')+M.moduleLimit(c):c.nodes.length}${I18n.t(" 个计算模块 · ")}${c.engine?I18n.t("正确性 + 性能验收"):c.buildable?I18n.t("自行放置组件"):c.sampleCount+I18n.t(" 组输入")}</small></button>`;
  };
  if(!route.groups){list.innerHTML=route.ids.map(card).join('');return;}
  const groupId=group=>'level-group-'+menuTrack+'-'+group.id;
+ const groupCards=group=>group.id==='decoder'?group.ids.slice(0,2).map(card).join('')+`<div class="decoder-lesson-chain" aria-label="${M.levelMenuCopy.decoderSteps}"><h4>${M.levelMenuCopy.decoderSteps}</h4>${group.ids.slice(2).map(card).join('')}</div>`:group.ids.map(card).join('');
  const connections=flow=>`<div class="level-dependencies" aria-label="${M.levelMenuCopy.connections}"><div class="level-dependency-sources">${flow.sources.map(source=>`<div><small>${source.label}</small><b>${source.text}</b></div>`).join('')}</div><svg viewBox="0 0 32 80" aria-hidden="true"><path d="M2 18 H14 V40 H28 M2 62 H14 V40 M23 35 L28 40 L23 45"/></svg><div class="level-dependency-target"><small>${flow.target.label}</small><b>${flow.target.text}</b></div></div>`;
- list.innerHTML=`<nav class="level-stage-nav" aria-label="${M.levelMenuCopy.stages}">${route.groups.map(group=>`<button type="button" data-level-group-target="${groupId(group)}" data-stage-color="${group.id}" ${group.ids.includes(stageId)?'aria-current="step"':''}>${group.label}</button>`).join('')}</nav>`+route.groups.map(group=>`<section class="level-group" id="${groupId(group)}" data-level-group="${group.id}" aria-labelledby="${groupId(group)}-title"><header class="level-group-heading"><div><h3 id="${groupId(group)}-title">${group.title}</h3><small>${group.ids.filter(id=>progress.completed(id)).length} / ${group.ids.length} ${M.levelMenuCopy.progress}</small></div><p>${group.description}</p></header>${group.connections?connections(group.connections):''}<div class="level-group-cards">${group.ids.map(card).join('')}</div></section>`).join('');
+ list.innerHTML=`<nav class="level-stage-nav" aria-label="${M.levelMenuCopy.stages}">${route.groups.map(group=>`<button type="button" data-level-group-target="${groupId(group)}" data-stage-color="${group.id}" ${group.ids.includes(stageId)?'aria-current="step"':''}>${group.label}</button>`).join('')}</nav>`+route.groups.map(group=>`<section class="level-group" id="${groupId(group)}" data-level-group="${group.id}" aria-labelledby="${groupId(group)}-title"><header class="level-group-heading"><div><h3 id="${groupId(group)}-title">${group.title}</h3><small>${group.ids.filter(id=>progress.completed(id)).length} / ${group.ids.length} ${M.levelMenuCopy.progress}</small></div><p>${group.description}</p></header>${group.connections?connections(group.connections):''}<div class="level-group-cards">${groupCards(group)}</div></section>`).join('');
 }
 function levelMenu(){
  closeHint();
@@ -361,7 +362,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=clear-entries-1');
+ const {createSceneArt}=await import('./scene-art.js?v=expanded-maps-1');
  function scenePalette(){
   if(typeof getComputedStyle!=='function')return {};
   const css=getComputedStyle(document.body),read=name=>css.getPropertyValue(name).trim();
@@ -395,29 +396,7 @@ try{
   el.style.left=left+'px';el.style.top=Math.max(12,Math.min(h-height-12,above?y-height-gap:y+gap))+'px';
   el.dataset.side=above?'above':'below';el.style.setProperty('--tip-x',Math.max(16,Math.min(width-16,x-left))+'px');
  }
- // Keep a visible side approach at both sockets, even for a backward wire.
- // Rounded corners share one route with the cable, click target and carrier.
- function curve(a,b){
-  const lead=1.5,exit=a.clone().add(new T.Vector3(lead,0,0)),entry=b.clone().add(new T.Vector3(-lead,0,0)),midY=(a.y+b.y)/2;
-  let points;
-  if(b.x-a.x>lead*2){
-   const x=(a.x+b.x)/2;points=[a,new T.Vector3(x,a.y,a.z),new T.Vector3(x,b.y,b.z),b];
-  }else{
-   const back=Math.min(a.z,b.z)-2.7,front=Math.max(a.z,b.z)+2.7,edge=(stage().boardDepth||11)/2-.4;
-   const detour=b.z<a.z?(back>=-edge?back:front):(front<=edge?front:back);
-   const z=Math.abs(b.z-a.z)>3?(a.z+b.z)/2:detour;
-   points=[a,exit,new T.Vector3(exit.x,midY,z),new T.Vector3(entry.x,midY,z),entry,b];
-  }
-  points=points.filter((p,i)=>!i||p.distanceTo(points[i-1])>1e-6);
-  const path=new T.CurvePath();let start=points[0];
-  const lineTo=end=>{if(start.distanceTo(end)>1e-6)path.add(new T.LineCurve3(start.clone(),end.clone()));start=end;};
-  for(let i=1;i<points.length-1;i++){
-   const corner=points[i],before=points[i-1],after=points[i+1],radius=Math.min(.35,corner.distanceTo(before)/3,corner.distanceTo(after)/3);
-   const incoming=corner.clone().lerp(before,radius/corner.distanceTo(before)),outgoing=corner.clone().lerp(after,radius/corner.distanceTo(after));
-   lineTo(incoming);path.add(new T.QuadraticBezierCurve3(incoming,corner.clone(),outgoing));start=outgoing;
-  }
-  lineTo(points.at(-1));return path;
- }
+ const curve=(a,b)=>new T.CubicBezierCurve3(a,new T.Vector3(a.x+.8,a.y+.4,a.z),new T.Vector3(b.x-.8,b.y+.4,b.z),b);
  const guide=document.createElementNS('http://www.w3.org/2000/svg','svg'),guidePath=document.createElementNS('http://www.w3.org/2000/svg','path');
  guide.setAttribute('class','connection-guide');guide.setAttribute('aria-hidden','true');guide.setAttribute('hidden','');guidePath.setAttribute('vector-effect','non-scaling-stroke');guide.appendChild(guidePath);
  const placementGuide=document.createElementNS('http://www.w3.org/2000/svg','svg'),placementPath=document.createElementNS('http://www.w3.org/2000/svg','path'),placementOutline=document.createElementNS('http://www.w3.org/2000/svg','path');
@@ -429,7 +408,7 @@ try{
  function rowEndpoint(kind){return new T.Vector3(kind==='source'?stage().sourceX+.34:stage().sinkX+.18,kind==='source'?.95:.98,art.rowZ(sample));}
  function wire(from,to,index){
   const cv=curve(point(from),point(to,'in',index)),color=nodeColor(from),dim=Math.min(4,(from==='R'||from==='Z')?(stage().sourceDim||2):definition(from).out),visuals=[];
-  for(let j=0;j<dim;j++){const offset=new T.Vector3(0,0,(j-(dim-1)/2)*.035),lane=curve(point(from).add(offset),point(to,'in',index).add(offset)),mesh=new T.Mesh(new T.TubeGeometry(lane,64,.012,6,false),material(color));wires.add(mesh);visuals.push(mesh);}
+  for(let j=0;j<dim;j++){const offset=(j-(dim-1)/2)*.035,points=cv.getPoints(32).map(p=>p.add(new T.Vector3(0,0,offset))),lane=new T.CatmullRomCurve3(points),mesh=new T.Mesh(new T.TubeGeometry(lane,32,.012,6,false),material(color));wires.add(mesh);visuals.push(mesh);}
   const arrow=new T.Mesh(new T.ConeGeometry(.08,.19,8),material(color));arrow.position.copy(cv.getPoint(.6));arrow.quaternion.setFromUnitVectors(new T.Vector3(0,1,0),cv.getTangent(.6).normalize());wires.add(arrow);visuals.push(arrow);visuals.forEach(mesh=>mesh.userData.wire={from,to});curves.push({from,to,index,curve:cv,visuals});
  }
  function neuralModule(n){art.module(assembly,n,definition(n.id),M.weights);}
@@ -468,7 +447,7 @@ try{
   if(wireTargets.parentNode!==overlay)overlay.prepend(wireTargets);wireTargets.style.display=busy||focusId||placing||pending?'none':'';wireTargets.setAttribute('viewBox',`0 0 ${w} ${h}`);
   const key=I18n.language()+curves.map(c=>`${c.from}:${c.to}:${c.index}`).join('|');
   if(key!==wireTargetKey){wireTargetKey=key;wireTargets.replaceChildren();wirePaths=curves.map(edge=>{const path=document.createElementNS('http://www.w3.org/2000/svg','path');path.setAttribute('tabindex','0');path.setAttribute('role','button');path.setAttribute('aria-label',outputName(edge.from)+' → '+(edge.to==='sink'?stage().outputTitle:nodeName(edge.to))+I18n.t("，选择连线"));path.dataset.wireTo=edge.to;path.dataset.wirePort=String(edge.index);path.addEventListener('click',()=>chooseWire(edge.to,edge.index));path.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();chooseWire(edge.to,edge.index);}});wireTargets.appendChild(path);return path;});}
-  curves.forEach((edge,i)=>{wirePaths[i].setAttribute('d',edge.curve.getPoints(64).map((p,j)=>{const [x,y]=project(p);return `${j?'L':'M'}${x.toFixed(1)} ${y.toFixed(1)}`;}).join(' '));wirePaths[i].classList.toggle('selected',!!selectedWire&&edge.to===selectedWire.to&&edge.index===selectedWire.index);});
+  curves.forEach((edge,i)=>{wirePaths[i].setAttribute('d',edge.curve.getPoints(32).map((p,j)=>{const [x,y]=project(p);return `${j?'L':'M'}${x.toFixed(1)} ${y.toFixed(1)}`;}).join(' '));wirePaths[i].classList.toggle('selected',!!selectedWire&&edge.to===selectedWire.to&&edge.index===selectedWire.index);});
  }
  function syncConnectionGuide(w,h){
   const visible=stageId==='wire'&&!state.sink&&!busy&&!pending&&!focusId;
