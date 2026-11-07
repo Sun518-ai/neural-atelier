@@ -934,17 +934,22 @@ test('masked head explanation distinguishes whole heads from Q and K using real 
  app.eval("switchLevel('causal')");assert.equal(doc.querySelector('.heads-primer'),null);assert.deepEqual([...app.c.I18n.missing],[]);
 });
 
-test('shelf hover help contains only stock and double-click guidance and clears on interaction or navigation',()=>{
- const app=boot(new Map(),'#causal'),doc=app.document,tip=doc.querySelector('#shelf-tooltip'),saved=app.eval('JSON.stringify(state)');
+test('combined shelf help shows its original chapter with stock guidance and clears on interaction or navigation',()=>{
+ const app=boot(new Map(),'#causal'),doc=app.document,M=app.c.NeuralPrologue,tip=doc.querySelector('#shelf-tooltip'),saved=app.eval('JSON.stringify(state)');
+ for(const kind of Object.keys(M.packages))assert.ok(M.levels[M.packageOrigin(kind).id],kind+' has a known source lesson');
+ for(const [kind,id]of Object.entries({'single-cross-attention':'cross-attention','self-heads':'multihead','relu-ffn':'original-ffn','original-ffn-block':'original-ffn','original-weights':'softmax','original-encoder':'encoder-layer','masked-heads':'masked-multihead'}))assert.equal(M.packageOrigin(kind).id,id);
+ assert.equal(M.packageOrigin('q'),null);
  const hover=button=>button.dispatchEvent(new app.window.Event('pointerover',{bubbles:true}));
  let button=doc.querySelector('[data-add-module="original-weights"]');assert.ok(button);assert.equal(button.hasAttribute('title'),false);
- hover(button);assert.equal(tip.hidden,false);assert.equal(tip.textContent,'可用数量 0 / 0 · 双击查看说明');assert.equal(button.getAttribute('aria-describedby'),'shelf-tooltip');assert.doesNotMatch(tip.textContent,/3 ×|Softmax/);
+ hover(button);assert.equal(tip.hidden,false);assert.equal(tip.textContent,'来源：原版基础 / 07\n可用数量 0 / 0 · 双击查看说明');assert.equal(button.getAttribute('aria-describedby'),'shelf-tooltip');assert.doesNotMatch(tip.textContent,/3 ×|Softmax/);
+ assert.ok(!tip.textContent.includes(M.levels.softmax.title));assert.match(button.getAttribute('aria-label'),/来源：原版基础 \/ 07/);
  assert.match(button.getAttribute('aria-label'),/Softmax/);assert.equal(app.eval('JSON.stringify(state)'),saved);
  button.dispatchEvent(new app.window.Event('pointerout',{bubbles:true}));assert.equal(tip.hidden,true);
  button=doc.querySelector('[data-add-module="q"]');hover(button);assert.equal(tip.hidden,false);
  doc.dispatchEvent(new app.window.Event('pointerdown',{bubbles:true}));assert.equal(tip.hidden,true);
  hover(button);doc.querySelector('#module-palette').dispatchEvent(new app.window.Event('scroll',{bubbles:true}));assert.equal(tip.hidden,true);
  hover(button);app.c.I18n.setPreference('en');assert.equal(tip.hidden,true);
- button=doc.querySelector('[data-add-module="q"]');hover(button);assert.match(tip.textContent,/2 \/ 2/);assert.doesNotMatch(tip.textContent,/[\u3400-\u9fff]|3 ×/);
+ button=doc.querySelector('[data-add-module="original-weights"]');hover(button);assert.equal(tip.textContent,'From: Original / 07\nCopies available 0 / 0 · Double-click to inspect');
+ button=doc.querySelector('[data-add-module="q"]');hover(button);assert.match(tip.textContent,/2 \/ 2/);assert.doesNotMatch(tip.textContent,/[\u3400-\u9fff]|3 ×|From:/);
  app.eval("switchLevel('masked-multihead')");assert.equal(tip.hidden,true);assert.equal(doc.querySelector('[aria-describedby="shelf-tooltip"]'),null);
 });

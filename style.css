@@ -429,4 +429,6 @@ body[data-stage-color] .chapter>span{color:var(--group-accent)}
 
 .scene-bottom{gap:12px}#scene-help{min-width:0;line-height:1.5}
 
-#shelf-tooltip{position:fixed;z-index:100;pointer-events:none;width:max-content;max-width:calc(100vw - 24px);padding:8px 11px;border:1px solid var(--line);border-radius:7px;background:var(--paper);color:var(--ink);font-size:12px;line-height:1.5;box-shadow:0 4px 16px #263a3d24;animation:shelf-tip-show .08s ease-out .15s both}#shelf-tooltip[hidden]{display:none}@keyframes shelf-tip-show{from{opacity:0}to{opacity:1}}@media(prefers-reduced-motion:reduce){#shelf-tooltip{animation-duration:0s}}
+#shelf-tooltip{white-space:pre-line;position:fixed;z-index:100;pointer-events:none;width:max-content;max-width:calc(100vw - 24px);padding:8px 11px;border:1px solid var(--line);border-radius:7px;background:var(--paper);color:var(--ink);font-size:12px;line-height:1.5;box-shadow:0 4px 16px #263a3d24;animation:shelf-tip-show .08s ease-out .15s both}#shelf-tooltip[hidden]{display:none}@keyframes shelf-tip-show{from{opacity:0}to{opacity:1}}@media(prefers-reduced-motion:reduce){#shelf-tooltip{animation-duration:0s}}
+
+.card-number[data-origin-level]{max-width:180px;letter-spacing:0;line-height:1.5}

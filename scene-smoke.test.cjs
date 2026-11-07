@@ -1458,6 +1458,9 @@ test('shelf cards inspect every available kind without placing a node, including
    if(!doc.querySelector(`[data-add-module="${kind}"]`)){assert.equal(M.fusions[level]?.kind,kind,'only this lesson’s unearned composite is hidden');continue;}
    const card=doc.querySelector(`[data-add-module="${kind}"]`);event(card,'click');event(card,'dblclick');await new Promise(setImmediate);
    assert.equal(doc.querySelector('#module-card').open,true,kind);assert.equal(doc.querySelector('#card-name').textContent,M.moduleName(M.levels[level],kind));
+   const origin=M.packageOrigin(kind),number=doc.querySelector('#card-number');
+   assert.equal(number.textContent,origin?'From: '+origin.chapter:M.levels[level].chapter);
+   assert.equal(number.dataset.originLevel,origin?.id);
    assert.doesNotMatch(doc.querySelector('#module-card').textContent,/[\u3400-\u9fff]/,kind);
    assert.ok(app.scenes.at(-1).children.some(o=>o.userData.shelfPreview));assert.equal(JSON.stringify(app.api.getState()),saved);
    doc.querySelector('#camera-reset').onclick();await new Promise(setImmediate);doc.querySelector('#card-close').onclick();

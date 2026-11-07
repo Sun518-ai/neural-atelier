@@ -492,6 +492,21 @@ M.packages={
  enffn:pack([['RMSNorm → SwiGLU'],[M.definitions.add.name]],L('把现代 FFN 及外部残差合成一个调度任务，仍保留归一化、两套投影、SiLU、逐元素相乘、降维与相加。','Groups the modern FFN and its residual as one scheduling task. Normalization, both projections, SiLU, elementwise multiplication, down projection and addition all remain inside.'))
 };
 L('内部组成','Inside this module');L('新组合组件','New packaged module');
+L('来源：','From: ');
+// Provenance follows the first lesson that packages the computation, rather
+// than a later packaging refresher or the currently selected example lesson.
+const packageOrigins={};
+for(const [id,{kind}]of Object.entries(M.fusions))packageOrigins[kind]??=id;
+// Wider tensors and source/target roles reuse these already taught structures.
+Object.assign(packageOrigins,{
+ 'self-heads':'multihead','original-ffn-block':'original-ffn',
+ 'target-embed':'wider-features','cross-heads':'cross-attention'
+});
+for(const kind of Object.keys(M.packages))packageOrigins[kind]??=origins[kind];
+M.packageOrigin=kind=>{
+ const id=M.packages[kind]&&packageOrigins[kind];
+ return id?{id,chapter:M.levels[id].chapter}:null;
+};
 for(const [kind,p]of Object.entries(M.packages)){
  const l=M.levels[origins[kind]];if(l){l.packages??=[];if(!l.packages.includes(kind))l.packages.push(kind);}
 }
