@@ -13,7 +13,7 @@ async function boot({reduced=true,frameMs=1000,onFrame=()=>{},languages=['zh-CN'
  let src=fs.readFileSync(__dirname+'/game.js','utf8').replace(/^import .*\n/gm,'').replace("const T=await import('./vendor/three.module.js');",'const T=window.T;').replace(/const \{createSceneArt\}=await import\('\.\/scene-art\.js\?v=[^']+'\);/,'');
  src+='\nwindow.testAPI={switchLevel,run,togglePause,refresh,select,assignDevice,chooseOutput,chooseInput,chooseModule,placeModule,getState:()=>state,setState:s=>state=s,getWorld:()=>world,getFault:()=>fault};';
  await vm.runInContext('(async()=>{'+src+'})()',c);
- assert.ok(c.testAPI.getWorld(),'3D boot failed');return {c,document,window,api:c.testAPI,scenes,time:()=>now,view:()=>view,camera:()=>renderedCamera};
+ assert.ok(c.testAPI.getWorld(),'3D boot failed');return {c,document,window,api:c.testAPI,scenes,time:()=>now,setFrameMs:value=>{frameMs=value;},view:()=>view,camera:()=>renderedCamera};
 }
 test('the ready-to-run full Transformer renders and completes every basic operator without editing',async()=>{
  const app=await boot({frameMs:5000}),M=app.c.NeuralPrologue;
@@ -1453,6 +1453,9 @@ test('English scene labels and module cards work, and live language switching ke
  }});
  const M=app.c.NeuralPrologue;
  for(const id of Object.keys(M.levels)){
+  // Keep a fine-grained live language switch in the first lesson. The remaining
+  // sweep checks translated labels/cards; dedicated scene tests cover pacing.
+  app.setFrameMs(id==='wire'?80:2500);
   app.api.switchLevel(id);const s=M.solutions(id);if(M.levels[id].engine)s.settings.precision=16;app.api.setState(s);app.api.getWorld().rebuild();await app.api.run();
   for(const n of s.nodes){app.api.getWorld().focus(n.id);assert.doesNotMatch(app.document.querySelector('#card-meaning').textContent,/[\u3400-\u9fff]/);app.document.querySelector('#card-close').onclick();}
   assert.doesNotMatch(app.document.querySelector('#labels').textContent,/[\u3400-\u9fff]/);
