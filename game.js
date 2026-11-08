@@ -28,6 +28,10 @@ function animationSchedule(nodes,depths,durationFor,travel,independent){
  if(!independent)for(const n of nodes)timings.get(n.id).end=depthEnds[depths[n.id]];
  return {nodes:timings,depthEnds,end:Math.max(...depthEnds)+travel};
 }
+// Keep complete numeric matrices readable before the next batch clears them.
+// Scalar trials retain their individual results; token outputs have their own
+// word-selection and append animations.
+for(const layout of Object.values(M.levels))if(layout.sequence&&!layout.tokenOutput)layout.outputArrivalHold??=450;
 I18n.prepare({definitions:M.definitions,levels:M.levels,routes:M.routes,controls:M.engineControls,metrics:M.metricLabels,vocab:M.math.vocab});
 for(const id of Object.keys(M.levels))I18n.prepare(M.samplesFor(id));
 I18n.activate();
@@ -448,7 +452,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=outlet-pan-1');
+ const {createSceneArt}=await import('./scene-art.js?v=score-io-1');
  function scenePalette(){
   if(typeof getComputedStyle!=='function')return {};
   const css=getComputedStyle(document.body),read=name=>css.getPropertyValue(name).trim();

@@ -52,14 +52,18 @@ test('every board can pan with the button or a modifier without moving modules o
  app.c.I18n.setPreference('en');assert.equal(doc.querySelector('#demo-pan').textContent,'Pan view');
 });
 
-test('embedding and position outlets hold arrived matrices, pulse, then clear before the next IDs',async()=>{
- for(const levelId of ['embedding','positions']){
+test('numeric matrix outlets hold arrived values, pulse, then clear before the next batch',async()=>{
+ for(const levelId of ['embedding','positions','qkv','scores','softmax','weighted-sum','normalize']){
  let app,mode='complete',paused=false,pauseFrames=0,pausedView,pausedResult,stopped=false;const seen=new Set(),holds=new Map(),pulses=[];
  const outlet=()=>{const out=[];app.scenes.at(-1).traverse(o=>{if(o.userData.sinkRow!=null){const text=o.children.filter(c=>c.material?.map).map(c=>c.material.map.image.drawnText);out[o.userData.sinkRow]={values:text.slice(2),status:text[1],flash:o.children[0].material.emissiveIntensity};}});return out;};
  const blank=()=>outlet().every(r=>r.values.every(v=>v==='·'));
  const fire=(target,type,props={})=>{const e=new app.window.Event(type,{bubbles:true,cancelable:true});Object.assign(e,props);target.dispatchEvent(e);};
  app=await boot({reduced:false,frameMs:80,onFrame:({document,now})=>{
   if(!app||mode==='stopped')return;const M=app.c.NeuralPrologue,name=document.querySelector('#sample-name').textContent,sample=M.samplesFor(levelId).find(s=>s.word===name);if(!sample)return;
+  if(levelId==='scores'){
+   const query=[],key=[];app.scenes.at(-1).traverse(o=>{if(o.userData.scoreQuery!=null)query[o.userData.scoreQuery]=o.material.map.image.drawnText;if(o.userData.scoreKey!=null)key[o.userData.scoreKey]=o.material.map.image.drawnText;});
+   assert.deepEqual(query,sample.word.split(' / '));assert.deepEqual(key,query,'both axes follow the current token order');
+  }
   const source=document.querySelector('.packet[data-from="R"][data-motion="wire"]:not([hidden])'),outgoing=document.querySelector('.packet[data-to="sink"][data-motion="wire"]:not([hidden])');
   if(source||outgoing){assert.ok(blank(),'the previous matrix is gone and this one has not arrived yet');seen.add((source?'cleared:':'travelling:')+name);}
   const displayed=outlet(),values=displayed.flatMap(r=>r.values);
@@ -85,6 +89,21 @@ test('embedding and position outlets hold arrived matrices, pulse, then clear be
  }
 });
 
+test('score outlet previews the actual wrong matrix, with a static hold for reduced motion',async()=>{
+ let app,seen=false;const times=[];
+ app=await boot({reduced:true,frameMs:80,onFrame:({now,document})=>{
+  if(!app||!document.body.classList.contains('network-running'))return;
+  const out=[],status=[],flash=[];app.scenes.at(-1).traverse(o=>{if(o.userData.sinkRow!=null){const text=o.children.filter(c=>c.material?.map).map(c=>c.material.map.image.drawnText);out[o.userData.sinkRow]=text.slice(2);status.push(text[1]);flash.push(o.children[0].material.emissiveIntensity);}});
+  if(out.flat().includes('·')||status.some(s=>s!=='·'))return;
+  const M=app.c.NeuralPrologue,x=M.samplesFor('scores')[0].v,actual=M.evaluate(app.api.getState(),x).output;
+  assert.deepEqual(out.flat(),Array.from(actual,v=>String(Number(v.toFixed(2)))));assert.notDeepEqual(out.flat(),Array.from(M.reference(x,'scores'),v=>String(Number(v.toFixed(2)))));
+  assert.ok(flash.every(v=>v===0));seen=true;times.push(now);
+ }});
+ const M=app.c.NeuralPrologue,s=M.solutions('scores');s.nodes.find(n=>n.id==='score').links.reverse();app.api.switchLevel('scores');app.api.setState(s);app.api.getWorld().rebuild();await app.api.run();
+ assert.ok(seen);assert.ok(times.at(-1)-times[0]>=1600);assert.ok(app.api.getFault());assert.equal(app.document.querySelectorAll('#test-results .fail').length,1);
+ app.c.I18n.setPreference('en');const names=[];app.scenes.at(-1).traverse(o=>{if(o.userData.scoreKey!=null)names[o.userData.scoreKey]=o.material.map.image.drawnText;});assert.deepEqual(names,M.samplesFor('scores')[0].word.split(' / '));assert.ok(names.every(s=>!/[\u3400-\u9fff]/.test(s)));
+ app.api.switchLevel('qkv');let axes=0;app.scenes.at(-1).traverse(o=>{if(o.userData.scoreKey!=null||o.userData.scoreQuery!=null)axes++;});assert.equal(axes,0,'pair axes do not leak onto vector feature outputs');
+});
 test('a full restart replaces visible residual wires with the tutorial start and undo restores the scene',async()=>{
  const app=await boot(),doc=app.document;app.api.switchLevel('residual');
  app.api.setState(app.c.NeuralPrologue.solutions('residual'));app.api.getWorld().rebuild();app.api.refresh();

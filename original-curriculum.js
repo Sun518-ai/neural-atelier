@@ -664,6 +664,19 @@ Object.assign(M.levels.qkv.rationale,{
  takeaway:L('例如“爱”的输入 [0, 1] 乘本关 Wᵥ = [[1, 0], [0, 2]]，得到值向量 [0, 2]，它仍属于“爱”。后面 Q/K 打分，经 Softmax 变成参考比例，再把各词的 V 按比例相加，词之间才发生信息汇合。','For example, Love starts with [0, 1]. Multiplying by this lesson’s Wᵥ = [[1, 0], [0, 2]] produces its value vector [0, 2], still belonging to Love. Later, Q/K supply scores and Softmax converts them to proportions that weight the sum of the V vectors. That later step mixes information across tokens.')
 });
 M.levels.qkv.summary=M.levels.qkv.description;
+Object.assign(M.levels.scores,{
+ sourceTitle:L('输入向量矩阵 X','Input vector matrix X'),sourceNames:{R:L('输入矩阵 X','Input matrix X')},routeInput:L('输入矩阵 X','Input matrix X'),
+ sourceNote:L('与上一关相同的 X，供 Q/K 投影','The same X as before, for Q/K projections'),
+ outputTitle:L('匹配分数矩阵 S','Matching-score matrix S'),outputNote:L('每格对应一对 Q 词与 K 词','One score per query–key token pair'),outputPairAxes:true,
+ mission:L('从 X 算出 Q/K，再得到匹配分数 S','Compute Q/K from X, then matching scores S'),
+ description:L('Wq、Wk 是组件内部的权重；Q = XWq、K = XWk 是计算结果。打分组件接收 Q 和 K，输出 S = QKᵀ / √2。本关从同一份 X 出发，上一关的 V 留给后面的内容汇合。','Wq and Wk are weights inside the modules; Q = XWq and K = XWk are computed results. The scoring module receives Q and K and outputs S = QKᵀ / √2. Start from the same X here; the previous lesson’s V will be used later for value aggregation.'),
+ resultNote:L('S 的每个格子是一个查询词与一个被比较词的匹配分数；下一关经过 Softmax 才变成参考比例 A。','Each cell of S scores one query token against one key token. The next lesson applies Softmax to turn these scores into attention weights A.')
+});
+M.levels.scores.summary=L('沿用上一关的输入 X，分别算出 Q/K，再得到三个查询词与三个被比较词之间的九个匹配分数。','Reuse the previous lesson’s input X, compute Q/K, then produce nine scores matching three query tokens against three key tokens.');
+Object.assign(M.levels.scores.rationale,{
+ title:L('出口的九个数分别表示什么？','What do the nine output values mean?'),
+ text:L('输出盘左侧是发起查询的词 Q，上方是被比较的词 K。交点就是这一对词的分数。对同一个查询，分数越大，后面经 Softmax 得到的参考比例越高；此时还没有汇合 V。','The left edge of the output tray lists query tokens Q; the top lists compared tokens K. Their intersection holds that pair’s score. For the same query, a higher score gives a larger weight after Softmax; V has not been aggregated yet.')
+});
 M.levels.softmax.description=L('将已学过的 Q/K 投影和打分接起来，再把分数交给 Softmax。每组权重的和应为 1，本关不遮住未来位置。','Connect the familiar Q/K projections and scoring, then feed the scores to Softmax. Each weight row should sum to 1; this level has no future mask.');
 M.levels.residual.rationale.scope=L('沿用序章 05 的 ReLU FFN 和同一套教学权重，本关只增加残差。原版完整子层还会在相加后接 LayerNorm，后面再学。','Uses Prologue 05’s ReLU FFN and the same teaching weights; only the residual is new. The complete original sublayer also applies LayerNorm after addition, which comes later.');
 M.levels.ffn.description=L('将已学的 SwiGLU 和残差组合起来。R 是原输入，Z = RMSNorm(R) 已准备好；这里比较现代 Pre-LN 与原版先相加后归一化的区别。','Combine SwiGLU with a residual. R is the original input and Z = RMSNorm(R) is ready. Compare modern Pre-LN with the original’s addition before normalization.');
@@ -780,7 +793,7 @@ for(const [id,width]of [['score',2],['original-score',4]]){
 cards.softmax={...previousCard('softmax'),ability:L('把一组分数变成一组比例','Turn scores into proportions'),formula:'Aⱼ = exp(Sⱼ) / Σₜ exp(Sₜ)',
  meaning:L('对同一个查询的三个分数分别取指数，再除以这些指数的总和。输出是非负比例，总和为 1，供后面按比例读取 V。','Exponentiate the three scores for one query, then divide each exponential by their sum. The outputs are nonnegative proportions summing to 1, ready to read V in proportion.'),
  purpose:L('Softmax 对分数差距敏感：输入 [0, 2] 得到约 [12%, 88%]，先除以 √2 再算则约为 [20%, 80%]。两次都和为 1，但比例不同；前一步缩放不会被这一步抵消。','Softmax responds to score differences: [0, 2] gives about [12%, 88%], while dividing by √2 first gives about [20%, 80%]. Both sum to 1 but allocate differently; Softmax does not cancel the preceding scale.')};
-M.levels.scores.rationale.takeaway=scorePurpose;
+M.levels.scores.rationale.takeaway=L('例如 Q“我” = [1, 0.25]，K“爱” = [0.2, 1]，交点算 (1×0.2 + 0.25×1) / √2 ≈ 0.32。除以 √2 是因为每个 Q/K 有两个特征。0.32 是分数，不是 32% 的比例，也不是模型权重。','For example, Q for I is [1, 0.25] and K for Love is [0.2, 1]. Their cell computes (1×0.2 + 0.25×1) / √2 ≈ 0.32. The divisor is √2 because each Q/K vector has two features. 0.32 is a score, not a 32% weight or a model parameter.');
 M.scoreGuide={
  title:L('先看一个查询怎样给键打分','Follow one query as it scores the keys'),
  query:L('查询 Q','Query Q'),key:L('匹配的键 K','Matching key K'),dot:L('点积 Q · K','Dot product Q · K'),scaled:L('缩放分数 S','Scaled score S'),

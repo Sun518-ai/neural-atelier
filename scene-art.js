@@ -1,7 +1,7 @@
 // Scene objects represent weights, features and token rows; math stays in model.js.
 export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
  const context=new T.Group(),floor=new T.Group();floor.userData.environmentFloor=true;scene.add(floor,context);
- const units=new Map(),socketRings=new WeakMap(),sharedSphere=new T.SphereGeometry(.115,18,14),rows=[],tokens=[];
+ const units=new Map(),socketRings=new WeakMap(),sharedSphere=new T.SphereGeometry(.115,18,14),rows=[],tokens=[],outputHeaders=[];
  const rowColor=i=>[0x397aa2,0x8862aa,0x288778][i]??0x557e6b;
  const featureColor=i=>[0x397aa2,0x8862aa,0xb68036,0x288778][i%4];
  const projectionColor=0xb77724;
@@ -74,7 +74,7 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
  }
  function surroundings(samples,layout={},palette={}){
   for(const parent of [floor,context])for(const o of [...parent.children]){parent.remove(o);o.traverse(c=>{if(c.geometry&&!c.geometry.userData?.shared)c.geometry.dispose();c.material?.map?.dispose();c.material?.dispose?.();});}
-  tokens.length=0;rows.length=0;floor.visible=!layout.floating;context.visible=true;
+  tokens.length=0;rows.length=0;outputHeaders.length=0;floor.visible=!layout.floating;context.visible=true;
   const sourceX=layout.sourceX??-8.55,sinkX=layout.sinkX??9,dim=layout.sinkDim||2,w=layout.boardWidth??(layout.id==='wire'?11.6:layout.id==='projection'?15:22.1),d=layout.boardDepth??(layout.id==='ffn'||!layout.id?11:7);
   const surface=palette.surface||'#eaf0e4',edge=palette.edge||'#b7c8b9',accent=palette.accent||'#526d5e';
   if(!layout.floating){
@@ -103,14 +103,19 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   const outputStart=context.children.length;
   slab(context,rackW,3.8,.42,sinkX,.07,0,0x608f7c);slab(context,rackW-.15,3.64,.08,sinkX,.5,0,0xe8f1df);
   const labelX=seq?-1.15:dim===4?-.87:-.47;
-  textTile(context,I18n.t("位置"),.48,.28,sinkX+labelX,.63,-1.65,{size:72,color:'#526d5e',bg:'#e8f1df'});
+  const pairAxes=!!layout.outputPairAxes,cw=seq?Math.min(.7,1.95/outCols):.36;
+  textTile(context,pairAxes?'Q↓ K→':I18n.t("位置"),pairAxes?.75:.48,.28,sinkX+labelX,.63,-1.65,{size:72,color:'#526d5e',bg:'#e8f1df'});
+  if(pairAxes)for(let j=0;j<outCols;j++){
+   const header=textTile(context,samples[0].word.split(' / ')[j],cw,.28,sinkX-.55+j*(cw+.03),.63,-1.65,{size:66,color:'#526d5e',bg:'#e8f1df'});
+   header.mesh.userData.scoreKey=j;outputHeaders.push(header);
+  }
   samples.slice(0,3).forEach((_,i)=>{const g=new T.Group();g.position.set(sinkX,.66,rowZ(i));g.userData.sinkRow=i;context.add(g);
    const panel=slab(g,rackW-.45,.72,.08,0,0,0,0xc8d9c5);
    const stripe=box(g,rackW-.55,.035,.045,0,.105,.32,rowColor(i),{emissive:rowColor(i),emissiveIntensity:.1});
-   textTile(g,String(i),.28,.32,labelX,.13,0,{size:70});
+   const label=textTile(g,pairAxes?samples[0].word.split(' / ')[i]:String(i),pairAxes?.5:.28,.32,labelX,.13,0,{size:70});
+   if(pairAxes)label.mesh.userData.scoreQuery=i;
    const status=textTile(g,'·',.19,.22,rackW/2-.12,.14,0,{size:82,bg:'#e8f1df'});
-   const cw=seq?Math.min(.7,1.95/outCols):.36;
-   const cells=Array.from({length:outCols},(_,j)=>textTile(g,'·',cw,.43,seq?-.55+j*(cw+.03):(dim===4?-.42:-.02)+j*.4,.14,0,{color:'#558974',bg:'#e9f3e2',size:51}));rows.push({g,cells,status,panel,stripe});
+   const cells=Array.from({length:outCols},(_,j)=>textTile(g,'·',cw,.43,seq?-.55+j*(cw+.03):(dim===4?-.42:-.02)+j*.4,.14,0,{color:'#558974',bg:'#e9f3e2',size:51}));rows.push({g,cells,status,panel,stripe,label});
   });
   context.children.slice(outputStart).forEach(o=>o.position.y+=layout.sinkY||0);
   context.userData={samples,layout};
@@ -416,6 +421,7 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   }
   const {samples}=context.userData,seq=!!layout.sequence,input=seq?samples[activeSample].v:null;
   const words=seq?samples[activeSample].word.split(' / '):samples.slice(0,3).map(s=>s.word);
+  if(layout.outputPairAxes){rows.forEach((r,i)=>r.label.write(words[i]));outputHeaders.forEach((h,i)=>h.write(words[i]));}
   const sourceValues=layout.dualSource?window.NeuralPrologue.sourceValues({levelId:layout.id},input):null;
   tokens.forEach(t=>{const i=t.index,secondary=t.sourceId==='Z',v=secondary?sourceValues.Z:input;t.label.write(secondary?window.NeuralPrologue.math.vocab[layout.secondaryTokenIds[i]]:words[i]);t.g.userData.active=busy&&(seq||i===activeSample);t.cells.forEach((c,j)=>{const value=seq?v[i*t.cells.length+j]:samples[i].v[j];c.write(Number.isFinite(value)?Number(value.toFixed(2)).toString():'·');});});
   pulseSource();

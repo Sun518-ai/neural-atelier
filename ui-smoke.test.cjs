@@ -128,6 +128,26 @@ test('embedded browsers fall back to page fullscreen and Escape preserves the ru
  const e=new app.window.Event('keydown');e.key='Escape';doc.dispatchEvent(e);assert.equal(button.getAttribute('aria-pressed'),'false');assert.equal(doc.querySelector('#game').classList.contains('demo-expanded'),false);assert.equal(app.eval('busy'),true);
  await button.onclick();app.eval("busy=false;switchLevel('wire')");assert.equal(doc.body.classList.contains('demo-fullscreen'),false);
 });
+test('score input and output describe X, projected Q/K and pairwise scores in both languages',()=>{
+ for(const language of ['zh-CN','en-US']){
+  const app=boot(new Map(),'#scores',[language]),M=app.c.NeuralPrologue,doc=app.document,before=app.eval('JSON.stringify(state)');
+  assert.equal(M.levels.scores.outputPairAxes,true);assert.match(M.levels.scores.outputTitle,language==='zh-CN'?/匹配分数矩阵 S/:/Matching-score matrix S/);
+  assert.match(doc.querySelector('.route').textContent,language==='zh-CN'?/输入矩阵 X/:/Input matrix X/);
+  assert.match(doc.querySelector('.mission').textContent,/Q = XWq/);assert.match(doc.querySelector('.mission').textContent,/K = XWk/);assert.match(doc.querySelector('.mission').textContent,/S = QKᵀ \/ √2/);
+  const x=M.samplesFor('scores')[0].v,q=M.operations.q([x]),k=M.operations.k([x]);assert.deepEqual(Array.from(q.slice(0,2)),[1,.25]);assert.deepEqual(Array.from(k.slice(2,4)),[.2,1]);assert.equal(+M.reference(x,'scores')[1].toFixed(2),.32);
+  assert.deepEqual(Array.from(x),Array.from(M.samplesFor('qkv')[0].v));assert.notDeepEqual(Array.from(x),Array.from(M.reference(x,'qkv')));
+  doc.querySelector('#hint').onclick();assert.match(doc.querySelector('#structure-dialog').textContent,/Wq/);assert.match(doc.querySelector('#structure-dialog').textContent,/Softmax/);
+  if(language==='en-US')assert.doesNotMatch(doc.querySelector('.mission').textContent,/[\u3400-\u9fff]/);
+  assert.equal(app.eval('JSON.stringify(state)'),before);
+ }
+});
+test('all numeric batch outlets have reading time without changing word-output animations',()=>{
+ const app=boot(),M=app.c.NeuralPrologue;
+ for(const [id,layout]of Object.entries(M.levels)){
+  if(layout.sequence&&!layout.tokenOutput)assert.equal(layout.outputArrivalHold,450,id+' pauses numeric results');
+  else assert.equal(layout.outputArrivalHold,undefined,id+' retains its existing individual/word readout');
+ }
+});
 test('QKV distinguishes the computed V matrix from Wv weights in its goal, card and hint',()=>{
  for(const language of ['zh-CN','en-US']){
   const app=boot(new Map(),'#qkv',[language]),M=app.c.NeuralPrologue,doc=app.document,before=app.eval('JSON.stringify(state)');
