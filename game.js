@@ -174,7 +174,7 @@ function stageChrome(){
  $('#demo-fullscreen').hidden=!c.floating;syncFullscreen();
  if(!c.floating&&document.fullscreenElement===$('#game'))document.exitFullscreen().catch(()=>{});
  $('#scene').setAttribute('aria-label',I18n.t(c.floating?'拖动旋转 · Shift / 右键拖动平移 · 滚轮缩放':c.demonstration?'拖动转动视角 · 双击查看基础组件':'拖动空白转动视角，拖动模块重新摆放'));
- $('#demo-follow').hidden=!c.floating;$('#demo-follow-next').hidden=!c.floating;$('#demo-follow-view').hidden=!c.floating;$('#demo-pan').hidden=!c.floating;$('#demo-views').hidden=!c.demonstration;$('#demo-views').innerHTML=(c.demoViews||[]).map(view=>`<button type="button" data-demo-view="${view.key}">${view.label}</button>`).join('');
+ $('#demo-follow').hidden=!c.floating;$('#demo-follow-next').hidden=!c.floating;$('#demo-follow-view').hidden=!c.floating;$('#demo-pan').hidden=false;$('#demo-views').hidden=!c.demonstration;$('#demo-views').innerHTML=(c.demoViews||[]).map(view=>`<button type="button" data-demo-view="${view.key}">${view.label}</button>`).join('');
  document.body.dataset.stageColor=stageColor(c);renderStructureMap();document.body.classList.toggle('engine-level',!!c.engine);$('#device-docks').hidden=!c.engine;resetReport();$('#engine-controls').hidden=!c.engine;engineControls();$('.scene-legend').hidden=c.nodes.length===0;$('.scene-identity .chip').textContent=c.demonstration?I18n.t('完整演示'):I18n.t('自由接线');$('#scene-help').textContent=c.floating?I18n.t('拖动旋转 · Shift / 右键拖动平移 · 滚轮缩放'):c.demonstration?I18n.t('拖动转动视角 · 双击查看基础组件'):c.nodes.length?I18n.t("拖模块摆放 · 点连线删除 · 双击查看模块卡"):I18n.t("圆口出，方口进 · 拖动空白转动视角");$('#pass-count').textContent='0 / '+c.sampleCount;document.title=I18n.t("神经工坊 · ")+c.title;$('.chapter span').textContent=c.chapter;$('.chapter strong').textContent=c.title;
  $('.mission h2').textContent=c.mission;$('.mission p').textContent=c.description;$('#mission-limits').innerHTML=c.engine?Object.entries(c.limits).map(([key,value])=>{const [name,unit]=M.metricLabels[key];return `<span>${name} ${key==='tps'||key==='aneMin'?'≥':'≤'} ${value} ${unit}</span>`;}).join(''):'';
  const reason=c.rationale;$('#mission-reason').hidden=!reason;
@@ -446,14 +446,14 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=independent-demo-1');
+ const {createSceneArt}=await import('./scene-art.js?v=outlet-pan-1');
  function scenePalette(){
   if(typeof getComputedStyle!=='function')return {};
   const css=getComputedStyle(document.body),read=name=>css.getPropertyValue(name).trim();
   return {surface:read('--group-bg'),edge:read('--group-border'),accent:read('--group-accent')};
  }
  const art=createSceneArt(T,scene,colors,{anisotropy:renderer.capabilities.getMaxAnisotropy()});art.surroundings(samples(),stage(),scenePalette());
- let fusionEffect=null,tokenPreview=null;
+ let fusionEffect=null,tokenPreview=null,arrivalPreview=null;
  const assembly=new T.Group(),wires=new T.Group();scene.add(assembly,wires);const neuronGeo=new T.SphereGeometry(.115,16,12);let elements=[],curves=[],packets=[],drag=null,preview=null,yaw=.05,pitch=.8,zoom=stage().zoom,lastDepth=-1,playbackTimeline=null;
  const cameraTarget=new T.Vector3();let focusId=null,shelfFocus=null,shelfModel=null,overview=null,cameraFrame=0,transitioning=false,lastTap=null;
  let followFlight=null,followFlightFrame=0;
@@ -504,7 +504,7 @@ try{
  function neuralModule(n){art.module(assembly,n,definition(n.id),M.weights);}
  function rebuild(){if(focusId)leaveFocus();clearPreview();dispose(assembly);dispose(wires);art.resetUnits();curves=[];state.nodes.forEach(neuralModule);state.nodes.forEach(n=>n.links.forEach((id,i)=>{if(id)wire(id,n.id,i);}));if(state.sink)wire(state.sink,'sink',0);labels();}
  function addLabel(tag,klass,html,attrs,pos){const el=document.createElement(tag);el.className=klass;const owner=attrs['data-owner']||attrs['data-node']||attrs['data-output']||attrs['data-input']?.split(':')[0];el.innerHTML=String(html);for(const [k,v]of Object.entries(attrs))el.setAttribute(k,v);if(owner)el.dataset.owner=owner;overlay.appendChild(el);elements.push({el,pos});return el;}
- function labels(){art.sync(current?.values,current?.depths||{},level,selected,sample,results,busy,stage(),current?.output,tokenPreview,playbackTimeline);overlay.querySelectorAll('.node-label,.port,.source-label,.node-value,.local-fault,.fault-pin,.device-badge,.row-marker,.wire-actions,.demo-section-label').forEach(el=>el.remove());elements=[];
+ function labels(){art.sync(current?.values,current?.depths||{},level,selected,sample,results,busy,stage(),current?.output,tokenPreview,playbackTimeline,arrivalPreview);overlay.querySelectorAll('.node-label,.port,.source-label,.node-value,.local-fault,.fault-pin,.device-badge,.row-marker,.wire-actions,.demo-section-label').forEach(el=>el.remove());elements=[];
   for(const section of stage().demoSections||[])addLabel('span','demo-section-label',section.label,{'style':'--section-color:'+section.color},()=>new T.Vector3(section.x,(section.y||0)+.2,section.z));
   const edge=selectedWire&&curves.find(c=>c.to===selectedWire.to&&c.index===selectedWire.index&&c.from===selectedWire.from);
   if(edge&&!busy&&!focusId)addLabel('div','wire-actions',`<span>${outputName(edge.from)} → ${edge.to==='sink'?stage().outputTitle:nodeName(edge.to)}</span><button type="button" data-delete-wire>${I18n.t("删除连线")}</button><button type="button" data-close-wire aria-label="${I18n.t("关闭")}">×</button>`,{},()=>edge.curve.getPoint(.5));
@@ -729,8 +729,9 @@ try{
    const {width,meanSquare,divisor}=ex.rms,v=ex.inputs[0][1].slice(0,width);
    $('#card-example-values').innerHTML=ex.inputs.map(v=>vectorRow(v)).join('')+`<div class="card-silu-worked"><small>${I18n.t('这里只展开第一个位置的归一化，其他位置分别计算。')}</small><code>mean(X²) = ${formulaNumber(meanSquare)}<br>r = √(${formulaNumber(meanSquare)} + ε) ≈ ${formulaNumber(divisor)}<br>${vector(v)} / ${formulaNumber(divisor)} ≈ ${vector(ex.output[1].slice(0,width))}</code></div>`+vectorRow(ex.output,true);
   }else if(ex.normalization){
-   const {mean,variance,epsilon}=ex.normalization;
-   $('#card-example-values').innerHTML=ex.inputs.map(v=>vectorRow(v)).join('')+`<div class="card-silu-worked">${cardStage.sequence?'<small>'+I18n.t('这里只展开第一个位置的归一化，其他位置分别计算。')+'</small>':''}<code>μ = ${formulaNumber(mean)}<br>σ² = ${formulaNumber(variance)}<br>(x − μ) / √(σ² + ${epsilon})</code></div>`+vectorRow(ex.output,true);
+   $('#card-stats').children[1].querySelector('span').textContent=M.layerNormGuide.parameterTitle;
+   const {width,mean,variance,epsilon}=ex.normalization,copy=M.layerNormGuide,input=ex.inputs[0][1].slice(0,width),centered=input.map(x=>x-mean),output=ex.output[1].slice(0,width),divisor=Math.sqrt(variance+epsilon),term=x=>x<0?'('+formulaNumber(x)+')':formulaNumber(x);
+   $('#card-example-values').innerHTML=ex.inputs.map(v=>vectorRow(v,false,-1,copy.input)).join('')+`<div class="card-silu-worked card-layernorm-steps">${cardStage.sequence?'<small>'+I18n.t('这里只展开第一个位置的归一化，其他位置分别计算。')+'</small>':''}<b>${copy.center}</b><code>μ = (${input.map(term).join(' + ')}) / ${width} ≈ ${formulaNumber(mean)}<br>${vector(input)} − ${term(mean)} = ${vector(centered)}</code><b>${copy.scale}</b><code>σ² = (${centered.map(x=>term(x)+'²').join(' + ')}) / ${width} ≈ ${formulaNumber(variance)}<br>${vector(centered)} / √(${formulaNumber(variance)} + ε)<br>≈ ${vector(centered)} / ${formulaNumber(divisor)} ≈ ${vector(output)}</code><b>${copy.affine}</b><code>1 × ${vector(output)} + 0 ≈ ${vector(output)}</code><small>${copy.parameters}</small></div>`+vectorRow(ex.output,true,-1,copy.output);
   }else if(ex.activation?.kind==='relu'){
    const {feature}=ex.activation,input=ex.inputs[0],output=ex.output,x=input[1][feature];
    $('#card-example-values').innerHTML=`<div class="card-silu-example">${vectorRow(input,false,feature)}<div class="card-silu-link"><b>ReLU</b><span>${input[1].map((_,i)=>`<i class="${i===feature?'example-focus':''}">↓</i>`).join('')}</span></div>${vectorRow(output,true,feature)}<div class="card-silu-worked"><code>max(0, ${formulaNumber(x)}) = ${fmt(output[1][feature])}</code></div></div>`;
@@ -810,7 +811,7 @@ try{
    effect.frame=requestAnimationFrame(tick);
   });
  }
- function clearPackets(){stopFollowFlight();finishFusion(false);tokenPreview=null;playbackTimeline=null;followedPacket=null;packets.forEach(p=>{p.el.remove();p.calculation?.remove();p.outputLabels?.forEach(({el})=>el.remove());for(const mesh of [p.mesh,p.otherMesh,p.outputMesh].filter(Boolean)){scene.remove(mesh);mesh.traverse(o=>{o.geometry?.dispose();o.material?.map?.dispose();o.material?.dispose();});}});packets=[];art.clearProcessing();render();}
+ function clearPackets(){stopFollowFlight();finishFusion(false);tokenPreview=arrivalPreview=null;art.outputReadout(sample,results,busy,stage());playbackTimeline=null;followedPacket=null;packets.forEach(p=>{p.el.remove();p.calculation?.remove();p.outputLabels?.forEach(({el})=>el.remove());for(const mesh of [p.mesh,p.otherMesh,p.outputMesh].filter(Boolean)){scene.remove(mesh);mesh.traverse(o=>{o.geometry?.dispose();o.material?.map?.dispose();o.material?.dispose();});}});packets=[];art.clearProcessing();render();}
  function finishDemo(id){
   if(!followData)return Promise.resolve();
   const from=cameraTarget.clone(),startZoom=zoom,startYaw=yaw,startPitch=pitch;let previous=animationTime(),elapsed=0;
@@ -863,7 +864,12 @@ try{
    const d=definition(n.id),tokenOperation=art.tokenOperation(d);
    return d.type==='pick'?art.selectionFrame(0,d.ins[0]/d.out,d.out).duration:tokenOperation?art.tokenFrame(0,tokenOperation).duration:['norm','layernorm'].includes(d.type)?normalizationFrame(0,d.type==='layernorm').duration:seq&&(projectionNode(n.id)||d.type==='mix')?art.sequenceProjectionFrame(0,d.type==='mix'?d.out/3:weightsFor(n.id)[0].length).duration:!seq&&(projectionNode(n.id)||['multiply','add'].includes(d.type))?art.projectionFrame(0,ev.values[n.id].length).duration:1;
   },travelDuration,independent);
-  const timings=schedule.nodes,ends=schedule.depthEnds,lastWave=ends.length-1,max=schedule.end;
+  const timings=schedule.nodes,ends=schedule.depthEnds,lastWave=ends.length-1;
+  // Reveal the actual matrix only after its packet reaches the outlet, then
+  // give it reading time on the same pausable, speed-controlled clock.
+  const outlet=stage().outputArrivalHold&&seq&&ev.output&&curves.find(edge=>edge.to==='sink'&&ev.values[edge.from]);
+  const arrived=outlet?(timings.get(outlet.from)?.end||0)+travelDuration:null,hold=outlet?stage().outputArrivalHold/ms:0;
+  const max=outlet?Math.max(schedule.end,arrived+hold):schedule.end;
   if(independent)playbackTimeline={nodes:timings,time:-1};
   // The complete model uses the same operation clock as every teaching level.
   // Never compress it to a total runtime: slow playback must keep each column readable.
@@ -1027,6 +1033,11 @@ try{
    if(playbackTimeline)playbackTimeline.time=t;
    const phase=independent?[...timings.values()].reduce((count,n)=>count+Number(t>=n.start)+Number(t>=n.end),0):level;
    if(phase!==lastDepth){lastDepth=phase;labels();renderShelf();}
+   if(outlet){
+    const progress=clamp((t-arrived)/hold);
+    arrivalPreview=t>=arrived?{values:ev.output,pulse:reduced||progress>=.45?0:Math.sin(Math.PI*progress/.45)**2}:null;
+    art.outputReadout(sample,results,busy,stage(),tokenPreview,arrivalPreview);
+   }
    if(tokenSink){
     const values=ev.values[tokenSink.id],clock=t-timings.get(tokenSink.id).start;
     let ready=0;
@@ -1152,7 +1163,7 @@ try{
   placementMesh.traverse(o=>{if(o.material?.emissive){o.material.emissive.set(placementMesh.userData.validPlacement?0x234d3e:0xa03524);o.material.emissiveIntensity=.3;}});render();
  }
  function previewAt(x,y){clearPreview();if(!pending)return;const p=worldPoint(x,y);if(!p)return;p.y=.6;preview=new T.Line(new T.BufferGeometry().setFromPoints(curve(point(pending),p).getPoints(30)),new T.LineDashedMaterial({color:0xbd8e57,dashSize:.2,gapSize:.1}));preview.computeLineDistances();scene.add(preview);render();}
- overlay.addEventListener('click',e=>{const b=e.target.closest('button');if(!b||busy)return;if(b.hasAttribute('data-delete-node')){removeModule(b.dataset.deleteNode);return;}if(b.hasAttribute('data-close-node')){actionNode=null;labels();return;}if(b.hasAttribute('data-delete-wire')){deleteWire();return;}if(b.hasAttribute('data-close-wire')){selectedWire=null;labels();return;}if(b.hasAttribute('data-dismiss-result')){e.stopPropagation();fault=null;$('#run-report').hidden=true;labels();$('#run').focus({preventScroll:true});return;}if(b.dataset.assign){select(b.dataset.assign);say(I18n.t("把芯片标记拖到目标区域，或点击下方 CPU / GPU / ANE。"));return;}if(b.dataset.suppress)return;if(b.dataset.output)chooseOutput(b.dataset.output);if(b.dataset.input){const [to,i]=b.dataset.input.split(':');chooseInput(to,Number(i));}if(b.dataset.node&&!suppressNodeClick)select(b.dataset.node);});
+ overlay.addEventListener('click',e=>{const b=e.target.closest('button');if(!b||busy)return;if(b.hasAttribute('data-delete-node')){removeModule(b.dataset.deleteNode);return;}if(b.hasAttribute('data-close-node')){actionNode=null;labels();return;}if(b.hasAttribute('data-delete-wire')){deleteWire();return;}if(b.hasAttribute('data-close-wire')){selectedWire=null;labels();return;}if(b.hasAttribute('data-dismiss-result')){e.stopPropagation();fault=null;$('#run-report').hidden=true;labels();$('#run').focus({preventScroll:true});return;}if(wantsPan(e))return;if(b.dataset.assign){select(b.dataset.assign);say(I18n.t("把芯片标记拖到目标区域，或点击下方 CPU / GPU / ANE。"));return;}if(b.dataset.suppress)return;if(b.dataset.output)chooseOutput(b.dataset.output);if(b.dataset.input){const [to,i]=b.dataset.input.split(':');chooseInput(to,Number(i));}if(b.dataset.node&&!suppressNodeClick)select(b.dataset.node);});
  overlay.addEventListener('keydown',e=>{const b=e.target.closest('[data-node]');if(b&&e.key==='Enter'){e.preventDefault();focus(b.dataset.node);}});
  function activeFollowPackets(){return packets.filter(p=>p.wasActive||p.motion==='feedback');}
  function followTracking(active=activeFollowPackets()){
@@ -1217,18 +1228,19 @@ try{
   glideToFollow();
  }
  function setFollow(enabled){followData=!!enabled;if(!followData)stopFollowFlight();$('#demo-follow').setAttribute('aria-pressed',String(followData));if(followData){cameraPan=false;$('#demo-pan').setAttribute('aria-pressed','false');}}
+ const wantsPan=e=>!focusId&&(cameraPan||e.shiftKey||e.button===1||e.button===2);
  function dragCamera(e){
   if(stage().floating&&!focusId)setFollow(false);
-  const pan=stage().floating&&!focusId&&(cameraPan||e.shiftKey||e.button===1||e.button===2);
+  const pan=wantsPan(e);
   drag={kind:'camera',x:e.clientX,y:e.clientY,yaw,pitch,moved:false,pan,target:cameraTarget.clone(),right:new T.Vector3().setFromMatrixColumn(camera.matrixWorld,0),up:new T.Vector3().setFromMatrixColumn(camera.matrixWorld,1),units:23*zoom/host.clientWidth};
  }
- for(const target of [host,overlay])target.addEventListener('contextmenu',e=>{if(stage().floating)e.preventDefault();});
+ for(const target of [host,overlay])target.addEventListener('contextmenu',e=>{if(!focusId)e.preventDefault();});
  $('#demo-follow').onclick=()=>setFollow(!followData);
  $('#demo-follow-next').onclick=cycleFollow;
  $('#demo-follow-view').onchange=e=>{if(!followProfiles[e.target.value])return;followView=e.target.value;followZoom=null;setFollow(true);};
- $('#demo-pan').onclick=()=>{setFollow(false);cameraPan=!cameraPan;$('#demo-pan').setAttribute('aria-pressed',String(cameraPan));};
- overlay.addEventListener('pointerdown',e=>{if(transitioning)return;if(busy){dragCamera(e);return;}const b=e.target.closest('button');if(!b)return;if(stage().demonstration){dragCamera(e);if(!drag.pan)drag.inspect=b.dataset.node;return;}if(b.dataset.assign){selected=b.dataset.assign;drag={kind:'device',id:b.dataset.assign,x:e.clientX,y:e.clientY,moved:false};return;}if(b.dataset.output){clearConnectionError();drag={kind:'wire',id:b.dataset.output,el:b,x:e.clientX,y:e.clientY,moved:false};}if(b.dataset.node){if(focusId){drag={kind:'camera',x:e.clientX,y:e.clientY,yaw,pitch,moved:false};return;}const n=state.nodes.find(n=>n.id===b.dataset.node),p=worldPoint(e.clientX,e.clientY);selected=n.id;actionNode=null;drag={kind:'node',id:n.id,x:e.clientX,y:e.clientY,moved:false,old:clone(state),offset:p?[n.x-p.x,n.z-p.z]:[0,0]};renderShelf();}});
- host.addEventListener('pointerdown',e=>{if(transitioning)return;if(busy){dragCamera(e);return;}if(stage().floating&&!focusId){dragCamera(e);ray.setFromCamera(new T.Vector2((e.clientX-host.getBoundingClientRect().left)/host.clientWidth*2-1,-((e.clientY-host.getBoundingClientRect().top)/host.clientHeight)*2+1),camera);let hit=ray.intersectObjects(assembly.children,true)[0]?.object;while(hit&&!hit.userData.node)hit=hit.parent;if(!drag.pan)drag.inspect=hit?.userData.node;return;}if(placing){const p=worldPoint(e.clientX,e.clientY);if(p)placeModule(p.x,p.z);return;}if(selectedWire||actionNode){selectedWire=actionNode=null;labels();}if(focusId){drag={kind:'camera',x:e.clientX,y:e.clientY,yaw,pitch,moved:false};return;}const p=worldPoint(e.clientX,e.clientY),hit=ray.intersectObjects(assembly.children,true)[0];if(hit){let object=hit.object;while(object&&!object.userData.node)object=object.parent;if(object?.userData.node){if(stage().demonstration){dragCamera(e);drag.inspect=object.userData.node;return;}const n=state.nodes.find(n=>n.id===object.userData.node);selected=n.id;actionNode=null;drag={kind:'node',id:n.id,x:e.clientX,y:e.clientY,moved:false,old:clone(state),offset:p?[n.x-p.x,n.z-p.z]:[0,0]};renderShelf();return;}}drag={kind:'camera',x:e.clientX,y:e.clientY,yaw,pitch,moved:false};if(pending){pending=null;clearConnectionError();labels();clearPreview();say(I18n.t("已取消连线。"));}});
+ $('#demo-pan').onclick=()=>{setFollow(false);cameraPan=!cameraPan;$('#demo-pan').setAttribute('aria-pressed',String(cameraPan));if(cameraPan){pending=selectedWire=placing=actionNode=null;clearPreview();clearPlacement();labels();renderShelf();}};
+ overlay.addEventListener('pointerdown',e=>{if(transitioning)return;if(busy||wantsPan(e)){dragCamera(e);return;}const b=e.target.closest('button');if(!b)return;if(stage().demonstration){dragCamera(e);if(!drag.pan)drag.inspect=b.dataset.node;return;}if(b.dataset.assign){selected=b.dataset.assign;drag={kind:'device',id:b.dataset.assign,x:e.clientX,y:e.clientY,moved:false};return;}if(b.dataset.output){clearConnectionError();drag={kind:'wire',id:b.dataset.output,el:b,x:e.clientX,y:e.clientY,moved:false};}if(b.dataset.node){if(focusId){drag={kind:'camera',x:e.clientX,y:e.clientY,yaw,pitch,moved:false};return;}const n=state.nodes.find(n=>n.id===b.dataset.node),p=worldPoint(e.clientX,e.clientY);selected=n.id;actionNode=null;drag={kind:'node',id:n.id,x:e.clientX,y:e.clientY,moved:false,old:clone(state),offset:p?[n.x-p.x,n.z-p.z]:[0,0]};renderShelf();}});
+ host.addEventListener('pointerdown',e=>{if(transitioning)return;if(busy||wantsPan(e)){dragCamera(e);return;}if(stage().floating&&!focusId){dragCamera(e);ray.setFromCamera(new T.Vector2((e.clientX-host.getBoundingClientRect().left)/host.clientWidth*2-1,-((e.clientY-host.getBoundingClientRect().top)/host.clientHeight)*2+1),camera);let hit=ray.intersectObjects(assembly.children,true)[0]?.object;while(hit&&!hit.userData.node)hit=hit.parent;if(!drag.pan)drag.inspect=hit?.userData.node;return;}if(placing){const p=worldPoint(e.clientX,e.clientY);if(p)placeModule(p.x,p.z);return;}if(selectedWire||actionNode){selectedWire=actionNode=null;labels();}if(focusId){drag={kind:'camera',x:e.clientX,y:e.clientY,yaw,pitch,moved:false};return;}const p=worldPoint(e.clientX,e.clientY),hit=ray.intersectObjects(assembly.children,true)[0];if(hit){let object=hit.object;while(object&&!object.userData.node)object=object.parent;if(object?.userData.node){if(stage().demonstration){dragCamera(e);drag.inspect=object.userData.node;return;}const n=state.nodes.find(n=>n.id===object.userData.node);selected=n.id;actionNode=null;drag={kind:'node',id:n.id,x:e.clientX,y:e.clientY,moved:false,old:clone(state),offset:p?[n.x-p.x,n.z-p.z]:[0,0]};renderShelf();return;}}drag={kind:'camera',x:e.clientX,y:e.clientY,yaw,pitch,moved:false};if(pending){pending=null;clearConnectionError();labels();clearPreview();say(I18n.t("已取消连线。"));}});
  $('#module-palette').addEventListener('pointerdown',e=>{const b=e.target.closest('[data-add-module]');if(!b||b.dataset.addDisabled==='true'||busy||focusId)return;e.preventDefault();chooseModule(b.dataset.addModule);drag={kind:'palette',id:placing,x:e.clientX,y:e.clientY,moved:false};});
  $('#module-shelf').addEventListener('toggle',()=>{const shelf=$('#module-shelf');shelf.querySelector('summary').title=shelf.hasAttribute('open')?I18n.t('收起组件架'):I18n.t('展开组件架');render();});
  document.addEventListener('pointermove',e=>{if(placing)previewPlacement(e.clientX,e.clientY);if(!drag||(busy&&drag.kind!=='camera'))return;if(Math.hypot(e.clientX-drag.x,e.clientY-drag.y)>5)drag.moved=true;if(!drag.moved)return;if(drag.kind==='wire'){pending=drag.id;previewAt(e.clientX,e.clientY);}if(drag.kind==='node'){const p=worldPoint(e.clientX,e.clientY),n=state.nodes.find(n=>n.id===drag.id);if(p){const b=M.bounds(stage());n.x=Math.max(b.left,Math.min(b.right,p.x+drag.offset[0]));n.z=Math.max(b.back,Math.min(b.front,p.z+drag.offset[1]));rebuild();}}if(drag.kind==='camera'){const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(drag.pan){cameraTarget.copy(drag.target).addScaledVector(drag.right,-dx*drag.units).addScaledVector(drag.up,dy*drag.units);}else{yaw=stage().floating?drag.yaw-dx*.005:Math.max(-.65,Math.min(.65,drag.yaw-dx*.003));pitch=Math.max(stage().floating?-1.4:.4,Math.min(stage().floating?1.4:1.35,drag.pitch+dy*.004));}render();}});

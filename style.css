@@ -89,6 +89,7 @@ body{min-width:1080px}#game{max-width:1920px;padding:18px 24px}main{grid-templat
 .card-silu-link>b{font:600 11px ui-monospace,monospace}.card-silu-link i{text-align:center;font:16px/1.2 sans-serif;opacity:.4}.card-silu-link i.example-focus{opacity:1;font-weight:700}
 .card-silu-worked{margin-top:9px;padding:8px 10px;border-left:2px solid var(--card-accent);background:#fffdf280;border-radius:0 5px 5px 0}
 .card-silu-worked small{margin:0 0 5px}.card-silu-worked code{font:12px/1.8 ui-monospace,monospace;color:var(--card-accent)}
+.card-layernorm-steps{display:grid;gap:6px}.card-layernorm-steps>b{font-size:12px}.card-layernorm-steps>code{display:block;overflow-wrap:anywhere}
 .module-card .card-silu-use{font-size:10px;margin:9px 0 5px;color:#857756}
 #mission-reason[hidden],#mission-reason [hidden]{display:none}#mission-reason{margin-top:13px;padding-top:11px;border-top:1px solid #cbd6c5}
 #mission-reason h3{font-size:12px;font-weight:600;color:#365a4d}#mission-reason p{font-size:11px;line-height:1.65;margin-top:6px}
@@ -454,7 +455,7 @@ body[data-screen=levels] #level-menu::backdrop{background:linear-gradient(#54785
 #demo-follow-view{border:1px solid var(--line);border-radius:7px;background:#fffdf5;color:var(--ink);padding:6px;font:inherit;font-size:11px}#demo-follow-view[hidden]{display:none}
 
 .demo-level .demo-section-label{color:var(--section-color)}
-.demo-level #demo-pan[aria-pressed="true"],.demo-level #demo-follow[aria-pressed="true"]{background:var(--group-accent);color:#fff}
+#demo-pan[aria-pressed="true"],.demo-level #demo-follow[aria-pressed="true"]{background:var(--group-accent);color:#fff}
 
 /* The dark exhibit palette is only active in fullscreen. */
 body.demo-level.demo-fullscreen[data-stage-color] .arena{

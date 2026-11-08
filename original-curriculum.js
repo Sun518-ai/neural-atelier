@@ -48,14 +48,14 @@ const sourceIds=[2,0,1],sourceFeatures=()=>position(embed(sourceIds,4)),memory=(
 const def=(name,ins,out,type,hint,extra={})=>({name,ins,out,type,hint,x:0,z:0,...extra});
 const labels={
  relu:L('ReLU · 负数归零','ReLU · zero negative values'),
- ln:L('LayerNorm · 减均值再缩放','LayerNorm · center and scale'),
+ ln:'LayerNorm',
  ffn:L('原版 FFN · ReLU','Original FFN · ReLU'),
  attn:L('双头自注意力','Two-head self-attention'),
  masked:L('双头因果注意力','Two-head masked attention'),
  cross:L('双头交叉注意力','Two-head cross-attention'),
  position:L('正弦位置编码','Sinusoidal positions')
 };
-const lnHint=L('每个 token 单独减去特征均值，再除以标准差。本例 γ = 1、β = 0；不会混合不同 token。','Center each token by its own feature mean, then divide by its standard deviation. Here γ = 1 and β = 0; different tokens are not mixed.');
+const lnHint=L('这块就是 LayerNorm 基础算子。减均值、除以标准差是它内部的计算步骤，不是由前面组件合成的新模块。每个 token 用自己的特征计算；本例固定 γ = 1、β = 0。','This is the basic LayerNorm operator. Subtracting the mean and dividing by the standard deviation are its internal steps, not a new package of earlier modules. Each token uses its own features; this example fixes γ = 1 and β = 0.');
 const ffnHint=L('每个 token 分别经过 Linear → ReLU → Linear。两次投影的偏置在本例设为 0；内部没有门分支和归一化。','Each token follows Linear → ReLU → Linear. Both biases are zero in this example; there is no gate branch or normalization inside.');
 const positionHint=L('原版先把词向量乘 √d_model，再加正弦/余弦位置编码。本例 d_model = 2，位置 p 加 [sin(p), cos(p)]。','The original scales embeddings by √d_model, then adds sinusoidal positions. Here d_model = 2, and position p adds [sin(p), cos(p)].');
 const widePositionHint=L('四维词向量乘 √4，再加 [sin(p), cos(p), sin(p/100), cos(p/100)]。两对特征使用不同频率，仍是原版的相加位置编码。','Scale four-feature embeddings by √4, then add [sin(p), cos(p), sin(p/100), cos(p/100)]. The two pairs use different frequencies, still using the original additive encoding.');
@@ -185,11 +185,11 @@ lesson('residual',L('留一条回来的路','Keep a path back'),['relu-ffn','add
  L('残差不保证数值不变：修改量可以增加、减少，甚至抵消原值。ReLU 仍在 FFN 内部；新加的只是外面的直连路径和相加。','A residual does not keep values unchanged: the update may increase, decrease or cancel them. ReLU remains inside the FFN; only the bypass and addition are new.'),
  {'relu-ffn':['R'],add:['R','relu-ffn'],sink:'add'},x=>plus(x,classicFFN(x)),{scalar:true,buildable:true,requirePlacement:true,inventory:{'relu-ffn':1,add:1},maxModules:2,packages:['relu-ffn'],retiredCircuitKinds:['project','down'],shape:'X + FFN(X) → 2'});
 Object.assign(added.residual.rationale,{kind:'residual',input:[1,0]});
-lesson('layernorm',L('先减均值，再看尺度','Center before scaling'),['layernorm2'],
- L('把每个向量整理到零均值','Center each vector at zero'),
- L('把输入送过 LayerNorm。它先减去这组特征的均值，再除以标准差；所有输入都要匹配。','Pass the input through LayerNorm. Subtract the feature mean and divide by the standard deviation. Match every input.'),
- L('叠很多层时，特征的整体偏移和尺度会变化。LayerNorm 以每个 token 自己的特征为一组，去掉共同偏移并调整尺度，方便后续层处理。','Across many layers, features can shift and change scale. LayerNorm treats each token’s features as one group, removing a shared offset and adjusting their scale for subsequent layers.'),
- L('[1, 3] 的均值是 2、标准差是 1，归一化后约为 [−1, 1]；[6, 8] 也约为 [−1, 1]。学习到的 γ 和 β 还可以重新缩放和平移。','[1, 3] has mean 2 and standard deviation 1, giving approximately [−1, 1]. [6, 8] gives the same result. Learned γ and β can then rescale and shift it.'),
+lesson('layernorm',L('LayerNorm：整理特征的尺度','LayerNorm: normalize feature scale'),['layernorm2'],
+ L('让每个特征表示它比自身均值高或低多少','Express each feature relative to its own mean'),
+ L('本关认识一个基础算子：LayerNorm。它把同一个 token 的特征减去均值，再除以标准差。搭好输入到出口的网络，观察每组数如何先以 0 为中心，再调整幅度。','Meet a basic operator: LayerNorm. It subtracts the mean of one token’s features, then divides by their standard deviation. Build a path from input to outlet and observe each set of values being centered at zero and rescaled.'),
+ L('经过投影和残差相加，同一组特征可能整体偏大，或彼此差距变大。LayerNorm 去掉这组数的共同偏移和尺度，让后续层在较稳定的数值范围内处理相对差异，有助于训练稳定。每个 token 单独计算，不把整句话的数混在一起。','Projections and residual addition can shift a token’s features together or spread them farther apart. LayerNorm removes that shared offset and scale so later layers can work with relative differences in a more stable numerical range, helping training stability. Each token is normalized separately, not together with the whole sentence.'),
+ L('[1, 3] → 减均值 2 → [−1, 1] → 除以标准差 1 → 约 [−1, 1]；[6, 10] 减均值 8、再除以标准差 2，也得到约 [−1, 1]。这些都是 LayerNorm 内部步骤。本关取 γ = 1、β = 0；真实模型还会学习每个特征的缩放 γ 和偏移 β。','[1, 3] → subtract mean 2 → [−1, 1] → divide by standard deviation 1 → approximately [−1, 1]. For [6, 10], subtract mean 8 and divide by standard deviation 2 to get the same result. These are LayerNorm’s internal steps. This lesson uses γ = 1, β = 0; a real model learns a scale γ and offset β for each feature.'),
  {layernorm2:['R'],sink:'layernorm2'},ln,{scalar:true});
 lesson('add-norm',L('先相加，再归一化','Add first, normalize second'),['relu-ffn','add','layernorm2'],
  L('算出 LayerNorm(X + FFN(X))','Compute LayerNorm(X + FFN(X))'),
@@ -202,7 +202,7 @@ lesson('positions',L('同一个词也有不同位置','The same word at differen
  L('查表取词向量，再加入原版的正弦位置编码。改变词的顺序，位置相加后的特征也应改变。','Look up embeddings, then add the original sinusoidal positions. Reordering tokens must change the position-enriched features.'),
  L('仅靠词向量，注意力不知道词出现在哪里。把确定的位置模式加进输入，后续 Q/K/V 就能同时利用词和位置。','Embeddings alone do not tell Attention where a token occurs. Adding a deterministic position pattern lets later Q/K/V projections use both the token and its position.'),
  L('本例只有一对特征：PE(p) = [sin(p), cos(p)]。原版更宽的向量使用多组频率；这是相加，不是 RoPE 对 Q/K 做旋转。','This example has one feature pair: PE(p) = [sin(p), cos(p)]. Wider original models use multiple frequencies. This adds to embeddings; it does not rotate Q/K as RoPE does.'),
- {embedding:['R'],position:['embedding'],sink:'position'},ids=>position(embed(ids)),{sourceDim:3,sourceTitle:'Token ID',shape:'3 ID → 3 × 2'});
+ {embedding:['R'],position:['embedding'],sink:'position'},ids=>position(embed(ids)),{outputArrivalHold:450,sourceDim:3,sourceTitle:'Token ID',shape:'3 ID → 3 × 2'});
 lesson('weighted-sum',L('按比例取回内容','Read content in proportion'),['original-weights','v','aggregate'],
  L('用注意力权重组合 V','Combine V using attention weights'),
  L('前面学过的打分和 Softmax 已封装。将它算出的比例与 V 送入汇合模块，为每个位置得到两个输出特征。','Scoring and Softmax are packaged from earlier lessons. Feed their proportions and V into aggregation to produce two output features per position.'),
@@ -702,7 +702,22 @@ for(const id of operatorIds){
  const d=M.definitions[id],w=M.weights[id];cards[id]={number:'',seal:id.slice(0,1).toUpperCase(),english:id.toUpperCase().replaceAll('-',' '),family:L('原版 Transformer','Original Transformer'),color:'#'+M.extraColors[id].toString(16).padStart(6,'0'),ability:d.name,meaning:d.hint,purpose:scope,weight:w?w.length+' × '+w[0].length:L('无 / 已封装','None / packaged'),trait:L('数值计算','Numerical computation'),stage:0};
 }
 Object.assign(cards.relu,{formula:'Aᵢ = max(0, Pᵢ)',purpose:L('正值沿直线通过，负值停在 0。输入符号会改变通过的特征，因此在线性层之间加入非线性。','Positive values pass along a straight line; negative values stop at zero. The input sign changes which features pass, adding nonlinearity between linear layers.')});
-for(const id of ['layernorm2','ln-attn','ln-ffn','ln-cross'])cards[id].formula='LN(x) = (x − μ) / √(variance(x) + ε) · γ + β';
+for(const id of ['layernorm2','ln-attn','ln-ffn','ln-cross'])Object.assign(cards[id],{
+ english:'LAYERNORM',family:L('基础算子 · 归一化','Basic operator · Normalization'),
+ ability:L('去掉共同偏移，再统一尺度','Remove a shared offset, then normalize scale'),
+ formula:'LN(x) = γ ⊙ ((x − μ) / √(σ² + ε)) + β',
+ purpose:L('投影和残差相加会改变特征的大小与偏移。LayerNorm 用当前 token 自己的均值和标准差，把相对差异放到较稳定的尺度上，方便后续层处理。在原版 Transformer 中，它位于残差相加之后；后面的“先相加，再归一化”关会把两者接起来。','Projections and residual addition can change feature scale and offset. LayerNorm uses the current token’s own mean and standard deviation to put relative differences on a more stable scale for later layers. The original Transformer applies it after residual addition; the later Add first, normalize second lesson connects those steps.'),
+ weight:L('γ = 1，β = 0（本例固定）','γ = 1, β = 0 (fixed here)'),
+ trait:L('每个 token 独立归一化','Normalize each token independently')
+});
+M.layerNormGuide={
+ center:L('1 · 减去均值','1 · Subtract the mean'),
+ scale:L('2 · 除以标准差','2 · Divide by the standard deviation'),
+ affine:L('3 · 按特征缩放与平移','3 · Scale and shift each feature'),
+ parameters:L('γ 和 β 是可学习参数；本例固定为 1 和 0，所以这一步保持上面的结果。ε = 0.000001，防止所有特征相同时除以 0。','γ and β are learnable parameters. Here they are fixed at 1 and 0, so this step leaves the result above unchanged. ε = 0.000001 prevents division by zero when all features are equal.'),
+ input:L('输入特征','Input features'),output:L('归一化结果','Normalized result'),parameterTitle:L('归一化参数','Normalization parameters')
+};
+I18n.prepare(M.layerNormGuide);
 for(const id of ['relu-ffn','original-ffn-block'])cards[id].formula='FFN(x) = ReLU(xW1 + b1)W2 + b2';
 for(const id of ['single-attention','single-cross-attention','two-head-attention']){
  cards[id].formula=id==='two-head-attention'?'Y = Concat(head A, head B) × Wo':'Y = softmax(QKᵀ / √'+(id==='single-attention'?'2':'4')+') × V × Wo';
@@ -912,7 +927,7 @@ M.extraExample=(id,levelId)=>{
  const ex={sampleIndex,exampleSource:[names.R,input],inputs:n.links.map(k=>[names[k]||k,ev.values[k]]),output:[names[id]||id,ev.values[id]]};
  if(id==='relu')ex.activation={kind:'relu',feature:3};
  if(M.definitions[id].type==='add')ex.addition={feature:0};
- if(M.definitions[id].type==='layernorm'){const width=M.definitions[id].ins[0]===12?4:2,v=ev.values[n.links[0]].slice(0,width),mean=v.reduce((a,b)=>a+b,0)/width,variance=v.reduce((s,x)=>s+(x-mean)**2,0)/width;ex.normalization={mean,variance,epsilon:eps};}
+ if(M.definitions[id].type==='layernorm'){const width=M.definitions[id].ins[0]===12?4:2,v=ev.values[n.links[0]].slice(0,width),mean=v.reduce((a,b)=>a+b,0)/width,variance=v.reduce((s,x)=>s+(x-mean)**2,0)/width;ex.normalization={width,mean,variance,epsilon:eps};}
  return ex;
 };
 })(window.NeuralPrologue);

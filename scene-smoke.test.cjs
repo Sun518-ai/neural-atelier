@@ -16,6 +16,61 @@ async function boot({reduced=true,frameMs=1000,onFrame=()=>{},languages=['zh-CN'
  await vm.runInContext('(async()=>{'+src+'})()',c);
  assert.ok(c.testAPI.getWorld(),'3D boot failed');return {c,document,window,api:c.testAPI,scenes,time:()=>now,setFrameMs:value=>{frameMs=value;},view:()=>view,camera:()=>renderedCamera};
 }
+test('every board can pan with the button or a modifier without moving modules or wiring',async()=>{
+ const app=await boot(),doc=app.document,M=app.c.NeuralPrologue,T=app.c.T;
+ const fire=(target,type,props={})=>{const e=new app.window.Event(type,{bubbles:true,cancelable:true});Object.assign(e,props);target.dispatchEvent(e);};
+ const drag=(target,props={})=>{fire(target,'pointerdown',{clientX:40,clientY:40,...props});fire(doc,'pointermove',{clientX:180,clientY:110});fire(doc,'pointerup',{clientX:180,clientY:110});};
+ for(const id of ['wire','embedding','ffn','kv-cache']){
+  app.api.switchLevel(id);app.api.setState(M.solutions(id));app.api.getWorld().rebuild();app.api.refresh();
+  const saved=JSON.stringify(app.api.getState()),button=doc.querySelector('#demo-pan'),host=doc.querySelector('#scene'),direction=()=>app.camera().getWorldDirection(new T.Vector3()),initial=app.camera().position.clone();
+  host.getBoundingClientRect=()=>({left:0,top:0,width:1400,height:760});
+  assert.equal(button.hidden,false);assert.equal(button.getAttribute('aria-pressed'),'false');
+  button.onclick();assert.equal(button.getAttribute('aria-pressed'),'true');const heading=direction();
+  drag(host);assert.ok(app.camera().position.distanceTo(initial)>1);assert.ok(direction().distanceTo(heading)<1e-9);
+  const label=doc.querySelector('.node-label')||doc.querySelector('[data-output="R"]'),before=app.camera().position.clone();
+  drag(label);fire(label,'click');assert.ok(app.camera().position.distanceTo(before)>1);assert.equal(JSON.stringify(app.api.getState()),saved);
+  fire(doc.querySelector('[data-output="R"]'),'click');fire(doc.querySelector('[data-input="sink:0"]'),'click');assert.equal(JSON.stringify(app.api.getState()),saved,'pan mode does not start a wire');
+  button.onclick();doc.querySelector('#camera-reset').onclick();assert.ok(app.camera().position.distanceTo(initial)<1e-9);
+  for(const props of [{shiftKey:true},{button:2}]){const before=app.camera().position.clone();drag(host,props);assert.ok(app.camera().position.distanceTo(before)>1);assert.ok(direction().distanceTo(heading)<1e-9);}
+  drag(host);assert.ok(direction().distanceTo(heading)>.01,id+' normal dragging orbits again after leaving pan mode');
+  assert.equal(JSON.stringify(app.api.getState()),saved);
+ }
+ app.c.I18n.setPreference('en');assert.equal(doc.querySelector('#demo-pan').textContent,'Pan view');
+});
+
+test('embedding and position outlets hold arrived matrices, pulse, then clear before the next IDs',async()=>{
+ for(const levelId of ['embedding','positions']){
+ let app,mode='complete',paused=false,pauseFrames=0,pausedView,pausedResult,stopped=false;const seen=new Set(),holds=new Map(),pulses=[];
+ const outlet=()=>{const out=[];app.scenes.at(-1).traverse(o=>{if(o.userData.sinkRow!=null){const text=o.children.filter(c=>c.material?.map).map(c=>c.material.map.image.drawnText);out[o.userData.sinkRow]={values:text.slice(2),status:text[1],flash:o.children[0].material.emissiveIntensity};}});return out;};
+ const blank=()=>outlet().every(r=>r.values.every(v=>v==='·'));
+ const fire=(target,type,props={})=>{const e=new app.window.Event(type,{bubbles:true,cancelable:true});Object.assign(e,props);target.dispatchEvent(e);};
+ app=await boot({reduced:false,frameMs:80,onFrame:({document,now})=>{
+  if(!app||mode==='stopped')return;const M=app.c.NeuralPrologue,name=document.querySelector('#sample-name').textContent,sample=M.samplesFor(levelId).find(s=>s.word===name);if(!sample)return;
+  const source=document.querySelector('.packet[data-from="R"][data-motion="wire"]:not([hidden])'),outgoing=document.querySelector('.packet[data-to="sink"][data-motion="wire"]:not([hidden])');
+  if(source||outgoing){assert.ok(blank(),'the previous matrix is gone and this one has not arrived yet');seen.add((source?'cleared:':'travelling:')+name);}
+  const displayed=outlet(),values=displayed.flatMap(r=>r.values);
+  if(mode==='disconnected'){assert.ok(values.every(v=>v==='·'||v==='—'));return;}
+  if(!values.some(v=>v!=='·')||displayed.some(r=>r.status!=='·'))return;
+  assert.deepEqual(values,Array.from(M.evaluate(app.api.getState(),sample.v).output,v=>String(Number(v.toFixed(2)))));
+  if(mode==='stop'){mode='stopped';stopped=true;app.api.run();assert.ok(blank(),'stop clears the ungraded matrix and its pulse');return;}
+  if(!holds.has(name))holds.set(name,[]);holds.get(name).push(now);pulses.push(displayed[0].flash);
+  if(!paused){paused=true;app.api.togglePause();pausedResult=JSON.stringify(displayed);pausedView=app.camera().position.clone();document.querySelector('#demo-pan').onclick();}
+  if(pauseFrames<3){
+   assert.equal(JSON.stringify(outlet()),pausedResult,'pause freezes numbers and pulse');pauseFrames++;
+   if(pauseFrames===2){fire(document.querySelector('#scene'),'pointerdown',{clientX:600,clientY:300});fire(document,'pointermove',{clientX:680,clientY:340});fire(document,'pointerup',{});assert.ok(app.camera().position.distanceTo(pausedView)>1);}
+   if(pauseFrames===3)app.api.togglePause();
+  }
+ }});
+ const M=app.c.NeuralPrologue,doc=app.document;doc.querySelector('#welcome').close();app.api.switchLevel(levelId);const state=M.solutions(levelId);app.api.setState(state);app.api.getWorld().rebuild();const saved=JSON.stringify(state);
+ assert.ok(blank());await app.api.run();assert.equal(JSON.stringify(state),saved);assert.equal(doc.querySelectorAll('#test-results .pass').length,3);
+ for(const {word}of M.samplesFor(levelId)){assert.ok(seen.has('cleared:'+word));assert.ok(seen.has('travelling:'+word));const times=holds.get(word);assert.ok(times.at(-1)-times[0]>=1600,'the slowest setting holds each complete matrix long enough to read');}
+ assert.ok(Math.max(...pulses)>.3);assert.ok(pulses.includes(0));assert.equal(pauseFrames,3);
+ assert.deepEqual(outlet().flatMap(r=>r.values),Array.from(M.evaluate(state,M.samplesFor(levelId).at(-1).v).output,v=>String(Number(v.toFixed(2)))));assert.ok(outlet().every(r=>r.status==='✓'),'the final matrix remains after completion');
+ mode='stop';const replay=app.api.run();assert.ok(blank());await replay;assert.ok(stopped);
+ mode='disconnected';state.sink=null;app.api.getWorld().rebuild();await app.api.run();assert.equal(doc.querySelectorAll('#test-results .fail').length,1);assert.ok(outlet().every(r=>r.flash===0));
+ }
+});
+
 test('a full restart replaces visible residual wires with the tutorial start and undo restores the scene',async()=>{
  const app=await boot(),doc=app.document;app.api.switchLevel('residual');
  app.api.setState(app.c.NeuralPrologue.solutions('residual'));app.api.getWorld().rebuild();app.api.refresh();
@@ -60,7 +115,7 @@ test('floating demonstration supports full orbit, pan and cursor zoom without ed
  const anchor=ray.ray.intersectPlane(new T.Plane().setFromNormalAndCoplanarPoint(direction(),new T.Vector3()),new T.Vector3());
  fire(host,'wheel',{clientX:(cursor.x+1)*700,clientY:(1-cursor.y)*380,deltaY:-800});
  const projected=anchor.clone().project(app.camera());assert.ok(Math.abs(projected.x-cursor.x)<1e-9&&Math.abs(projected.y-cursor.y)<1e-9,'zoom stays anchored under the cursor');
- assert.equal(JSON.stringify(app.api.getState()),saved);app.api.switchLevel('wire');assert.ok(app.camera().isOrthographicCamera);assert.ok(scene.children.find(o=>o.userData.environmentFloor).visible);assert.equal(doc.querySelector('#demo-pan').hidden,true);assert.equal(doc.querySelector('#demo-follow-view').hidden,true);
+ assert.equal(JSON.stringify(app.api.getState()),saved);app.api.switchLevel('wire');assert.ok(app.camera().isOrthographicCamera);assert.ok(scene.children.find(o=>o.userData.environmentFloor).visible);assert.equal(doc.querySelector('#demo-pan').hidden,false);assert.equal(doc.querySelector('#demo-follow-view').hidden,true);
 });
 test('follow switch cycles live data while paused and follows the selected branch through handoffs',async()=>{
  let app,phase=0,frozen=null;const selectedNode='masked-a-q-2',targets=new Set();
@@ -821,6 +876,28 @@ test('cross-attention uses separate four-feature source racks and distinct trave
  app.api.getWorld().focus('original-k');assert.match(app.document.querySelector('#card-formula').textContent,/E/);
  const example=app.document.querySelector('#card-example-values');assert.doesNotMatch(example.textContent,/original-|\bwide-/);assert.ok(example.querySelector('[style*="repeat(4"]'));
  app.document.querySelector('#card-close').onclick();assert.equal(app.document.querySelectorAll('.packet').length,0);assert.deepEqual([...app.c.I18n.missing],[]);
+});
+
+test('LayerNorm cards show the actual per-token centering and scaling as one basic operator',async()=>{
+ const app=await boot(),M=app.c.NeuralPrologue,doc=app.document;
+ for(const language of ['zh','en']){
+  app.c.I18n.setPreference(language);
+  for(const [level,kind,width]of [['layernorm','layernorm2',2],['encoder-layer','ln-attn',4],['decoder-layer','ln-cross',4]]){
+   app.api.switchLevel(level);app.api.setState(M.solutions(level));app.api.getWorld().rebuild();app.api.getWorld().focus(kind);
+   const ex=M.extraExample(kind,level),n=ex.normalization,input=Array.from(ex.inputs[0][1]).slice(0,width),centered=input.map(x=>x-n.mean),result=centered.map(x=>x/Math.sqrt(n.variance+n.epsilon));
+   assert.equal(n.width,width);assert.ok(Math.abs(centered.reduce((a,b)=>a+b,0))<1e-9);
+   assert.ok(result.every((x,i)=>Math.abs(x-ex.output[1][i])<1e-9));
+   assert.equal(doc.querySelector('#card-package').hidden,true);assert.equal(M.packageOrigin(kind),null);
+   assert.equal(doc.querySelectorAll('.card-layernorm-steps>b').length,3);
+   const rendered=doc.querySelector('.card-layernorm-steps').textContent;
+   for(const text of ['μ =','σ² =','γ','β','0.000001'])assert.ok(rendered.includes(text),text);
+   assert.doesNotMatch(rendered,/undefined|NaN/);assert.doesNotMatch(doc.querySelector('#card-stats').textContent,/已封装|packaged/);
+   if(language==='en')assert.doesNotMatch(rendered+doc.querySelector('#card-family').textContent,/[\u3400-\u9fff]/);
+   if(kind==='layernorm2'){assert.equal(doc.querySelector('#card-name').textContent,'LayerNorm');assert.ok(rendered.includes('[0.5, −0.5]')||rendered.includes('[0.5, -0.5]'));}
+   doc.querySelector('#card-close').onclick();
+  }
+ }
+ assert.deepEqual([...app.c.I18n.missing],[]);
 });
 
 test('original LayerNorm animates centering and scaling on four features and clears its highlights after stopping',async()=>{

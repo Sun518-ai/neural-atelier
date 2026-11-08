@@ -405,7 +405,7 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   }
   return active;
  }
- function sync(values,depths,depth,selected,activeSample,results,busy,layout={},output=null,tokenPreview=null,timeline=null){
+ function sync(values,depths,depth,selected,activeSample,results,busy,layout={},output=null,tokenPreview=null,timeline=null,arrivalPreview=null){
   if(!busy)clearProcessing();
   for(const [id,u]of units){const timing=timeline?.nodes.get(id),completed=values?.[id]&&(timing?timeline.time>=timing.end:(depths[id]||0)<=depth),active=busy&&(timing?timeline.time>=timing.start&&timeline.time<timing.end:depths[id]===depth),sel=id===selected;
    u.glow.material.emissiveIntensity=active?1.6:sel?.9:completed?.45:.12;
@@ -419,10 +419,15 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   const sourceValues=layout.dualSource?window.NeuralPrologue.sourceValues({levelId:layout.id},input):null;
   tokens.forEach(t=>{const i=t.index,secondary=t.sourceId==='Z',v=secondary?sourceValues.Z:input;t.label.write(secondary?window.NeuralPrologue.math.vocab[layout.secondaryTokenIds[i]]:words[i]);t.g.userData.active=busy&&(seq||i===activeSample);t.cells.forEach((c,j)=>{const value=seq?v[i*t.cells.length+j]:samples[i].v[j];c.write(Number.isFinite(value)?Number(value.toFixed(2)).toString():'·');});});
   pulseSource();
+  outputReadout(activeSample,results,busy,layout,tokenPreview,arrivalPreview);
+ }
+ function outputReadout(activeSample,results,busy,layout={},tokenPreview=null,arrivalPreview=null){
+  const seq=!!layout.sequence,flash=arrivalPreview?.pulse||0;
   rows.forEach((r,i)=>{
-   const active=busy&&(seq||i===activeSample);r.g.userData.active=active;r.stripe.material.emissiveIntensity=active?1.3:.1;
+   const active=busy&&(seq||i===activeSample);r.g.userData.active=active;r.stripe.material.emissiveIntensity=layout.outputArrivalHold?(arrivalPreview ? .3+1.6*flash : .1):active?1.3:.1;
+   r.panel.material.emissive.set(rowColor(i));r.panel.material.emissiveIntensity=.4*flash;
    const result=seq?results[activeSample]:results[i],offset=seq?i*r.cells.length:0;
-   const actual=result?.actual||(layout.tokenOutput?tokenPreview:null);
+   const actual=result?.actual||arrivalPreview?.values||(layout.tokenOutput?tokenPreview:null);
    const rowPass=result&&(seq?actual&&r.cells.every((_,j)=>Number.isFinite(actual[offset+j])&&Math.abs(actual[offset+j]-result.expected[offset+j])<(layout.engine?(layout.limits?.error||.06):1e-9)):result.pass);
    const tone=!result?'#558974':rowPass?'#397c61':'#a14d3d';
    r.panel.material.color.set(!result?0xc8d9c5:rowPass?0xbcd8c4:0xe6c1ac);
@@ -1007,5 +1012,5 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
   };
  }
  function resetUnits(){units.clear();}
- return {selectionFrame,selectionChoice,selectionAnchor,routeSelectionInput,routeSelectionOutput,surroundings,module,sync,fusionVisual,focusCalculations,updateDetail,detailsVisible:()=>detailModes[detailScope],pulseSource,layerNormFrame,layerNormStats,layerNormAnchor,routeLayerNormInput,routeLayerNormOutput,tokenOperation,tokenFrame,tokenAnchor,routeTokenInput,routeTokenOutput,projectionFrame,sequenceProjectionFrame,routeSequenceProjectionInput,routeSequenceProjectionOutput,routeAggregationValues,rmsFrame,rmsAnchor,routeRMSOutput,projectionColor,pairColorsFor:id=>units.get(id)?.pairTones||pairColors,processing,clearProcessing,packet,prepareProjectionPacket,routeProjectionPacket,routePairedPacket,projectionOutlet,projectionRadius,prepareProjectionOutput,routeProjectionOutput,featureColor,rowColor,rowZ,sourceOffset,resetUnits,focus(active){context.visible=!active;floor.visible=!active&&!context.userData.layout?.floating;detailScope=active?'card':'board';if(active)detailModes.card=true;}};
+ return {outputReadout,selectionFrame,selectionChoice,selectionAnchor,routeSelectionInput,routeSelectionOutput,surroundings,module,sync,fusionVisual,focusCalculations,updateDetail,detailsVisible:()=>detailModes[detailScope],pulseSource,layerNormFrame,layerNormStats,layerNormAnchor,routeLayerNormInput,routeLayerNormOutput,tokenOperation,tokenFrame,tokenAnchor,routeTokenInput,routeTokenOutput,projectionFrame,sequenceProjectionFrame,routeSequenceProjectionInput,routeSequenceProjectionOutput,routeAggregationValues,rmsFrame,rmsAnchor,routeRMSOutput,projectionColor,pairColorsFor:id=>units.get(id)?.pairTones||pairColors,processing,clearProcessing,packet,prepareProjectionPacket,routeProjectionPacket,routePairedPacket,projectionOutlet,projectionRadius,prepareProjectionOutput,routeProjectionOutput,featureColor,rowColor,rowZ,sourceOffset,resetUnits,focus(active){context.visible=!active;floor.visible=!active&&!context.userData.layout?.floating;detailScope=active?'card':'board';if(active)detailModes.card=true;}};
 }
