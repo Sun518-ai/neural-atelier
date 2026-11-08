@@ -226,8 +226,8 @@ html[lang=en] .chapter strong{font-size:19px;letter-spacing:0}html[lang=en] .mis
 .shelf-size-controls button{width:18px;min-height:21px;padding:0;border:0;border-radius:4px;background:transparent;color:#658173;font:16px/21px sans-serif}
 .shelf-size-controls button:hover:not(:disabled){background:#e5eddf}
 #module-palette{display:grid;gap:4px;max-height:min(400px,calc(100vh - 335px));overflow-y:auto;scrollbar-width:thin;padding:5px 1px 2px;overscroll-behavior:contain}
-.shelf-current,.shelf-earlier-list{display:grid;gap:4px}
-.shelf-current h4{margin:1px 1px 4px;font-size:10px;font-weight:500;line-height:1.5;color:#688471}
+.shelf-current,.shelf-earlier-list,.shelf-earlier-group{display:grid;gap:4px}
+.shelf-current h4,.shelf-earlier-group h4{margin:1px 1px 4px;font-size:10px;font-weight:500;line-height:1.5;color:#688471}
 .shelf-earlier{margin-top:5px;padding-top:7px;border-top:1px solid #d3decf}
 .shelf-earlier>summary{display:flex;gap:4px;align-items:center;min-height:30px;color:#56745f;font-size:10px;cursor:pointer;list-style:none}
 .shelf-earlier>summary::-webkit-details-marker{display:none}
@@ -377,7 +377,7 @@ body[data-screen=levels] #level-menu::backdrop{background:linear-gradient(#54785
 
 .encoder-stage-path{padding:9px 10px;margin-top:10px;border-left:3px solid #43897a;background:#43897a0b;font-size:12px;font-weight:600;line-height:1.8;color:#365d53}.encoder-job[data-encoder-job=process] .encoder-stage-path{border-color:#846990;background:#8469900b;color:#715780}.encoder-job .encoder-stage-source{font-weight:600}.encoder-job .encoder-stage-finish{margin-top:5px}.progress-setting{align-items:flex-start;flex-direction:column;gap:10px}.progress-setting button,#progress-reset-confirm button{font-size:12px}#progress-reset-confirm{padding:12px;background:#ac694b0b;border:1px solid #d7b6a5;border-radius:9px;margin-bottom:12px}#progress-reset-confirm p,#progress-reset-status{font-size:12px;line-height:1.7;margin:0 0 10px}#progress-reset-confirm>div{display:flex;justify-content:flex-end;gap:8px}#progress-reset-apply{color:#914d36;border-color:#cda18c}#progress-reset-status{color:#45685c}#progress-reset-confirm[hidden],#progress-reset-status[hidden]{display:none}
 
-.shelf-current+.shelf-current{margin-top:8px;padding-top:7px;border-top:1px solid #d3decf}
+.shelf-current+.shelf-current,.shelf-earlier-group+.shelf-earlier-group{margin-top:8px;padding-top:7px;border-top:1px solid #d3decf}
 /* Reserve real space for the open shelf; canvas and hit-target labels share a viewport. */
 .arena{--shelf-space:0px;--shelf-width:176px}
 .arena:has(>#module-shelf[data-size=small]){--shelf-width:112px}

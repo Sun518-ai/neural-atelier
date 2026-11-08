@@ -8,7 +8,7 @@ function boot(storage=new Map(),hash='',languages=['zh-CN']){
  const hashchange=()=>listeners.get('hashchange')?.();
  const navigation={pushState(_,title,url){location.href=new URL(url,location.href).href;entries.splice(++cursor);entries.push(location.href);},replaceState(_,title,url){location.href=new URL(url,location.href).href;entries[cursor]=location.href;},back(){if(cursor){location.href=entries[--cursor];hashchange();}},forward(){if(cursor+1<entries.length){location.href=entries[++cursor];hashchange();}},get length(){return entries.length;}};
  const c={window:{},document,console,navigator:{languages},location,history:navigation,addEventListener:(type,fn)=>listeners.set(type,fn),localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)}};c.window=c;vm.createContext(c);
- for(const file of ['locales/en.js','i18n.js','music.js','shell.js','model.js','campaign.js','engine-model.js','original-curriculum.js','transformer-demo.js','cloud-curriculum.js','structure-map.js'])vm.runInContext(fs.readFileSync(__dirname+'/'+file,'utf8'),c,{filename:file});
+ for(const file of ['locales/en.js','i18n.js','music.js','shell.js','model.js','campaign.js','engine-model.js','original-curriculum.js','transformer-demo.js','cloud-curriculum.js','lesson-io.js','structure-map.js'])vm.runInContext(fs.readFileSync(__dirname+'/'+file,'utf8'),c,{filename:file});
  for(const file of ['module-cards.js','level-progress.js'])vm.runInContext(fs.readFileSync(__dirname+'/'+file,'utf8').replaceAll('export ',''),c,{filename:file});
  let code=fs.readFileSync(__dirname+'/game.js','utf8').replace(/^import .*\n/gm,'');code=code.slice(0,code.indexOf("try{\n const T="));
  vm.runInContext(code+`\nworld={relocalize(){},labels(){},rebuild(){},beforeStage(){},setStage(){},clearPackets(){},focused(){return null},async animate(){}};refresh();`,c);
@@ -132,7 +132,7 @@ test('score input and output describe X, projected Q/K and pairwise scores in bo
  for(const language of ['zh-CN','en-US']){
   const app=boot(new Map(),'#scores',[language]),M=app.c.NeuralPrologue,doc=app.document,before=app.eval('JSON.stringify(state)');
   assert.equal(M.levels.scores.outputPairAxes,true);assert.match(M.levels.scores.outputTitle,language==='zh-CN'?/匹配分数矩阵 S/:/Matching-score matrix S/);
-  assert.match(doc.querySelector('.route').textContent,language==='zh-CN'?/输入矩阵 X/:/Input matrix X/);
+  assert.match(doc.querySelector('.route').textContent,language==='zh-CN'?/输入向量矩阵 X/:/Input vector matrix X/);
   assert.match(doc.querySelector('.mission').textContent,/Q = XWq/);assert.match(doc.querySelector('.mission').textContent,/K = XWk/);assert.match(doc.querySelector('.mission').textContent,/S = QKᵀ \/ √2/);
   const x=M.samplesFor('scores')[0].v,q=M.operations.q([x]),k=M.operations.k([x]);assert.deepEqual(Array.from(q.slice(0,2)),[1,.25]);assert.deepEqual(Array.from(k.slice(2,4)),[.2,1]);assert.equal(+M.reference(x,'scores')[1].toFixed(2),.32);
   assert.deepEqual(Array.from(x),Array.from(M.samplesFor('qkv')[0].v));assert.notDeepEqual(Array.from(x),Array.from(M.reference(x,'qkv')));
@@ -613,7 +613,7 @@ test('the shelf remains usable after the placement tutorial and original lessons
 test('encoder groups old parts without hiding useful distractors or prewiring the challenge',()=>{
  const app=boot(new Map(),'#encoder-layer'),doc=app.document;
  const current=()=>[...doc.querySelectorAll('.shelf-current [data-add-module]')].map(e=>e.dataset.addModule);
- assert.deepEqual(current(),['self-heads','encoder-add','ln-attn','original-ffn-block','ffn-add','ln-ffn','wide-position']);
+ assert.deepEqual(current(),['self-heads','original-ffn-block','encoder-add','ln-attn','ffn-add','ln-ffn','wide-position']);
  assert.ok(doc.querySelector('[data-add-module="ffn-add"]'));assert.ok(doc.querySelector('[data-add-module="ln-ffn"]'));
  assert.equal(doc.querySelector('[data-add-module="original-encoder"]'),null,'the answer package still requires a win');
  assert.equal(doc.querySelector('[data-earlier-parts]').hasAttribute('open'),false);
@@ -973,21 +973,28 @@ test('failed full reset or undo does not switch the active saved run',()=>{
  app.c.localStorage.setItem=write;doc.querySelector('#progress-reset-apply').onclick();before=new Map(app.storage);board=app.eval('JSON.stringify(state)');
  app.c.localStorage.setItem=()=>{throw new Error('Storage unavailable');};doc.querySelector('#progress-restart-undo').onclick();assert.deepEqual(app.storage,before);assert.equal(app.eval('JSON.stringify(state)'),board);assert.equal(app.eval('progress.completed(stageId)'),false);assert.match(doc.querySelector('#progress-reset-status').textContent,/保存失败/);
 });
-test('causal and every later learning shelf group packages without losing old parts or saved circuits',()=>{
+test('every learning shelf groups packages without losing old parts or saved circuits',()=>{
  const app=boot(),M=app.c.NeuralPrologue,doc=app.document;
- const ids=[...M.routes.main.ids.slice(M.routes.main.ids.indexOf('causal')),...M.routes.modern.ids];
- for(const id of ids.filter(id=>!M.levels[id].demonstration)){
+ const ids=[...M.routes.main.ids,...M.routes.modern.ids];
+ for(const id of ids.filter(id=>M.levels[id].buildable&&!M.levels[id].demonstration)){
   app.eval(`switchLevel('${id}');state=M.solutions(stageId);save();refresh()`);const before=app.eval('JSON.stringify(state)');
   const expected=Object.keys(M.inventory(M.levels[id])).filter(kind=>M.fusions[id]?.kind!==kind||M.levels[id].nodes.includes(kind));
   const actual=[...doc.querySelectorAll('[data-add-module]')].map(el=>el.dataset.addModule);
   assert.deepEqual([...actual].sort(),[...expected].sort(),id+' retains exactly the unlocked inventory');assert.equal(new Set(actual).size,actual.length,id+' renders each kind once');
-  assert.ok(doc.querySelector('[data-earlier-parts]'),id);assert.equal(doc.querySelector('[data-earlier-parts]').hasAttribute('open'),false);
+  const earlier=doc.querySelector('[data-earlier-parts]');if(earlier)assert.equal(earlier.hasAttribute('open'),false);
+  assert.ok(doc.querySelector('[data-shelf-group]'),id+' has explicit grouping');
   for(const el of doc.querySelectorAll('[data-shelf-group="packages"] [data-add-module]'))assert.ok(M.packages[el.dataset.addModule]);
   for(const el of doc.querySelectorAll('[data-shelf-group="basics"] [data-add-module]'))assert.ok(!M.packages[el.dataset.addModule]);
+  assert.equal(actual.length,doc.querySelectorAll('[data-shelf-group="packages"] [data-add-module], [data-shelf-group="basics"] [data-add-module]').length,id+' classifies every module, including earlier parts');
   for(const kind of M.levels[id].nodes)assert.ok(doc.querySelector(`.shelf-current [data-add-module="${kind}"]`),id+' keeps taught modules visible');
-  doc.querySelector('[data-earlier-parts]').setAttribute('open','');app.eval('refresh()');assert.equal(doc.querySelector('[data-earlier-parts]').hasAttribute('open'),true);
+  if(earlier){earlier.setAttribute('open','');app.eval('refresh()');assert.equal(doc.querySelector('[data-earlier-parts]').hasAttribute('open'),true);}
   app.c.I18n.setPreference('en');assert.doesNotMatch(doc.querySelector('#module-palette').textContent,/[\u3400-\u9fff]/);assert.equal(app.eval('JSON.stringify(state)'),before);app.c.I18n.setPreference('zh');
  }
+ for(const id of ['pack-scores','weighted-sum','self-attention','multihead']){
+  app.eval(`switchLevel('${id}')`);assert.ok(doc.querySelector('[data-shelf-group="packages"] [data-add-module="original-weights"]'),id+' groups the learned score package');
+  assert.ok(doc.querySelector('[data-shelf-group="basics"] [data-add-module="v"]'),id+' groups V as a basic module');
+ }
+ app.eval("switchLevel('self-attention');state=M.solutions(stageId);save();progress.complete(stageId,state);refresh()");assert.ok(doc.querySelector('[data-shelf-group="packages"] [data-add-module="single-attention"]'),'the newly crafted single head joins the package group');
  app.eval("switchLevel('causal')");assert.ok(doc.querySelector('[data-shelf-group="packages"] [data-add-module="single-attention"]'));assert.ok(doc.querySelector('[data-shelf-group="basics"] [data-add-module="v"]'),'V remains a compatible distractor');
  assert.ok(doc.querySelector('.shelf-earlier [data-add-module="original-encoder"]'),'four-feature encoder is still available among earlier parts');
  app.eval("switchLevel('decoder-layer');state=M.solutions(stageId);save();progress.complete(stageId,state);refresh()");assert.ok(doc.querySelector('[data-shelf-group="packages"] [data-add-module="original-decoder"]'),'newly earned reward appears in its package group');
@@ -1090,7 +1097,7 @@ test('every playable lesson has a bilingual structure location, valid focus and 
  app.document.querySelector('#structure-close').onclick();
  assert.equal(map.get('decoder-self').exit,'norm1');assert.equal(map.get('encoder-layer').exit,'norm2');assert.equal(map.get('decoder-layer').exit,'norm3');
  assert.match(map.get('ffn').where,/half/);assert.match(map.get('ffn').next,/attention half is absent/);
- assert.match(map.get('encoder-decoder').output,/logits/);assert.match(map.get('autoregressive').note,/fixed transition table/);
+ assert.match(map.get('encoder-decoder').output,/Candidate-token scores L/);assert.match(map.get('autoregressive').note,/fixed transition table/);
  assert.match(map.get('placement').output,/features/);assert.match(map.get('placement').note,/not a real model/);
  assert.deepEqual(Array.from(map.flows.decoder,n=>n.id),['attention','add1','norm1','cross','add2','norm2','ffn','add3','norm3']);
  assert.deepEqual(Array.from(map.flows.modernLayer,n=>n.id),['norm1','attention','add1','norm2','ffn','add2']);
@@ -1172,7 +1179,7 @@ test('hint reference updates on hashes and language and stays inspectable during
  const app=boot(new Map(),'#causal'),doc=app.document;
  const open=()=>doc.querySelector('#hint').onclick();
  open();app.c.I18n.setPreference('en');assert.match(doc.querySelector('#structure-dialog-content').textContent,/masked self-attention/);
- app.eval("switchLevel('original-ffn')");assert.match(doc.querySelector('#structure-dialog-content').textContent,/FFN transformation/);
+ app.eval("switchLevel('original-ffn')");assert.match(doc.querySelector('#structure-dialog-content').textContent,/ReLU FFN output/);
  doc.querySelector('#structure-close').onclick();
  app.eval("switchLevel('causal')");assert.equal(doc.querySelector('.structure-compact'),null);open();
  app.location.hash='#encoder-layer';app.hashchange();assert.match(doc.querySelector('#structure-dialog-content').textContent,/Encoder layer output/);

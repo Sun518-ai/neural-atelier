@@ -115,7 +115,7 @@ flows.pairwise=flows.modernFFN.filter(n=>n.id!=='silu').map(n=>n.id==='multiply'
 lessons.pairwise={...lessons.pairwise,flow:'pairwise',note:L('这里只练 U ⊙ G，门值尚未经过 SiLU。地图展示它在门控 FFN 中的位置；下一关再补激活。','This isolates U ⊙ G without SiLU on the gate. The map locates it in a gated FFN; the next lesson adds the activation.')};
 for(const id of ['quantization','session','kv-cache'])lessons[id].regions=['memory','gpu'];
 for(const data of [copy,flows,lessons])prepare(data);
-function get(id){const entry=lessons[id];if(!entry)throw new Error('Missing structure map for '+id);return {...entry,steps:flows[entry.flow],shape:M.levels[id].tokenOutput?M.levels[id].sinkDim+' '+copy.ids:(M.levels[id].sequence?'3 × '+M.levels[id].sinkDim/3:'1 × '+M.levels[id].sinkDim)};}
+function get(id){const entry=lessons[id];if(!entry)throw new Error('Missing structure map for '+id);const l=M.levels[id];return {...entry,output:l.outputTitle+' · '+l.outputNote,steps:flows[entry.flow],shape:l.tokenOutput?l.sinkDim+' '+copy.ids:(l.sequence?'3 × '+l.sinkDim/3:'1 × '+l.sinkDim)};}
 const esc=s=>String(tr(s)).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
 function drilldown(title,steps,note=''){
  return `<details class="architecture-drilldown"><summary>${esc(title)}</summary><ol>${steps.map(text=>`<li>${esc(text)}</li>`).join('')}</ol>${note?`<p>${esc(note)}</p>`:''}</details>`;

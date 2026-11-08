@@ -642,14 +642,16 @@ for(const [kind,p]of Object.entries(M.packages)){
  const l=M.levels[origins[kind]];if(l){l.packages??=[];if(!l.packages.includes(kind))l.packages.push(kind);}
 }
 I18n.prepare(M.packages);
-// Use the same shelf organization beyond the encoder. Classify by interfaces
-// and package metadata, not by the reference wiring; keep compatible distractors.
-const groupedLater=[...M.routes.main.ids.slice(M.routes.main.ids.indexOf('causal')),...M.routes.modern.ids];
-for(const id of groupedLater){
+// Group every learning shelf from the first placement lesson onward. Classify
+// by interfaces and package metadata; keep compatible distractors and authored
+// width-based ordering instead of using the reference wiring as a shopping list.
+const groupedLearning=[...M.routes.main.ids,...M.routes.modern.ids];
+for(const id of groupedLearning){
+ if(!M.levels[id].buildable)continue;
  const l=M.levels[id],contract=kind=>JSON.stringify([M.definitions[kind].ins,M.definitions[kind].out]);
  const contracts=new Set(l.nodes.map(contract)),dimensions=new Set(l.nodes.flatMap(kind=>[...M.definitions[kind].ins,M.definitions[kind].out]));
  const kinds=Object.keys(M.inventory(l)),currentKinds=kinds.filter(kind=>contracts.has(contract(kind))||(M.packages[kind]&&[...M.definitions[kind].ins,M.definitions[kind].out].every(dim=>dimensions.has(dim))));
- l.shelf={currentKinds,order:currentKinds,current:L('可用组件','Available modules'),packages:L('组合组件','Combined modules'),basics:L('基础组件','Basic modules'),earlier:L('已学零件','Earlier parts'),note:L('保留之前学过的零件，仍可拖出或双击查看。端口尺寸不同的组件不能直接相连；上方也包含可选组件，并非都要使用。','Earlier parts can still be placed or inspected with a double-click. Different port sizes cannot connect directly. The groups above include optional modules; you do not need to use every one.')};
+ l.shelf={...(l.shelf||{currentKinds,order:currentKinds,current:L('可用组件','Available modules'),earlier:L('已学零件','Earlier parts'),note:L('保留之前学过的零件，仍可拖出或双击查看。端口尺寸不同的组件不能直接相连；上方也包含可选组件，并非都要使用。','Earlier parts can still be placed or inspected with a double-click. Different port sizes cannot connect directly. The groups above include optional modules; you do not need to use every one.')}),packages:L('组合组件','Combined modules'),basics:L('基础组件','Basic modules')};
  I18n.prepare(l.shelf);
 }
 
@@ -681,6 +683,7 @@ Object.assign(M.levels.scores.rationale,{
  text:L('输出盘左侧是发起查询的词 Q，上方是被比较的词 K。交点就是这一对词的分数。对同一个查询，分数越大，后面经 Softmax 得到的参考比例越高；此时还没有汇合 V。','The left edge of the output tray lists query tokens Q; the top lists compared tokens K. Their intersection holds that pair’s score. For the same query, a higher score gives a larger weight after Softmax; V has not been aggregated yet.')
 });
 M.levels.softmax.description=L('将已学过的 Q/K 投影和打分接起来，再把分数交给 Softmax。每组权重的和应为 1，本关不遮住未来位置。','Connect the familiar Q/K projections and scoring, then feed the scores to Softmax. Each weight row should sum to 1; this level has no future mask.');
+M.levels.softmax.summary=M.levels.softmax.description;
 M.levels.residual.rationale.scope=L('沿用序章 05 的 ReLU FFN 和同一套教学权重，本关只增加残差。原版完整子层还会在相加后接 LayerNorm，后面再学。','Uses Prologue 05’s ReLU FFN and the same teaching weights; only the residual is new. The complete original sublayer also applies LayerNorm after addition, which comes later.');
 M.levels.ffn.description=L('将已学的 SwiGLU 和残差组合起来。R 是原输入，Z = RMSNorm(R) 已准备好；这里比较现代 Pre-LN 与原版先相加后归一化的区别。','Combine SwiGLU with a residual. R is the original input and Z = RMSNorm(R) is ready. Compare modern Pre-LN with the original’s addition before normalization.');
 M.levels.ffn.rationale.text=L('这一现代实现先归一化输入，再算 SwiGLU 修改量并加回 R。它改变了原版的激活、分支结构和归一化位置，不应当当作原版 FFN 的起点。','This modern version normalizes the input first, computes a SwiGLU update and adds it to R. It changes the original activation, branch structure and normalization placement.');
