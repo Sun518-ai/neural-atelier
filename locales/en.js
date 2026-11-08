@@ -1,5 +1,6 @@
 // English copy. Chinese source phrases are stable lookup keys.
 globalThis.AtelierEnglish = {
+  "共 {count} 关": "{count} levels",
   "关闭提示": "Close hint",
   "下一条提示": "Next hint",
   "通关记录": "Completion records",

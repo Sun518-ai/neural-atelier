@@ -187,10 +187,13 @@ lesson('residual',L('留一条回来的路','Keep a path back'),['relu-ffn','add
 Object.assign(added.residual.rationale,{kind:'residual',input:[1,0]});
 lesson('layernorm',L('LayerNorm：整理特征的尺度','LayerNorm: normalize feature scale'),['layernorm2'],
  L('让每个特征表示它比自身均值高或低多少','Express each feature relative to its own mean'),
- L('本关认识一个基础算子：LayerNorm。它把同一个 token 的特征减去均值，再除以标准差。搭好输入到出口的网络，观察每组数如何先以 0 为中心，再调整幅度。','Meet a basic operator: LayerNorm. It subtracts the mean of one token’s features, then divides by their standard deviation. Build a path from input to outlet and observe each set of values being centered at zero and rescaled.'),
+ L('本关单独练习 LayerNorm。左侧是游戏直接给定的两维练习向量，不承接前一关的计算结果。连接并观察每组数如何减去自身均值，再除以标准差。','This lesson isolates LayerNorm. The game directly supplies two-feature practice vectors on the left; they are not computed by the preceding lesson. Connect the circuit and observe each vector being centered by its own mean and divided by its standard deviation.'),
  L('经过投影和残差相加，同一组特征可能整体偏大，或彼此差距变大。LayerNorm 去掉这组数的共同偏移和尺度，让后续层在较稳定的数值范围内处理相对差异，有助于训练稳定。每个 token 单独计算，不把整句话的数混在一起。','Projections and residual addition can shift a token’s features together or spread them farther apart. LayerNorm removes that shared offset and scale so later layers can work with relative differences in a more stable numerical range, helping training stability. Each token is normalized separately, not together with the whole sentence.'),
  L('[1, 3] → 减均值 2 → [−1, 1] → 除以标准差 1 → 约 [−1, 1]；[6, 10] 减均值 8、再除以标准差 2，也得到约 [−1, 1]。这些都是 LayerNorm 内部步骤。本关取 γ = 1、β = 0；真实模型还会学习每个特征的缩放 γ 和偏移 β。','[1, 3] → subtract mean 2 → [−1, 1] → divide by standard deviation 1 → approximately [−1, 1]. For [6, 10], subtract mean 8 and divide by standard deviation 2 to get the same result. These are LayerNorm’s internal steps. This lesson uses γ = 1, β = 0; a real model learns a scale γ and offset β for each feature.'),
- {layernorm2:['R'],sink:'layernorm2'},ln,{scalar:true});
+ {layernorm2:['R'],sink:'layernorm2'},ln,{scalar:true,
+  sourceTitle:L('练习向量 X','Practice vector X'),sourceNames:{R:L('练习向量 X','Practice vector X')},routeInput:L('练习向量 X','Practice vector X'),
+  sourceNote:L('本关直接给定，未经过残差','Given here; before any residual addition'),outputTitle:L('LayerNorm 结果 Y','LayerNorm result Y')});
+added.layernorm.rationale.scope=L('放回原版 Transformer，LayerNorm 接收的是残差相加后的结果，例如 X + FFN(X)。后面的“先相加，再归一化”关会把这条路径完整接起来；本关先把这一算子单独学清楚。','In the original Transformer, LayerNorm receives the result of residual addition, such as X + FFN(X). The later Add first, normalize second lesson connects that full path; this lesson first teaches the operator on its own.');
 lesson('add-norm',L('先相加，再归一化','Add first, normalize second'),['relu-ffn','add','layernorm2'],
  L('算出 LayerNorm(X + FFN(X))','Compute LayerNorm(X + FFN(X))'),
  L('FFN 已封装成一块熟悉的组件。让修改量加回原输入，再把相加后的结果交给 LayerNorm。','The familiar FFN is packaged as one module. Add its update to the original input, then apply LayerNorm to the sum.'),

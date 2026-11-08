@@ -46,7 +46,7 @@ test('independent animation scheduling advances branches separately and waits on
 test('the full-model demonstration runs immediately, replays without running and keeps puzzle saves untouched',async()=>{
  const storage=new Map(),app=boot(storage,'#transformer-demo'),doc=app.document;
  const graph=app.eval('JSON.stringify(state)');assert.equal(app.eval('state.nodes.length'),67);
- for(const selector of ['#module-shelf','#hint','#reset','#undo'])assert.equal(doc.querySelector(selector).hidden,true,selector);
+ for(const selector of ['#module-shelf','#reset','#undo'])assert.equal(doc.querySelector(selector).hidden,true,selector);
  assert.equal(doc.querySelector('#demo-views').hidden,false);assert.equal(app.eval('busy'),false);
  app.eval("chooseOutput('R');chooseInput('sink',0)");assert.equal(app.eval('pending'),null);assert.equal(app.eval('JSON.stringify(state)'),graph);
  await app.eval('run()');assert.equal(app.eval('levelPassed()'),true);assert.equal(doc.querySelector('#level-complete').open,true);assert.match(doc.querySelector('#complete-detail').textContent,/完整模型/);
@@ -981,12 +981,12 @@ test('every playable lesson has a bilingual structure location, valid focus and 
    const entry=map.get(id),keys=entry.steps.map(n=>n.id);
    assert.ok(keys.includes(entry.exit),id+' outlet belongs to its reference structure');for(const focus of entry.focus)assert.ok(keys.includes(focus),id+' focus');
    app.eval(`switchLevel('${id}')`);const saved=app.eval('JSON.stringify(state)'),progress=app.storage.get('neural-atelier-chapters-v1');
-   app.document.querySelector('[data-open-structure]').dispatchEvent(new app.window.Event('click',{bubbles:true}));
+   app.document.querySelector('#hint').onclick();
    assert.ok(app.document.querySelector('#structure-dialog').open);
    assert.equal(app.document.querySelectorAll('.map-step-exit').length,1,id+' has one lesson outlet');
    assert.ok(app.document.querySelector('#structure-dialog-content').textContent.includes(entry.output));
    assert.ok(app.document.querySelectorAll('#structure-dialog-content .architecture-drilldown').length>0,id+' has expandable internals');
-   if(lang==='en')assert.doesNotMatch(app.document.querySelector('#structure-dialog-content').textContent+app.document.querySelector('#structure-map').textContent,/[\u3400-\u9fff]/,id);
+   if(lang==='en')assert.doesNotMatch(app.document.querySelector('#structure-dialog-content').textContent,/[\u3400-\u9fff]/,id);
    app.document.querySelector('#structure-close').onclick();assert.equal(app.document.querySelector('#structure-dialog').open,false);
    assert.equal(app.eval('JSON.stringify(state)'),saved);assert.equal(app.storage.get('neural-atelier-chapters-v1'),progress);
   }
@@ -996,7 +996,7 @@ test('every playable lesson has a bilingual structure location, valid focus and 
  assert.equal(map.get('qkv').exit,'qkv');assert.match(map.get('qkv').output,/only V/);
  assert.equal(map.get('cross-attention').exit,'wo');assert.match(map.get('cross-attention').output,/before residual/);
  app.eval("switchLevel('cross-attention')");
- app.document.querySelector('[data-open-structure]').dispatchEvent(new app.window.Event('click',{bubbles:true}));
+ app.document.querySelector('#hint').onclick();
  const branches=app.document.querySelectorAll('[data-map-flow="cross"] .map-branch-pair>ol');
  assert.equal(branches.length,2);assert.match(branches[0].textContent,/LayerNorm → D/);assert.match(branches[0].textContent,/D → Q projection → Q/);assert.match(branches[1].textContent,/E → K \/ V projections/);
  assert.equal(map.get('cross-attention').focus.includes('prepared'),false,'the preceding lesson is context, not required again on this board');
@@ -1027,9 +1027,9 @@ test('wiring map identifies a general operation instead of locating it inside en
  for(const lang of ['zh','en']){
   app.c.I18n.setPreference(lang);app.eval("switchLevel('wire')");
   const saved=app.eval('JSON.stringify(state)'),progress=app.storage.get('neural-atelier-chapters-v1');
-  app.document.querySelector('[data-open-structure]').click();
-  const compact=app.document.querySelector('#structure-map'),full=app.document.querySelector('#structure-dialog-content');
-  assert.deepEqual([...compact.querySelectorAll('.map-region-active')].map(n=>n.dataset.mapRegion),['wire']);
+  app.document.querySelector('#hint').onclick();
+  const full=app.document.querySelector('#structure-dialog-content');
+  assert.equal(app.document.querySelector('#structure-map'),null);assert.ok(full.querySelector('[data-map-region=wire].map-region-active'));
   assert.equal(full.querySelectorAll('.architecture-focus').length,0,'generic wiring has no dedicated architecture layer');
   assert.ok(full.querySelector('.wiring-reference .architecture-detail'));
   assert.equal(full.querySelector('.wiring-reference').hasAttribute('open'),false,'complete model is optional context');
@@ -1040,7 +1040,7 @@ test('wiring map identifies a general operation instead of locating it inside en
   assert.equal(app.eval('JSON.stringify(state)'),saved);assert.equal(app.storage.get('neural-atelier-chapters-v1'),progress);
   app.document.querySelector('#structure-close').onclick();
   for(const id of ['encoder-decoder','transformer-demo','autoregressive']){
-   app.eval(`switchLevel('${id}')`);app.document.querySelector('[data-open-structure]').click();
+   app.eval(`switchLevel('${id}')`);app.document.querySelector('#hint').onclick();
    const architecture=app.document.querySelector('.architecture-detail');
    for(const key of ['encoder-input','decoder-input','readout'])assert.ok(architecture.querySelector(`[data-architecture-node="${key}"].architecture-focus`),id+' includes '+key);
    app.document.querySelector('#structure-close').onclick();
@@ -1053,7 +1053,7 @@ test('generation map names the actual modules, distinguishes predictions from co
  app.eval("state=M.solutions('autoregressive')");const saved=app.eval('JSON.stringify(state)');
  for(const lang of ['zh','en']){
   app.c.I18n.setPreference(lang);
-  app.document.querySelector('[data-open-structure]').dispatchEvent(new app.window.Event('click',{bubbles:true}));
+  app.document.querySelector('#hint').onclick();
   const map=app.document.querySelector('#structure-dialog-content');
   for(const kind of ['step','pick','feedback'])assert.equal(map.querySelector(`[data-generation-module="${kind}"] strong`).textContent,M.definitions[kind].name);
   assert.equal(map.querySelector('.generation-reference').hasAttribute('open'),false,'full network is secondary to the generation loop');
@@ -1094,14 +1094,13 @@ test('expanded modern and execution maps distinguish architecture, device count 
  assert.match(engine.querySelector('[data-architecture-node="engine-decode"]').textContent,/same layers and weights/);
 });
 
-test('structure map updates on hashes and language, remembers collapse and stays inspectable during a run',async()=>{
+test('hint reference updates on hashes and language and stays inspectable during a run',async()=>{
  const app=boot(new Map(),'#causal'),doc=app.document;
- const open=()=>doc.querySelector('[data-open-structure]').dispatchEvent(new app.window.Event('click',{bubbles:true}));
+ const open=()=>doc.querySelector('#hint').onclick();
  open();app.c.I18n.setPreference('en');assert.match(doc.querySelector('#structure-dialog-content').textContent,/masked self-attention/);
  app.eval("switchLevel('original-ffn')");assert.match(doc.querySelector('#structure-dialog-content').textContent,/FFN transformation/);
- doc.querySelector('#structure-close').onclick();doc.querySelector('.structure-compact').removeAttribute('open');
- app.eval("switchLevel('causal')");assert.equal(doc.querySelector('.structure-compact').hasAttribute('open'),false);
- doc.querySelector('.structure-compact').setAttribute('open','');open();
+ doc.querySelector('#structure-close').onclick();
+ app.eval("switchLevel('causal')");assert.equal(doc.querySelector('.structure-compact'),null);open();
  app.location.hash='#encoder-layer';app.hashchange();assert.match(doc.querySelector('#structure-dialog-content').textContent,/Encoder layer output/);
  doc.querySelector('#structure-close').onclick();app.eval("switchLevel('wire');state=M.solutions('wire')");
  let resolve;app.c.pauseMapTest=()=>new Promise(r=>{resolve=r;});app.eval('world.animate=pauseMapTest');const running=app.eval('run()');
@@ -1150,21 +1149,21 @@ test('masked bridge keeps old decoder progress and saves repeated module instanc
  assert.equal(reload.eval('stage().next'),'decoder-self');assert.equal(reload.eval('JSON.stringify(state)'),bridge);
 });
 
-test('hints open beside level navigation, dismiss without editing and never write into the run toolbar',async()=>{
- const app=boot(new Map(),'#original-ffn'),doc=app.document;
- assert.equal(doc.querySelector('#hint').closest('.topbar'),doc.querySelector('.topbar'));
- assert.equal(doc.querySelector('.side-actions #hint'),null);assert.equal(doc.querySelector('#feedback').textContent,'');
- const board=app.eval('JSON.stringify(state)');doc.querySelector('#hint').onclick();
- assert.equal(doc.querySelector('#hint-panel').hidden,false);assert.equal(doc.querySelector('#hint').getAttribute('aria-expanded'),'true');assert.ok(doc.querySelector('#hint-text').textContent.length);
- assert.equal(doc.querySelector('#feedback').textContent,'');assert.equal(app.eval('JSON.stringify(state)'),board);
- doc.querySelector('#scene').dispatchEvent(new app.window.Event('pointerdown',{bubbles:true}));assert.equal(doc.querySelector('#hint-panel').hidden,true);
- doc.querySelector('#hint').onclick();const escape=new app.window.Event('keydown',{bubbles:true,cancelable:true});escape.key='Escape';doc.dispatchEvent(escape);assert.equal(doc.querySelector('#hint-panel').hidden,true);
- doc.querySelector('#hint').onclick();doc.querySelector('#hint-close').onclick();assert.equal(doc.querySelector('#hint').getAttribute('aria-expanded'),'false');
- app.eval("switchLevel('ffn')");doc.querySelector('#hint').onclick();const first=doc.querySelector('#hint-text').textContent;
- if(!doc.querySelector('#hint-next').hidden){doc.querySelector('#hint-next').onclick();assert.notEqual(doc.querySelector('#hint-text').textContent,first);}
- app.eval("switchLevel('causal')");assert.equal(doc.querySelector('#hint-panel').hidden,true);
- app.c.I18n.setPreference('en');doc.querySelector('#hint').onclick();assert.doesNotMatch(doc.querySelector('#hint-panel').textContent,/[\u3400-\u9fff]/);
- app.eval("state=M.solutions('causal')");await app.eval('run()');assert.equal(doc.querySelector('#hint-panel').hidden,true);assert.equal(app.eval('levelPassed()'),true);
+test('the hint button opens the full optional reference and closes without changing the circuit',async()=>{
+ const app=boot(new Map(),'#layernorm'),doc=app.document,button=doc.querySelector('#hint'),dialog=doc.querySelector('#structure-dialog');
+ assert.equal(button.closest('.topbar'),doc.querySelector('.topbar'));assert.equal(button.getAttribute('aria-haspopup'),'dialog');assert.equal(button.getAttribute('aria-controls'),dialog.id);
+ assert.equal(doc.querySelector('#structure-map'),null);assert.equal(doc.querySelector('#hint-panel'),null);
+ assert.match(doc.querySelector('.mission>p').textContent,/不承接前一关/);assert.match(doc.querySelector('.route').textContent,/练习向量/);
+ const board=app.eval('JSON.stringify(state)');button.onclick();
+ assert.equal(dialog.open,true);assert.equal(doc.querySelector('#structure-title').textContent,'本关提示');assert.ok(doc.querySelector('.architecture-detail'));assert.equal(doc.querySelector('#feedback').textContent,'');assert.equal(app.eval('JSON.stringify(state)'),board);
+ const cancel=new app.window.Event('cancel',{cancelable:true});dialog.dispatchEvent(cancel);assert.equal(dialog.open,false);
+ button.onclick();doc.querySelector('#structure-close').onclick();assert.equal(dialog.open,false);
+ button.onclick();app.eval('levelMenu()');assert.equal(dialog.open,false);
+ app.eval("switchLevel('transformer-demo')");assert.equal(button.hidden,false);assert.equal(button.disabled,false);button.onclick();assert.ok(dialog.open);
+ app.c.I18n.setPreference('en');assert.equal(doc.querySelector('#structure-title').textContent,'Level hint');assert.doesNotMatch(doc.querySelector('#structure-dialog-content').textContent,/[\u3400-\u9fff]/);
+ doc.querySelector('#structure-close').onclick();app.eval("switchLevel('wire');state=M.solutions('wire')");button.onclick();await app.eval('run()');assert.equal(dialog.open,false);assert.equal(app.eval('levelPassed()'),true);
+ app.eval('renderLevelMenu()');assert.match(doc.querySelector('#level-track-main').textContent,/31 levels/);
+ app.c.I18n.setPreference('zh');app.eval('renderLevelMenu()');assert.match(doc.querySelector('#level-track-main').textContent,/共 31 关/);
 });
 
 test('masked head explanation distinguishes whole heads from Q and K using real independent reading weights',()=>{

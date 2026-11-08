@@ -25,7 +25,7 @@ function writeLevelHash(id,replace=false){
  const loc=window.location,nav=window.history;if(!loc||!nav||loc.hash==='#'+id)return;
  nav[replace?'replaceState':'pushState'](null,'',loc.pathname+loc.search+'#'+id);
 }
-let stageId=levelFromHash()||progress.current(),state=progress.load(stageId),history=[],selected=null,pending=null,current=null,results=[],sample=0,busy=false,paused=false,pauseStarted=0,pausedDuration=0,runId=0,level=99,hints=0,world=null,fault=null;
+let stageId=levelFromHash()||progress.current(),state=progress.load(stageId),history=[],selected=null,pending=null,current=null,results=[],sample=0,busy=false,paused=false,pauseStarted=0,pausedDuration=0,runId=0,level=99,world=null,fault=null;
 let selectedWire=null,actionNode=null,placing=null,lastFusionKind=null,menuTrack=M.levels[stageId].track,levelMenuFromHome=false;
 let demoSamples=null;
 const stage=()=>M.levels[stageId],samples=()=>demoSamples||(M.samplesFor?.(stageId)||M.samples),save=()=>progress.save(state);
@@ -152,23 +152,22 @@ function causalPrimer(){
  return `<div class="causal-primer"><table><caption>${g.caption}</caption><thead><tr><th>${g.reference}</th>${words.map(word=>`<th scope="col">${word}</th>`).join('')}</tr></thead><tbody>${words.map((word,i)=>`<tr><th scope="row">${word}</th>${words.map((_,j)=>`<td class="${j<=i?'allowed':'blocked'}" aria-label="${j<=i?g.allowed:g.blocked}">${j<=i?'✓':'0'}</td>`).join('')}</tr>`).join('')}</tbody></table><small>${g.legend}</small><p>${g.read}</p><details><summary>${g.detail}</summary>${[[g.before,scores],[g.masked,masked],[g.after,weights]].map(([label,value])=>`<div class="causal-step"><span>${label}</span><code>${values(value)}</code></div>`).join('')}<p>${g.why}</p></details></div>`;
 }
 function renderStructureMap(){
- const compact=$('#structure-map .structure-compact'),expanded=compact?compact.hasAttribute('open'):true;
- $('#structure-map').innerHTML=M.structureMap.render(stageId);
- $('#structure-map .structure-compact').toggleAttribute('open',expanded);
  $('#structure-title').textContent=M.structureMap.copy.title;
  $('#structure-close').setAttribute('aria-label',M.structureMap.copy.close);
  if($('#structure-dialog').open)$('#structure-dialog-content').innerHTML=M.structureMap.render(stageId,true);
 }
-$('#structure-map').addEventListener('click',e=>{if(!e.target.closest('[data-open-structure]'))return;$('#structure-dialog-content').innerHTML=M.structureMap.render(stageId,true);$('#structure-dialog').showModal();});
-$('#structure-close').onclick=()=>$('#structure-dialog').close();
-$('#structure-dialog').addEventListener('click',e=>{if(e.target!==$('#structure-dialog'))return;const r=e.target.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)e.target.close();});
+function closeHint(restoreFocus=false){if(!$('#structure-dialog').open)return;$('#structure-dialog').close();if(restoreFocus)$('#hint').focus?.({preventScroll:true});}
+function showHint(){renderStructureMap();$('#structure-dialog-content').innerHTML=M.structureMap.render(stageId,true);if(!$('#structure-dialog').open)$('#structure-dialog').showModal();}
+$('#hint').onclick=showHint;
+$('#structure-close').onclick=()=>closeHint(true);
+$('#structure-dialog').addEventListener('click',e=>{if(e.target!==$('#structure-dialog'))return;const r=e.target.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)closeHint(true);});
+$('#structure-dialog').addEventListener('cancel',e=>{e.preventDefault();closeHint(true);});
 function stageColor(c){return M.routes[c.track]?.groups?.find(group=>group.ids.includes(c.id))?.id||c.track;}
 function maskedHeadsPrimer(){
  const g=M.maskedHeadsGuide,sample=M.samplesFor('masked-multihead')[0],ev=M.evaluate(M.solutions('masked-multihead'),sample.v),words=sample.word.split(' / ');
  return `<div class="heads-primer"><div class="heads-input">${g.input}</div><div class="heads-pair">${g.heads.map((name,i)=>`<div class="heads-branch" data-head="${i}"><b>${name}</b><code>Q<sub>${i?'B':'A'}</sub> · K<sub>${i?'B':'A'}</sub> · V<sub>${i?'B':'A'}</sub></code><small>${g.result}</small></div>`).join('')}</div><div class="heads-join">${g.join}<span>↓ ${g.output}</span></div><details><summary>${g.exampleTitle}</summary><table><thead><tr><th></th>${words.map(w=>`<th>${w}</th>`).join('')}</tr></thead><tbody>${g.heads.map((name,i)=>`<tr><th>${name}</th>${ev.values[i?'softmax-2':'softmax'].slice(3,6).map(value=>`<td>${Math.round(value*100)}%</td>`).join('')}</tr>`).join('')}</tbody></table><p>${g.exampleNote}</p></details><details><summary>${g.widthTitle}</summary><p>${g.width}</p></details><details><summary>${g.oldTitle}</summary><p>${g.old}</p></details></div>`;
 }
 function stageChrome(){
- closeHint();
  const c=stage();document.body.classList.toggle('demo-level',!!c.demonstration);
  if(!c.floating)fullscreenFallback=false;
  $('#demo-fullscreen').hidden=!c.floating;syncFullscreen();
@@ -205,12 +204,12 @@ function stageChrome(){
   $('#mission-reason-example').innerHTML+=c.packages.map(kind=>`<details class="package-primer" ${introduction?'open':''}><summary>${c.packageLabel||I18n.t('新组合组件')} · ${M.definitions[kind].name}</summary>${packageDiagram(kind)}</details>`).join('');
  }
  $('#mission-reason-example').hidden=!$('#mission-reason-example').hasChildNodes();
- $('.route').innerHTML=`${I18n.t("<span>输入 token</span><i>→</i>")}${c.id==='ffn'?I18n.t("<span>归一化输入 · 已就绪</span><i>→</i>"):''}<strong>${c.concept}</strong><i>→</i><span>${c.outputTitle}${I18n.t("</span><span class=\"route-tail\">教学缩尺 ")}${c.shape}</span>`;
+ $('.route').innerHTML=`${c.routeInput?'<span>'+c.routeInput+'</span><i>→</i>':I18n.t("<span>输入 token</span><i>→</i>")}${c.id==='ffn'?I18n.t("<span>归一化输入 · 已就绪</span><i>→</i>"):''}<strong>${c.concept}</strong><i>→</i><span>${c.outputTitle}${I18n.t("</span><span class=\"route-tail\">教学缩尺 ")}${c.shape}</span>`;
 }
 function renderLevelMenu(){
  const route=M.routes[menuTrack],list=$('#level-list'),navigation=$('#level-stage-nav');
  $('#level-menu').dataset.stageColor=menuTrack;
- $('#level-tracks').innerHTML=Object.entries(M.routes).map(([id,r])=>`<button type="button" role="tab" id="level-track-${id}" data-track="${id}" data-stage-color="${id}" aria-selected="${id===menuTrack}" aria-controls="level-list">${r.name}<span>${r.ids.length}</span></button>`).join('');
+ $('#level-tracks').innerHTML=Object.entries(M.routes).map(([id,r])=>`<button type="button" role="tab" id="level-track-${id}" data-track="${id}" data-stage-color="${id}" aria-selected="${id===menuTrack}" aria-controls="level-list">${r.name}<span>${I18n.t('共 {count} 关').replace('{count}',r.ids.length)}</span></button>`).join('');
  $('.level-menu-intro').textContent=route.description;
  navigation.hidden=!route.groups;navigation.setAttribute('aria-label',M.levelMenuCopy.stages);navigation.replaceChildren();
  list.setAttribute('aria-labelledby','level-track-'+menuTrack);list.classList.toggle('grouped-levels',!!route.groups);
@@ -233,7 +232,7 @@ function enterSelectedLevel(){document.body.dataset.screen='game';$('#level-menu
 function switchLevel(id,fromHash=false){
  if(busy||!M.levels[id])return;closeCompletion();if(id===stageId){enterSelectedLevel();return;}
  save();world?.beforeStage();stageId=id;state=progress.load(id);progress.select(id);
- demoSamples=null;history=[];selected=pending=current=fault=selectedWire=placing=actionNode=lastFusionKind=null;engineReport=null;results=[];sample=0;level=99;hints=0;
+ demoSamples=null;history=[];selected=pending=current=fault=selectedWire=placing=actionNode=lastFusionKind=null;engineReport=null;results=[];sample=0;level=99;
  stageChrome();world?.setStage();save();refresh();enterSelectedLevel();say('');if(!fromHash)writeLevelHash(id);
 }
 stageChrome();progress.select(stageId);save();writeLevelHash(stageId,true);
@@ -355,7 +354,7 @@ function renderGeneration(){
  $('#demo-transcript').replaceChildren(...[...seed,...generated].map((id,i)=>{const el=document.createElement('span');el.className=i<seed.length?'seed-token':'generated-token';el.textContent=M.math.vocab[id];return el;}));
  $('#demo-transcript').setAttribute('aria-label',I18n.t('完整文字'));
 }
-function refresh(){renderGeneration();refreshPauseControl();$('#progress-reset').disabled=busy;$('#progress-reset-apply').disabled=busy;$('#progress-restart').disabled=busy;$('#progress-restart-undo').disabled=busy;$('#progress-restart-undo').hidden=!progress.canUndoRestart();document.body.classList.toggle('network-running',busy);renderShelf();const t=samples()[sample];const won=levelPassed();$('.route strong').textContent=stage().concept+(won?I18n.t(" · 已通过"):'');$('#next-level').hidden=!(won||progress.completed(stageId))||!stage().next;$('#levels-open').disabled=busy;$('#engine-controls').querySelectorAll('input,select,button').forEach(e=>e.disabled=busy);$('#device-docks').querySelectorAll('button').forEach(e=>e.disabled=busy);$('#sample-name').textContent=t.word;$('#sample-value').textContent=stage().generationRounds?I18n.t('目标输入 · 最近三个词'):stage().sequence?(stage().sourceDim===3?'Token ID '+vector(t.v):I18n.t(stage().sourceDim===12?"3 个位置 × 4 个特征":"3 个位置 × 2 个特征")):vector(t.v);$('#pass-count').textContent=results.filter(r=>r.pass).length+' / '+stage().sampleCount;$('#test-results').innerHTML=results.map((r,i)=>`<div class="test-row ${r.pass?'pass':'fail'}"><span>${r.pass?'✓':'×'} ${samples()[i].word}</span><span>${stage().tokenOutput&&r.actual?M.readTokens(r.actual):stage().sequence?(r.actual?I18n.t("矩阵 ")+shape(r.actual.length):I18n.t("等待输入")):vector(r.actual)}</span></div>`).join('');$('#run').disabled=!world;$('#run').innerHTML=busy?I18n.t("<span>■</span> 停止"):I18n.t("<span>▶</span> 试跑我的网络");$('#undo').disabled=busy||!history.length;$('#reset').disabled=busy;$('#reset').hidden=!!stage().demonstration;$('#undo').hidden=!!stage().demonstration;$('#hint').hidden=!!stage().demonstration;$('#restore-layout').hidden=!progress.canRestore(stageId,state);$('#restore-layout').disabled=busy;$('#hint').disabled=busy;}
+function refresh(){renderGeneration();refreshPauseControl();$('#progress-reset').disabled=busy;$('#progress-reset-apply').disabled=busy;$('#progress-restart').disabled=busy;$('#progress-restart-undo').disabled=busy;$('#progress-restart-undo').hidden=!progress.canUndoRestart();document.body.classList.toggle('network-running',busy);renderShelf();const t=samples()[sample];const won=levelPassed();$('.route strong').textContent=stage().concept+(won?I18n.t(" · 已通过"):'');$('#next-level').hidden=!(won||progress.completed(stageId))||!stage().next;$('#levels-open').disabled=busy;$('#engine-controls').querySelectorAll('input,select,button').forEach(e=>e.disabled=busy);$('#device-docks').querySelectorAll('button').forEach(e=>e.disabled=busy);$('#sample-name').textContent=t.word;$('#sample-value').textContent=stage().generationRounds?I18n.t('目标输入 · 最近三个词'):stage().sequence?(stage().sourceDim===3?'Token ID '+vector(t.v):I18n.t(stage().sourceDim===12?"3 个位置 × 4 个特征":"3 个位置 × 2 个特征")):vector(t.v);$('#pass-count').textContent=results.filter(r=>r.pass).length+' / '+stage().sampleCount;$('#test-results').innerHTML=results.map((r,i)=>`<div class="test-row ${r.pass?'pass':'fail'}"><span>${r.pass?'✓':'×'} ${samples()[i].word}</span><span>${stage().tokenOutput&&r.actual?M.readTokens(r.actual):stage().sequence?(r.actual?I18n.t("矩阵 ")+shape(r.actual.length):I18n.t("等待输入")):vector(r.actual)}</span></div>`).join('');$('#run').disabled=!world;$('#run').innerHTML=busy?I18n.t("<span>■</span> 停止"):I18n.t("<span>▶</span> 试跑我的网络");$('#undo').disabled=busy||!history.length;$('#reset').disabled=busy;$('#reset').hidden=!!stage().demonstration;$('#undo').hidden=!!stage().demonstration;$('#restore-layout').hidden=!progress.canRestore(stageId,state);$('#restore-layout').disabled=busy;}
 async function run(){
  closeHint();closeCompletion();world?.clearConnectionError?.();
  if(busy){busy=paused=false;runId++;say(I18n.t("已停止。"));world.clearPackets();world.labels();refresh();return;}
@@ -405,7 +404,7 @@ function confirmProgressReset(mode){if(busy)return;clearProgressResetUI();progre
 $('#progress-reset').onclick=()=>confirmProgressReset('badges');$('#progress-restart').onclick=()=>confirmProgressReset('all');
 $('#progress-reset-cancel').onclick=()=>{clearProgressResetUI();resetTrigger().focus();};
 function reloadResetBoard(resume=false){
- world?.beforeStage();state=progress.load(stageId,{resume});history=[];selected=pending=placing=null;hints=0;
+ world?.beforeStage();state=progress.load(stageId,{resume});history=[];selected=pending=placing=null;
  changed();world?.setStage();
 }
 $('#progress-reset-apply').onclick=()=>{
@@ -424,16 +423,6 @@ $('#progress-restart-undo').onclick=()=>{
  reloadResetBoard(true);renderLevelMenu();clearProgressResetUI();say('');progressResetStatus('已恢复重置前的棋盘和通关记录。');$('#progress-restart').focus();
 };
 $('#restore-layout').onclick=()=>{if(busy)return;const restored=progress.restore(stageId);if(!restored)return;checkpoint();state=restored;selected=pending=placing=null;world?.clearPlacement?.();changed();say(I18n.t("已恢复上次方案。"));};
-function closeHint(restoreFocus=false){$('#hint-panel').hidden=true;$('#hint').setAttribute('aria-expanded','false');if(restoreFocus)$('#hint').focus({preventScroll:true});}
-function showHint(){
- const list=stage().hints?.length?stage().hints:[I18n.t("先点一个圆形输出口，再点方形输入口。也可以直接拖线。")],index=Math.min(hints++,list.length-1);
- $('#hint-text').textContent=list[index];$('#hint-next').hidden=index>=list.length-1;$('#hint-panel').hidden=false;$('#hint').setAttribute('aria-expanded','true');
-}
-$('#hint').onclick=()=>{if(busy)return;if(!$('#hint-panel').hidden)return closeHint();showHint();};
-$('#hint-next').onclick=()=>{if(!busy)showHint();};
-$('#hint-close').onclick=()=>closeHint(true);
-document.addEventListener('pointerdown',e=>{if(!$('#hint-panel').hidden&&!e.target.closest?.('.level-help'))closeHint();});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#hint-panel').hidden){e.preventDefault();e.stopImmediatePropagation();closeHint(true);}});
 $('#about-open').onclick=()=>$('#about').showModal();$('#about-close').onclick=()=>$('#about').close();$('#about').addEventListener('click',e=>{if(e.target===$('#about')){const r=e.target.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)e.target.close();}});
 try{
  const T=await import('./vendor/three.module.js');

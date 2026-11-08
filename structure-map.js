@@ -12,9 +12,9 @@ function prepare(value,seen=new WeakSet()){
  }
 }
 // Only the static HTML labels need entries in the shared catalog.
-for(const [zh,en]of [['结构地图','Structure map'],['关闭结构地图','Close structure map']])globalThis.AtelierEnglish[zh]??=en;
+for(const [zh,en]of [['本关提示','Level hint'],['关闭提示','Close hint']])globalThis.AtelierEnglish[zh]??=en;
 const copy={
- title:L('结构地图','Structure map'),open:L('展开结构地图','Open structure map'),close:L('关闭结构地图','Close structure map'),
+ title:L('本关提示','Level hint'),close:L('关闭提示','Close hint'),
  scope:L('本关所在位置','Lesson location'),exit:L('本关出口','Lesson outlet'),next:L('在完整结构中，接下来','Next in the complete structure'),
  focus:L('本关重点','Lesson focus'),reference:L('结构参考 · 不是棋盘接线答案','Architecture reference · not a wiring solution'),
  legend:L('步骤图中，着色的是本关练习的操作；描边的是本关出口。','In the step diagram, color marks the operations practiced here; an outline marks the lesson outlet.'),
@@ -60,7 +60,7 @@ locate('relu','original',['encoder','decoder'],'classicFFN',['activation'],'acti
 locate('down-projection','original',['encoder','decoder'],'classicFFN',['down'],'down',classic,L('压回后的特征 F','Projected-back features F'),L('在完整 FFN 中，这个宽度可与本段原输入相加。','In a complete FFN, this width can be added to the stage’s input.'),L('本关只练压回投影，输入支路没有 ReLU；后续关再组装完整 FFN。','This lesson isolates the down projection without ReLU in its input branch; later lessons assemble the full FFN.'));
 locate('original-ffn workshop pack-ffn','original',['encoder','decoder'],'classicFFN',['up','activation','down'],'result',classic,L('FFN 的变换 F','FFN transformation F'),L('加回 FFN 的输入，然后 LayerNorm（原版）。','Add the FFN’s input, then LayerNorm (original).'),reuse);
 locate('residual','original',['encoder','decoder'],'residual',['branch','add'],'add',L('原版 · FFN 与外部残差','Original · FFN and its residual'),L('相加后的特征 X + FFN(X)','Features after X + FFN(X)'),L('原版结构中接下来是 LayerNorm，本关还没加入。','LayerNorm follows in the original architecture; it is not part of this lesson yet.'),L('支路就是前两关的原版 FFN，ReLU 仍在内部。相加在组件外面，把 FFN 的结果加回同一份输入。','The branch is the previous two lessons’ original FFN, with ReLU still inside. Addition sits outside the package and adds the FFN result to the same input.'));
-locate('layernorm','original',['encoder','decoder'],'residual',['norm'],'norm',L('原版 · 子层后的 LayerNorm','Original · LayerNorm after a sublayer'),L('归一化后的特征','Normalized features'),L('交给下一个子层或下一层。','Pass to the next sublayer or layer.'),L('本关单独练归一化，不代表完整的残差子层。','This isolates normalization; it is not a complete residual sublayer.'));
+locate('layernorm','original',['encoder','decoder'],'residual',['norm'],'norm',L('原版 · 残差相加后的 LayerNorm','Original · LayerNorm after residual addition'),L('归一化后的特征','Normalized features'),L('在完整网络中交给下一个子层或下一层。','In the full network, pass to the next sublayer or layer.'),L('地图标出它在完整网络中的位置。本关只练 LayerNorm，输入由游戏直接给定，未经过残差；组合关再接 X + FFN(X) → LayerNorm。','The map marks its place in the full network. This lesson isolates LayerNorm with game-supplied inputs that have not passed through a residual addition. The combined lesson later connects X + FFN(X) → LayerNorm.'));
 locate('add-norm','original',['encoder','decoder'],'residual',['branch','add','norm'],'norm',L('原版 · FFN 子层与外部残差','Original · FFN sublayer and its residual'),L('FFN + 残差 + LayerNorm 的结果','Result of FFN + residual + LayerNorm'),L('送往下一层；Attention 子层在本关之外。','Pass to the next layer; attention is outside this lesson.'),residualNote);
 locate('embedding','original',['source','target'],'input',['embedding'],'embedding',L('原版 · 模型输入准备','Original · input preparation'),L('查表得到的词向量 X','Looked-up embeddings X'),L('加入正弦位置编码，再进入网络层。','Add sinusoidal positions before entering the layers.'));
 locate('positions wider-features','original',['source','target'],'input',['embedding','position'],'position',L('原版 · 模型输入准备','Original · input preparation'),L('带位置的词特征','Position-enriched token features'),L('用于注意力的 Q/K/V 投影。','Feed Q/K/V projections in attention.'),L('位置加在输入词向量上；这里不是旋转 Q/K 的 RoPE。','Positions are added to input embeddings; this is not RoPE rotation of Q/K.'));
@@ -253,9 +253,6 @@ function diagram(entry){
  }
  return `<svg class="structure-overview" viewBox="0 0 220 ${height}" role="img" aria-label="${esc(copy[entry.family]+' · '+entry.where)}"><g class="structure-edges">${paths.map(d=>`<path d="${d}"/>`).join('')}</g>${nodes.map(n=>{const inside=entry.family==='original'&&['encoder','decoder'].includes(n.id)||entry.family==='modern'&&n.id==='layers';return `<g data-map-region="${n.id}" class="${entry.regions.includes(n.id)?'map-region-active':''}"><rect x="${n.x}" y="${n.y}" width="58" height="28" rx="6"/><text x="${n.x+29}" y="${n.y+(inside?11:18)}" text-anchor="middle">${esc(n.label)}</text>${inside?`<text class="structure-mini-inside" x="${n.x+29}" y="${n.y+22}" text-anchor="middle">Attention · FFN</text>`:''}</g>`;}).join('')}</svg>`;
 }
-function generationOverview(){
- return `<div class="generation-mini"><span>${esc(L('已有文本','Existing text'))}</span><b>${esc(M.definitions.step.name)}</b><b>${esc(M.definitions.pick.name)}</b><b>${esc(M.definitions.feedback.name)}</b><span class="generation-return">↶ ${esc(L('新文本用于下一次预测','New text becomes the next input'))}</span></div>`;
-}
 function generationExample(kind='all'){
  const e=esc,{context,scores,predictions,next}=M.autoregressiveExample();
  const word=id=>e(M.math.vocab[id]),tokens=(ids,extra='')=>ids.map((id,i)=>`<span class="generation-token ${extra&&i===ids.length-1?extra:''}" data-token-id="${id}">${word(id)}</span>`).join('');
@@ -264,9 +261,8 @@ function generationExample(kind='all'){
  const update=`<div class="generation-window" data-generation-window><div><small>${e(L('原上下文','Old context'))}</small><div>${tokens(context)}</div></div><div><small>${e(L('只追加一个新词','Append just one token'))}</small><div><span class="generation-token generation-dropped" data-token-id="${context[0]}">${word(context[0])}</span>${tokens(context.slice(1))}<i>＋</i>${tokens([predictions[2]],'generation-new')}</div></div><div><small>${e(L('本关出口：最近三词','Lesson outlet: latest three'))}</small><div>${tokens(next,'generation-new')}</div></div></div><p>${e(L('划掉的旧词只因本关窗口装得下三个词而移出；“追加”本身不是替换整段文本。','The crossed-out token leaves only because this exercise’s window holds three tokens. Appending does not replace the whole text.'))}</p>`;
  return `<div class="generation-example">${kind==='feedback'?'':comparison}${kind==='pick'?'':update}</div>`;
 }
-function generationMap(entry,outlet,full){
+function generationMap(entry,outlet){
  const e=esc;
- if(!full)return `<details class="structure-compact" open><summary>${e(copy.title)}</summary><button type="button" data-open-structure aria-haspopup="dialog" aria-label="${e(copy.open)}"><div class="structure-mini-caption">${e(L('选出词以后，怎样继续生成？','After selecting a token, what happens next?'))}<span aria-hidden="true">↗</span></div>${generationOverview()}<span class="structure-open-detail">${e(L('查看组件对应关系与例子 →','See module roles and an example →'))}</span></button>${outlet}</details>`;
  const roles=[
   ['predict','step',L('承担“模型＋词表投影”的打分工作','Stands in for model + vocabulary scoring'),L('前面用完整模型算分；本关查固定表，输出同样形状的候选分数。只替换打分环节，方便专注后面的循环。','Earlier lessons computed scores with the full model. Here a lookup supplies candidate scores of the same shape, isolating the loop that follows.')],
   ['select','pick',L('承担选词工作','Selects tokens'),L('六个候选中挑最高分。每个输入位置都会有一个预测，真正续写整段文本时只用最后位置的预测。','Choose the best of six candidates. Each input position has a prediction; only the final position’s prediction continues the whole text.')],
@@ -274,11 +270,10 @@ function generationMap(entry,outlet,full){
  ];
  return `<div class="structure-context"><p class="structure-family">${e(entry.where)}</p><h3>${e(L('这一关搭的是“下一次输入”，不是新的一层网络','Build the next input, not another network layer'))}</h3><p class="structure-reference">${e(L('前面已经学会模型怎样输出分数；现在看选出的新词如何成为下一次输入。','You have learned how the model produces scores. Now see how a selected token becomes part of the next input.'))}</p></div><div class="generation-map-grid"><section class="structure-local"><h4>${e(L('地图中的步骤 ↔ 棋盘组件','Map steps ↔ board modules'))}</h4><ol class="structure-flow" data-map-flow="autoregressive">${roles.map(([id,kind,role,detail])=>`<li class="map-step-focus ${id==='append'?'map-step-exit':''}" data-map-step="${id}" data-generation-module="${kind}"><strong>${e(M.definitions[kind].name)}</strong><span>${e(role)}</span><p>${e(detail)}</p>${id==='append'?`<b>${e(copy.exit)}</b>`:''}</li>`).join('')}</ol><p class="structure-note">${e(entry.note)}</p></section><section><h4>${e(L('用“我 / 爱 / 猫”看一次更新','One update of I / Love / Cat'))}</h4>${generationExample()}${outlet}</section></div><p class="generation-loop-note">↶ ${e(M.levels.autoregressive.rationale.takeaway)}</p><details class="generation-reference"><summary>${e(L('对照：真实 Transformer 的打分部分在哪里？','Reference: where does a real Transformer compute scores?'))}</summary><p>${e(L('“教学预测器”替代下面的词向量、编码器／解码器和词表投影这一整段打分。真实模型用整个可见前缀生成分数；本关的表只看各位置的词，所以不会学语言。','The teaching predictor replaces the scoring stage below: embeddings, encoder/decoder and vocabulary projection. A real model uses the visible prefix to compute scores; this table looks only at the token at each position, so it does not learn language.'))}</p>${originalArchitecture({...entry,flow:'generation',focus:['layers','logits'],referenceOnly:true})}</details>`;
 }
-function render(id,full=false){
+function render(id){
  const entry=get(id),e=esc;
  const outlet=`<div class="structure-outlet"><small>${e(copy.exit)}</small><strong>${e(entry.output)}</strong><code>${e(entry.shape)}</code></div>`;
- if(id==='autoregressive')return generationMap(entry,outlet,full);
- if(!full)return `<details class="structure-compact" open><summary>${e(copy.title)}</summary><button type="button" data-open-structure aria-haspopup="dialog" aria-label="${e(copy.open)}"><div class="structure-mini-caption">${e(entry.flow==='connection'?entry.where:copy[entry.family])}<span aria-hidden="true">↗</span></div>${diagram(entry)}<span class="structure-location">${e(entry.where)}</span><span class="structure-open-detail">${e(L('展开详细结构 →','Explore the detailed structure →'))}</span></button>${outlet}</details>`;
+ if(id==='autoregressive')return generationMap(entry,outlet);
  const step=(n)=>`<li data-map-step="${n.id}" class="${entry.focus.includes(n.id)?'map-step-focus ':''}${entry.exit===n.id?'map-step-exit':''}"><span>${e(n.label)}</span>${entry.exit===n.id?`<b>${e(copy.exit)}</b>`:''}</li>`;
  let route=entry.steps.map(step).join('');
  if(entry.flow==='cross'){

@@ -59,6 +59,7 @@ The later puzzles add memory and execution-cost constraints to the numerical goa
 | Build from the shelf | Drag a module card onto the table; its 3D preview follows your cursor. Click a card, then a free spot as an alternative. **Return module** removes that copy and its wires. |
 | Explore the scene | Drag empty space to rotate; scroll to zoom. During a run, dragging the workbench or a module rotates the view without moving the module. |
 | Pan the view | Every level has **Pan view** beside **Reset view**. Turn it on and drag, or hold Shift/right-drag. Panning also works during runs and pauses; it does not move modules. |
+| Get a hint | Click **Hint** beside the level selector to view the detailed architecture, this lesson’s focus and its output. Close with ×, Escape or the backdrop. |
 | Inspect a module | Double-click it on the workbench or shelf to open its card. Shelf previews work even when stock is exhausted; Enter also opens a focused shelf item. |
 | Test your circuit | Click **Run my network** and watch the vectors move. |
 | Pause a run | Click **Pause** beside the run button. Rotate or zoom while frozen, then click **Resume** to continue from the same moment. |
