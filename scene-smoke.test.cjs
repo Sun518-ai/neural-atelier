@@ -1,11 +1,11 @@
 const fs=require('node:fs'),vm=require('node:vm'),test=require('node:test'),assert=require('node:assert/strict');
 const {parseHTML}=require('linkedom');
-async function boot({reduced=true,frameMs=1000,onFrame=()=>{},languages=['zh-CN'],timers={setTimeout,clearTimeout}}={}){
+async function boot({reduced=true,frameMs=1000,onFrame=()=>{},languages=['zh-CN'],timers={setTimeout,clearTimeout},viewport={width:1400,height:760}}={}){
  const Three=await import('./vendor/three.module.js');
  const {document,window}=parseHTML(fs.readFileSync(__dirname+'/index.html','utf8'));const native=document.createElement.bind(document);
  document.createElement=function(name){const el=native(name);if(name==='canvas')el.getContext=()=>({fillRect(){},fillText(t){el.drawnText=String(t);},measureText(t){return {width:String(t).length*60}}});return el;};
  for(const el of document.querySelectorAll('dialog')){el.showModal=function(){this.open=true};el.close=function(){this.open=false};}
- for(const el of document.querySelectorAll('*')){Object.defineProperty(el,'clientWidth',{get:()=>el.id==='scene'?1400:100});Object.defineProperty(el,'clientHeight',{get:()=>el.id==='scene'?760:60});el.focus=()=>{};el.scrollIntoView=()=>{};}
+ for(const el of document.querySelectorAll('*')){Object.defineProperty(el,'clientWidth',{get:()=>el.id==='scene'?viewport.width:100});Object.defineProperty(el,'clientHeight',{get:()=>el.id==='scene'?viewport.height:60});el.focus=()=>{};el.scrollIntoView=()=>{};}
  let view,renderedCamera;const scenes=[];class Renderer{constructor(){this.domElement=native('canvas');this.shadowMap={};this.capabilities={getMaxAnisotropy:()=>8};}setPixelRatio(){}setClearColor(){}setSize(){}render(scene,camera){renderedCamera=camera;view={position:camera.position.toArray(),width:camera.right-camera.left};scenes.push(scene);scene.updateMatrixWorld();camera.updateMatrixWorld();scene.traverse(o=>{if(o.isMesh)assert.ok(o.matrixWorld.elements.every(Number.isFinite),'nonfinite transform '+o.type);});}}
  const storage=new Map();let now=0;const c={document,console,navigator:{languages},T:{...Three,WebGLRenderer:Renderer},devicePixelRatio:2,ResizeObserver:class{observe(){}},requestAnimationFrame:cb=>setImmediate(()=>{now+=frameMs;onFrame({now,document,window});cb(now);}),cancelAnimationFrame:clearImmediate,performance:{now:()=>now},matchMedia:()=>({matches:reduced}),setTimeout:timers.setTimeout,clearTimeout:timers.clearTimeout,localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)}};c.window=c;vm.createContext(c);
  for(const f of ['locales/en.js','i18n.js','music.js','shell.js','model.js','campaign.js','engine-model.js','original-curriculum.js','transformer-demo.js','cloud-curriculum.js','lesson-io.js','structure-map.js'])vm.runInContext(fs.readFileSync(__dirname+'/'+f,'utf8'),c,{filename:f});
@@ -1199,6 +1199,51 @@ test('extended overview shrinks the board and fades titles, then restores labels
  }
 });
 
+test('every ordinary lesson keeps numeric detail at its default 100% even in a narrower desktop viewport',async()=>{
+ const viewport={width:1100,height:700},app=await boot({viewport}),M=app.c.NeuralPrologue,doc=app.document;
+ const slider=doc.querySelector('#camera-zoom'),reset=()=>doc.querySelector('#camera-reset').onclick();
+ for(const id of Object.values(M.routes).flatMap(route=>route.ids).filter(id=>!M.levels[id].floating)){
+  app.api.switchLevel(id);app.api.setState(M.solutions(id));app.api.getWorld().rebuild();const saved=JSON.stringify(app.api.getState());
+  const faces=[];app.scenes.at(-1).traverse(o=>{if(o.userData.detailText)faces.push(o);});
+  assert.equal(doc.querySelector('#camera-zoom-rate').textContent,'100%',id);
+  assert.ok(faces.every(o=>o.visible),id+' default shows all matrix values');
+  slider.value='0';slider.dispatchEvent(new app.window.Event('input'));
+  assert.ok(faces.every(o=>!o.visible),id+' distant view abstracts all matrices together');
+  reset();assert.equal(doc.querySelector('#camera-zoom-rate').textContent,'100%');assert.ok(faces.every(o=>o.visible),id+' reset restores numeric detail');
+  assert.equal(JSON.stringify(app.api.getState()),saved,id+' camera changes do not edit the circuit');
+ }
+});
+
+test('single- and two-head attention show formulas and matrix values at 100% and restore them after zooming during a pause',async()=>{
+ let app,phase=0;const seen=new Set(),viewport={width:1100,height:700};
+ app=await boot({viewport,reduced:false,frameMs:200,onFrame:({document})=>{
+  if(!app)return;
+  const formulas=[...document.querySelectorAll('.sequence-projection-calculation:not([hidden])')];
+  for(const formula of formulas){
+   assert.equal(formula.dataset.detail,'full','the default view never hides active arithmetic');
+   assert.equal(Number(formula.style.getPropertyValue('--calculation-scale')),1,'100% uses the normal formula font size');
+   assert.match(formula.querySelector('.projection-equation').textContent,/×/);seen.add(formula.dataset.node);
+  }
+  const formula=formulas.find(el=>el.dataset.node==='aggregate');if(phase||!formula)return;phase=1;app.api.togglePause();
+  let unit;app.scenes.at(-1).traverse(o=>{if(o.userData.node==='aggregate')unit=o;});
+  const arithmetic=JSON.stringify(unit.userData.aggregation),text=formula.textContent,faces=unit.children.filter(o=>o.userData.detailText);
+  assert.ok(faces.length&&faces.every(o=>o.visible));
+  const slider=document.querySelector('#camera-zoom');slider.value='0';slider.dispatchEvent(new app.window.Event('input'));
+  assert.equal(formula.dataset.detail,'abstract');assert.ok(faces.every(o=>!o.visible));assert.ok(Number(formula.style.getPropertyValue('--calculation-scale'))<1);
+  document.querySelector('#camera-reset').onclick();
+  assert.equal(document.querySelector('#camera-zoom-rate').textContent,'100%');assert.equal(formula.dataset.detail,'full');assert.ok(faces.every(o=>o.visible));
+  viewport.width=1400;document.querySelector('#camera-reset').onclick();assert.equal(formula.dataset.detail,'full');assert.equal(Number(formula.style.getPropertyValue('--calculation-scale')),1);
+  assert.equal(formula.textContent,text);assert.equal(JSON.stringify(unit.userData.aggregation),arithmetic);app.api.togglePause();
+ }});
+ const M=app.c.NeuralPrologue;app.api.switchLevel('self-attention');const state=M.initial('self-attention');
+ for(const [kind,x,z]of [['original-weights',-4,-2],['v',-4,2],['aggregate',0,0],['output',4,0]])assert.ok(M.addNode(state,kind,x,z));
+ for(const [from,to,slot]of [['R','original-weights',0],['R','v',0],['original-weights','aggregate',0],['v','aggregate',1],['aggregate','output',0],['output','sink',0]])assert.equal(M.connect(state,from,to,slot),null);
+ app.api.setState(state);app.api.getWorld().rebuild();const saved=JSON.stringify(state);await app.api.run();
+ assert.deepEqual([...seen].sort(),['aggregate','output','v']);assert.equal(phase,1);assert.equal(app.document.querySelectorAll('#test-results .pass').length,3);assert.equal(JSON.stringify(state),saved);
+ seen.clear();app.api.switchLevel('multihead');const multi=M.solutions('multihead'),multiSaved=JSON.stringify(multi);app.api.setState(multi);app.api.getWorld().rebuild();await app.api.run();
+ assert.deepEqual([...seen],['output']);assert.equal(app.document.querySelectorAll('#test-results .pass').length,3);assert.equal(JSON.stringify(multi),multiSaved);
+});
+
 test('small matrices keep their blocks while numbers return when zoomed in',async()=>{
  const app=await boot();app.api.switchLevel('original-ffn');app.api.setState(app.c.NeuralPrologue.solutions('original-ffn'));app.api.getWorld().rebuild();
  const state=JSON.stringify(app.api.getState());
@@ -1767,7 +1812,7 @@ test('projection keeps computed values by their own output spheres before gather
     wheel(2000);assert.equal(calc.dataset.detail,'abstract');assert.ok(Number(calc.style.getPropertyValue('--calculation-scale'))<scale);
     assert.ok(labels.every(el=>el.style.visibility==='hidden'),'abstract view retains the 3D result blocks instead of tiny digits');
    }else if(zoomPhase===1){
-    zoomPhase=2;wheel(-2000);assert.equal(calc.dataset.detail,'full');assert.ok(Number(calc.style.getPropertyValue('--calculation-scale'))>1);app.api.togglePause();
+    zoomPhase=2;wheel(-2000);assert.equal(calc.dataset.detail,'full');assert.ok(Math.abs(Number(calc.style.getPropertyValue('--calculation-scale'))-1)<1e-9,'returning to 100% restores the normal formula size');app.api.togglePause();
    }
   }
   if(!out.visible)return;

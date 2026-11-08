@@ -453,7 +453,7 @@ try{
  const nodeColor=id=>colors[kindOf(id)]||0x91afa4;
  const material=(c,extra={})=>new T.MeshStandardMaterial({color:c,roughness:.62,metalness:.07,...extra});
  function box(parent,w,h,d,x,y,z,c,extra={}){const b=new T.Mesh(new T.BoxGeometry(w,h,d),material(c,extra));b.position.set(x,y,z);b.castShadow=true;b.receiveShadow=true;parent.add(b);return b;}
- const {createSceneArt}=await import('./scene-art.js?v=score-io-1');
+ const {createSceneArt}=await import('./scene-art.js?v=default-detail-1');
  function scenePalette(){
   if(typeof getComputedStyle!=='function')return {};
   const css=getComputedStyle(document.body),read=name=>css.getPropertyValue(name).trim();
@@ -615,7 +615,7 @@ try{
    Object.assign(camera,{left:-width/2,right:width/2,top:height/2,bottom:-height/2});
    camera.position.set(cameraTarget.x+Math.sin(yaw)*24,cameraTarget.y+Math.sin(pitch)*24,cameraTarget.z+Math.cos(yaw)*Math.cos(pitch)*24);
   }
-  camera.lookAt(cameraTarget);camera.updateProjectionMatrix();camera.updateMatrixWorld();art.updateDetail(camera,w,h);syncFusion();
+  camera.lookAt(cameraTarget);camera.updateProjectionMatrix();camera.updateMatrixWorld();art.updateDetail(camera,w,h,stage().floating||focusId?null:stage().zoom/zoom);syncFusion();
   for(const p of packets)if(p.tokenOperation||p.centering||p.sequenceProjection)for(const mesh of [p.mesh,p.mixing?p.otherMesh:null].filter(Boolean))for(const {label}of mesh.userData.featureRoutes)label.visible=label.material.opacity>0&&art.detailsVisible();
   renderer.render(scene,camera);
   syncConnectionGuide(w,h);syncPlacementGuide(w,h);syncWireTargets(w,h);syncConnectionError(w,h);
@@ -639,7 +639,8 @@ try{
   packets.forEach(p=>{
    const [x,y]=project(p.p.clone().add(new T.Vector3(0,.7,0)));p.el.style.left=x+'px';p.el.style.top=y+'px';
    if(p.calculation){
-    const scale=stage().floating?Math.min(w/width/60,w*.68/(p.calculation.offsetWidth||800)):w/width/60;
+    const resultScale=w/width/60;
+    const scale=stage().floating?Math.min(resultScale,w*.68/(p.calculation.offsetWidth||800)):focusId?resultScale:stage().zoom/zoom;
     p.equationVisible=art.detailsVisible();
     p.calculation.dataset.detail=p.equationVisible?'full':'abstract';p.calculation.style.setProperty('--calculation-scale',String(scale));
     const anchor=p.selection?art.selectionAnchor(p.node.id,p.selectionRow,p.progress??0):p.tokenOperation?art.tokenAnchor(p.node.id,p.tokenRow,p.input,p.progress??0):p.centering?art.layerNormAnchor(p.node.id,p.rmsRow,p.progress??0):p.normalizing?art.rmsAnchor(p.node.id,p.rmsRow):art.projectionOutlet(p.node.id,p.column);
@@ -652,11 +653,11 @@ try{
     p.calculation.style.setProperty('--calculation-focus',String(p.focus||0));
     for(const {el,bar}of p.outputLabels){
      const [rx,ry]=project(bar.getWorldPosition(new T.Vector3()));
-     if(p.sequenceProjection){el.style.left=rx+'px';el.style.top=(ry-12*scale)+'px';el.style.setProperty('--calculation-scale',String(scale));el.style.visibility=p.equationVisible?'':'hidden';continue;}
+     if(p.sequenceProjection){el.style.left=rx+'px';el.style.top=(ry-12*resultScale)+'px';el.style.setProperty('--calculation-scale',String(resultScale));el.style.visibility=p.equationVisible?'':'hidden';continue;}
      const [sx,sy]=project(art.projectionOutlet(p.node.id,bar.userData.feature)),g=p.outputMesh.userData.gather;
      const aligned=p.tokenOperation||p.centering||p.selection;
-     el.style.left=((sx+(aligned?0:28)*scale)*(1-g)+(rx-(aligned?0:7)*scale)*g)+'px';el.style.top=((sy-(aligned?16:0)*scale)*(1-g)+(ry-12*scale)*g)+'px';
-     el.style.setProperty('--calculation-scale',String(scale));el.style.visibility=p.equationVisible?'':'hidden';
+     el.style.left=((sx+(aligned?0:28)*resultScale)*(1-g)+(rx-(aligned?0:7)*resultScale)*g)+'px';el.style.top=((sy-(aligned?16:0)*resultScale)*(1-g)+(ry-12*resultScale)*g)+'px';
+     el.style.setProperty('--calculation-scale',String(resultScale));el.style.visibility=p.equationVisible?'':'hidden';
     }
    }
   });

@@ -43,7 +43,7 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
  }
  const detailBottom=new T.Vector3(),detailTop=new T.Vector3();
  const detailModes={board:true,card:true};let detailScope='board';
- function updateDetail(camera,width,height){
+ function updateDetail(camera,width,height,boardScale=null){
   scene.updateMatrixWorld(true);camera.updateMatrixWorld();
   const labels=[],modules=new Set();let smallest=Infinity;
   scene.traverse(mesh=>{
@@ -66,10 +66,12 @@ export function createSceneArt(T,scene,colors,{anisotropy=1}={}){
    };
    smallest=Math.min(smallest,Math.max(span(1,0),span(0,1.2)));
   }
-  // Judge the whole module, not the fitted font of its longest decimal.
-  // Normal-size modules keep all numbers; truly small plates switch together.
+  // 100% is each lesson's authored learning view, even on a wider board.
+  // Only abstract after zooming away from that view AND making plates small.
+  // Cards and the floating full-model demo still use projected size alone.
   if(!Number.isFinite(smallest))return;
-  const visible=smallest>=(detailModes[detailScope]?95:105);
+  const nearDefault=detailScope==='board'&&Number.isFinite(boardScale)&&boardScale>=(detailModes.board?.8:.9);
+  const visible=nearDefault||smallest>=(detailModes[detailScope]?95:105);
   detailModes[detailScope]=visible;labels.forEach(mesh=>mesh.visible=visible);
  }
  function surroundings(samples,layout={},palette={}){
