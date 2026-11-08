@@ -25,6 +25,6 @@ test('every lesson has explicit bilingual boundaries without changing its puzzle
  assert.deepEqual(Array.from(M.reference(x,'self-attention')),Array.from(y));
  assert.notDeepEqual(Array.from(o),Array.from(y),'the aggregation and projected attention outlets are distinct');
  assert.equal(M.levels['pack-scores'].chapter,'Original · reuse after 07');
- assert.equal(M.levels['masked-multihead'].chapter,'Original · assembly after 13');
+ assert.equal(M.levels['masked-multihead'].chapter,'Original · assembly practice');
  assert.equal(M.levels.softmax.summary,M.levels.softmax.description,'the menu describes the same unwired task as the lesson');
 });
