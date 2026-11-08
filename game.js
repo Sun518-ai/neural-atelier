@@ -1,5 +1,5 @@
-import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=slow-demo-1';
-import {createProgress} from './level-progress.js?v=full-restart-1';
+import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=ffn-progression-1';
+import {createProgress} from './level-progress.js?v=ffn-progression-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -194,7 +194,7 @@ function stageChrome(){
   const ex=M.embeddingWidthExample;
   $('#mission-reason-example').innerHTML=`<div class="embedding-width-example">${[[ex.beforeLabel,ex.before],[ex.afterLabel,ex.after]].map(([label,values])=>`<div data-width="${values.length}"><small>${label}</small><div class="embedding-lookup"><b>${ex.token}</b><span aria-hidden="true">→</span><div class="embedding-coordinates">${values.map((value,i)=>`<span style="--feature-color:${['#397aa2','#8862aa','#b68036','#288778'][i]}">${fmt(value)}</span>`).join('')}</div></div></div>`).join('')}</div>`;
  }else if(reason?.kind==='residual'){
-  const x=reason.input,f=M.linear(M.linear(x,M.weights.project),M.weights.down),y=x.map((v,i)=>v+f[i]);
+  const x=reason.input,f=M.operations['relu-ffn']([x]),y=x.map((v,i)=>v+f[i]);
   $('#mission-reason-example').innerHTML=`<div class="residual-example">${[['baseline',I18n.t("原有特征 X"),x],['update',I18n.t("修改量 F"),f],['result',I18n.t("更新结果 Y"),y]].map(([role,label,values])=>`<div data-role="${role}"><span>${label}</span><code>${vector(values)}</code></div>`).join('')}<small>Y = X + F</small></div>`;
  }else $('#mission-reason-example').innerHTML=reason?.inputs?`<table><caption>${I18n.t("比较两种输入的第 3 个特征")}</caption><thead><tr><th>${I18n.t("输入")}</th><th>${I18n.t("内容 × 系数 ≈ 结果")}</th></tr></thead><tbody>${reason.inputs.map(input=>{
   const i=reason.feature,u=M.linear(input,M.weights.up)[i],g=M.linear(input,M.weights.gate)[i],s=M.silu(g);

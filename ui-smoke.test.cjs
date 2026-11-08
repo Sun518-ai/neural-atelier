@@ -14,6 +14,18 @@ function boot(storage=new Map(),hash='',languages=['zh-CN']){
  vm.runInContext(code+`\nworld={relocalize(){},labels(){},rebuild(){},beforeStage(){},setStage(){},clearPackets(){},focused(){return null},async animate(){}};refresh();`,c);
  return {c,document,window,storage,location,navigation,hashchange,eval:code=>vm.runInContext(code,c)};
 }
+test('revised FFN lessons archive legacy projection circuits in every save generation',()=>{
+ for(const generation of [0,3])for(const id of ['workshop','residual']){
+  const key=`neural-atelier-level-${id}-v1`+(generation?'-run-'+generation:''),old={version:1,levelId:id,palette:['project','down','add'],nodes:[{id:'project',kind:'project',x:-2,z:1,links:['R']}],sink:'project'};
+  if(id==='residual'){old.nodes.push({id:'down',kind:'down',x:1,z:1,links:['project']},{id:'add',kind:'add',x:4,z:1,links:['R','down']});old.sink='add';}
+  const raw=JSON.stringify(old),meta={current:id,completed:[id,'wire'],generation,nextGeneration:generation},storage=new Map([[key,raw],['neural-atelier-chapters-v1',JSON.stringify(meta)]]),app=boot(storage,'#'+id);
+  assert.equal(storage.get(key+'-before-ffn-reuse'),raw);assert.equal(app.eval('state.nodes.length'),0);assert.equal(app.eval('state.sink'),null);
+  assert.equal(app.eval("progress.completed('wire')"),true);assert.equal(app.eval('progress.canRestore(stageId,state)'),false);
+  app.eval("M.addNode(state,'relu-ffn',0,0);M.connect(state,'R','relu-ffn',0);save()");
+  const edited=app.eval('JSON.stringify(state)'),reloaded=boot(storage,'#'+id);
+  assert.equal(reloaded.eval('JSON.stringify(state)'),edited,'an unfinished new circuit survives reload');assert.equal(storage.get(key+'-before-ffn-reuse'),raw);
+ }
+});
 test('independent animation scheduling advances branches separately and waits only for real inputs',()=>{
  const app=boot();
  const result=app.eval(`(()=>{
@@ -506,13 +518,13 @@ test('SwiGLU objective connects familiar modules to the FFN while keeping residu
  assert.deepEqual([...app.c.I18n.missing],[]);
 });
 test('the simple placement lesson introduces one familiar module before the original network chapter',()=>{
- const app=boot(new Map(),'#workshop',['en-US']);assert.equal(app.eval('state.nodes.length'),0);assert.equal(app.document.querySelectorAll('[data-add-module]').length,1);assert.equal(app.document.querySelector('#module-count').textContent,'0 / 1');assert.equal(app.eval('M.levels.residual.next'),'workshop');assert.equal(app.eval('M.levels.workshop.next'),'embedding');assert.doesNotMatch(app.document.querySelector('#module-shelf').textContent,/[\u3400-\u9fff]/);
+ const app=boot(new Map(),'#workshop',['en-US']);assert.equal(app.eval('state.nodes.length'),0);assert.equal(app.document.querySelectorAll('[data-add-module]').length,1);assert.equal(app.document.querySelector('#module-count').textContent,'0 / 1');assert.equal(app.eval('M.levels.workshop.next'),'residual');assert.equal(app.eval('M.levels.residual.next'),'embedding');assert.doesNotMatch(app.document.querySelector('#module-shelf').textContent,/[\u3400-\u9fff]/);
 });
 
 test('the shelf remains usable after the placement tutorial and original lessons begin empty',()=>{
  const app=boot(),M=app.c.NeuralPrologue,shelf=app.document.querySelector('#module-shelf');
  for(const [index,id]of M.routes.main.ids.entries()){
-  app.eval(`switchLevel('${id}')`);assert.equal(shelf.hidden,index<6||!!M.levels[id].demonstration,id+' shelf visibility');if(M.levels[id].demonstration)continue;
+  app.eval(`switchLevel('${id}')`);assert.equal(shelf.hidden,index<5||!!M.levels[id].demonstration,id+' shelf visibility');if(M.levels[id].demonstration)continue;
   if(index>=6){assert.equal(app.eval('state.nodes.length'),0,id+' requires taking modules from the shelf');assert.equal(app.eval('state.sink'),null);}
  }
  for(const id of [...M.routes.modern.ids,...M.routes.engine.ids]){
@@ -698,13 +710,13 @@ test('reordered chapters retain completion and advanced saves while finished pro
 });
 
 test('every fresh prologue requires wiring and the placement lesson requires taking a module',async()=>{
- const app=boot(),M=app.c.NeuralPrologue,ids=['wire','projection','relu','down-projection','original-ffn','residual','workshop'];
+ const app=boot(),M=app.c.NeuralPrologue,ids=['wire','projection','relu','down-projection','original-ffn','workshop','residual'];
  assert.deepEqual(Array.from(M.routes.main.ids).filter(id=>M.levels[id].practice),ids);
  for(const id of ids){
   app.eval(`switchLevel('${id}')`);
   assert.equal(app.eval('state.sink'),null,id+' starts with no output wire');
   assert.ok(app.eval('state.nodes.every(n=>n.links.every(x=>x===null))'),id+' has no preset connections');
-  assert.equal(app.eval('state.nodes.length'),id==='workshop'?0:M.levels[id].nodes.length);
+  assert.equal(app.eval('state.nodes.length'),M.levels[id].buildable?0:M.levels[id].nodes.length);
   assert.equal(app.document.querySelector('#restore-layout').hidden,true,'no previous solution is supplied');
   await app.eval('run()');assert.equal(app.eval('levelPassed()'),false,id+' cannot pass without playing');
   assert.ok(!app.document.querySelector('#level-complete').open);assert.equal(app.eval('progress.completed(stageId)'),false);
@@ -789,7 +801,7 @@ test('editing a completed prologue keeps the unfinished attempt across navigatio
  app.eval("switchLevel('projection');switchLevel('workshop')");assert.equal(app.eval('JSON.stringify(state)'),unfinished);
  const reloaded=boot(app.storage,'#workshop');assert.equal(reloaded.eval('JSON.stringify(state)'),unfinished);assert.equal(reloaded.eval('state.nodes.length'),1);
  assert.equal(reloaded.document.querySelector('#restore-layout').hidden,false);
- reloaded.document.querySelector('#restore-layout').onclick();assert.equal(reloaded.eval('state.sink'),'project');assert.equal(reloaded.eval('busy'),false);
+ reloaded.document.querySelector('#restore-layout').onclick();assert.equal(reloaded.eval('state.sink'),'relu-ffn');assert.equal(reloaded.eval('busy'),false);
 });
 
 test('bridge cards explain only their actual inputs and calculations in both languages',()=>{
@@ -858,7 +870,7 @@ test('starting over resets every board and completion while preserving settings 
  doc.querySelector('#progress-reset-cancel').onclick();assert.deepEqual(storage,before);
  app.eval('busy=true;refresh()');assert.equal(doc.querySelector('#progress-restart').disabled,true);doc.querySelector('#progress-reset-apply').onclick();assert.deepEqual(storage,before);app.eval('busy=false;refresh()');
  doc.querySelector('#progress-restart').onclick();doc.querySelector('#progress-reset-apply').onclick();
- assert.equal(app.eval('state.sink'),null);assert.equal(app.eval('state.nodes.length'),3,'fixed tutorial modules remain');assert.ok(app.eval('state.nodes.every(n=>n.links.every(x=>x===null))'));assert.equal(app.eval('history.length'),0);
+ assert.equal(app.eval('state.sink'),null);assert.equal(app.eval('state.nodes.length'),0,'residual modules must be placed from the shelf');assert.ok(app.eval('state.nodes.every(n=>n.links.every(x=>x===null))'));assert.equal(app.eval('history.length'),0);
  assert.equal(doc.querySelector('#restore-layout').hidden,true,'a reset board does not offer the old completed answer');
  assert.equal(doc.querySelector('#progress-restart-undo').hidden,false);assert.match(doc.querySelector('#progress-reset-status').textContent,/全部关卡已恢复/);
  for(const [key,value]of before)if(key!=='neural-atelier-chapters-v1')assert.equal(storage.get(key),value,'old save and preference retained: '+key);

@@ -79,7 +79,7 @@ test('multiple projection and residual instances have independent edges, values 
 });
 test('construction limits count current instances and fixed lessons cannot create modules',()=>{
  for(const id of ['wire','projection','relu','down-projection','original-ffn','residual'])assert.equal(M.canAdd(M.initial(id),'project'),false);
- const tutorial=M.initial('workshop');assert.equal(M.addNode(tutorial,'project',0,0),true);assert.equal(M.canAdd(tutorial,'project'),false);assert.equal(M.removeNode(tutorial,'project'),true);assert.equal(M.canAdd(tutorial,'project'),true);
+ const tutorial=M.initial('workshop');assert.equal(M.addNode(tutorial,'relu-ffn',0,0),true);assert.equal(M.canAdd(tutorial,'relu-ffn'),false);assert.equal(M.removeNode(tutorial,'relu-ffn'),true);assert.equal(M.canAdd(tutorial,'relu-ffn'),true);
  const s=M.initial('ffn'),kinds=['project','project','down','down','add','add','gate','project'];
  kinds.forEach((kind,i)=>assert.equal(M.addNode(s,kind,[-4.7,-1.4,1.9,5.2][i%4],i<4?-2:2),true));
  assert.equal(s.nodes.length,M.moduleLimit(M.levels.ffn));assert.equal(M.stock(s,'silu'),2);assert.equal(M.canAdd(s,'silu'),false,'free stock cannot exceed the table limit');
@@ -103,7 +103,7 @@ test('an alternate attention instance uses its own operator and its connected at
 
 test('bridge lessons precede compositions and each starts with a real unsolved task',()=>{
  const order=[...M.routes.main.ids,...M.routes.modern.ids],before=(a,b)=>assert.ok(order.indexOf(a)<order.indexOf(b),a+' must precede '+b);
- for(const chain of [['relu','down-projection','original-ffn','residual','workshop','activation','plain-ffn','gate-projection','pairwise','gating','swiglu','normalize','ffn'],['scores','softmax','causal','rotation','rope','aggregation','attention'],['vocabulary-scores','vocabulary','autoregressive']])for(let i=1;i<chain.length;i++)before(chain[i-1],chain[i]);
+ for(const chain of [['relu','down-projection','original-ffn','workshop','residual','activation','plain-ffn','gate-projection','pairwise','gating','swiglu','normalize','ffn'],['scores','softmax','causal','rotation','rope','aggregation','attention'],['vocabulary-scores','vocabulary','autoregressive']])for(let i=1;i<chain.length;i++)before(chain[i-1],chain[i]);
  for(const id of ['down-projection','plain-ffn','gate-projection','pairwise','swiglu','softmax','rotation','aggregation','vocabulary-scores']){
   const s=M.initial(id);assert.deepEqual(Array.from(s.nodes,n=>n.kind),M.levels[id].requirePlacement?[]:Array.from(M.levels[id].nodes),id+' follows its placement policy');
   if(id!=='down-projection')assert.equal(M.levels[id].buildable,true,id+' now permits returning and placing modules');

@@ -172,6 +172,19 @@ lesson('original-ffn',L('接出原版 FFN','Build the original FFN'),['project',
  L('第一次投影产生更多特征组合，ReLU 改变数值关系，第二次投影把这些结果组合回后续网络需要的宽度。','The first projection creates more feature combinations, ReLU changes their numerical relationships, and the second projection combines them back to the width needed downstream.'),
  L('FFN(x) = ReLU(xW1 + b1)W2 + b2。本例 b1、b2 为 0。FFN 加工同一 token 的特征，Attention 才负责跨 token 取信息。','FFN(x) = ReLU(xW1 + b1)W2 + b2. Here b1 and b2 are zero. The FFN processes features within each token; Attention reads across tokens.'),
  {project:['R'],relu:['project'],down:['relu'],sink:'down'},classicFFN,{scalar:true,shape:'2 → 4 → 4 → 2'});
+lesson('workshop',L('用上刚组好的 FFN','Use the FFN you just built'),['relu-ffn'],
+ L('从组件架取出原版 FFN','Take the original FFN from the shelf'),
+ L('上一关的三块组件已经合成“原版 FFN · ReLU”。把它拖到空台面上，再接好输入和出口，得到与上一关相同的结果。','The previous lesson’s three modules are now packaged as Original FFN · ReLU. Drag it onto the empty table and connect its input and output to reproduce the same result.'),
+ L('把验证过的一段网络收成组件，后面就能直接复用，不必反复重搭。封装只改变外观：里面仍依次执行线性展开、ReLU、线性压回，权重和结果都没有变。','Packaging a working network lets you reuse it without rebuilding its internals. Only the outer appearance changes: expansion, ReLU and down projection still run in order, with the same weights and results.'),
+ L('这一关只多学一个操作：从组件架拖入组件。双击 FFN 可以查看内部三步；下一关在它外面加残差。','This lesson adds just one action: dragging a module from the shelf. Double-click the FFN to inspect its three steps. Next, add a residual around it.'),
+ {'relu-ffn':['R'],sink:'relu-ffn'},classicFFN,{scalar:true,buildable:true,requirePlacement:true,placementTutorial:true,inventory:{'relu-ffn':1},maxModules:1,packages:['relu-ffn'],retiredCircuitKinds:['project'],sourceX:-6,sinkX:6,boardWidth:17,boardDepth:7,zoom:.83,outputTitle:L('FFN 输出 F','FFN output F')});
+lesson('residual',L('留一条回来的路','Keep a path back'),['relu-ffn','add'],
+ L('把 FFN 结果加回输入','Add the FFN result to the input'),
+ L('继续使用刚才的原版 FFN，再加入“残差相加”。目标是 X + FFN(X)：同一份输入既参与 FFN 计算，也直接参与最后的相加。','Reuse the original FFN and add Residual addition. The target is X + FFN(X): the same input contributes both through the FFN and directly to the final sum.'),
+ L('上一关把输入完全变成 FFN 的输出；现在把 FFN 输出当作对原输入的修改量。这样，支路只需学习加多少或减多少；不需要修改时，输出 0 就能让原输入继续传下去，不必再学一次复制输入。','The previous lesson replaced the input with the FFN output. Now use that output as an update to the input. The branch only needs to learn how much to add or subtract. When no change is needed, a zero update passes the input onward without learning to copy it again.'),
+ L('残差不保证数值不变：修改量可以增加、减少，甚至抵消原值。ReLU 仍在 FFN 内部；新加的只是外面的直连路径和相加。','A residual does not keep values unchanged: the update may increase, decrease or cancel them. ReLU remains inside the FFN; only the bypass and addition are new.'),
+ {'relu-ffn':['R'],add:['R','relu-ffn'],sink:'add'},x=>plus(x,classicFFN(x)),{scalar:true,buildable:true,requirePlacement:true,inventory:{'relu-ffn':1,add:1},maxModules:2,packages:['relu-ffn'],retiredCircuitKinds:['project','down'],shape:'X + FFN(X) → 2'});
+Object.assign(added.residual.rationale,{kind:'residual',input:[1,0]});
 lesson('layernorm',L('先减均值，再看尺度','Center before scaling'),['layernorm2'],
  L('把每个向量整理到零均值','Center each vector at zero'),
  L('把输入送过 LayerNorm。它先减去这组特征的均值，再除以标准差；所有输入都要匹配。','Pass the input through LayerNorm. Subtract the feature mean and divide by the standard deviation. Match every input.'),
@@ -356,8 +369,8 @@ Object.assign(M.levels,added);
 // lesson. Preserve those placed parts without offering them early on the shelf.
 M.levels['vocabulary-scores'].legacyInventory={'original-head':4,'target-embed':2,'original-transformer':2};
 M.levels.vocabulary.legacyInventory={'original-head':4};
-for(const level of Object.values(added))if(level.buildable)level.inventory=Object.fromEntries(level.nodes.map(kind=>[kind,2]));
-const originalPrologue=['wire','projection','relu','down-projection','original-ffn','residual','workshop'];
+for(const level of Object.values(added))if(level.buildable)level.inventory??=Object.fromEntries(level.nodes.map(kind=>[kind,2]));
+const originalPrologue=['wire','projection','relu','down-projection','original-ffn','workshop','residual'];
 const originalNetwork=['embedding','positions','layernorm','add-norm','qkv','scores','softmax','weighted-sum','self-attention','multihead','wider-features','encoder-layer','causal','decoder-self','cross-attention','decoder-layer','vocabulary-scores','encoder-decoder','vocabulary','autoregressive'];
 const modern=['activation','plain-ffn','gate-projection','pairwise','gating','swiglu','normalize','ffn','rotation','rope','aggregation','attention','block'];
 for(const level of Object.values(M.levels))level.practice=false;
@@ -376,7 +389,7 @@ for(const [track,route]of Object.entries(M.routes))route.ids.forEach((id,i)=>{M.
 // playable route, stored IDs, or the order of any mathematical operations.
 M.routes.main.description=L('从组件到完整模型：先搭编码器，再搭解码器，最后连接两端。输入准备、组件扩展和结构组装会分别标明。','Build from components to a complete model: assemble the encoder, build the decoder, then connect them. Input preparation, component extensions and assembly are labeled separately.');
 M.routes.main.groups=[
- {id:'workbench',label:L('动手入门','Getting started'),title:L('序章 · 学会动手搭网络','Prologue · Learn to build'),description:L('从传递一个向量开始，逐步搭出投影、ReLU、FFN 与残差，再学会从组件架取出模块。','Start by routing a vector, build projections, ReLU, an FFN and a residual, then learn to place modules from the shelf.'),ids:originalPrologue},
+ {id:'workbench',label:L('动手入门','Getting started'),title:L('序章 · 学会动手搭网络','Prologue · Learn to build'),description:L('先学投影与 ReLU，再搭出原版 FFN；从组件架取用这个 FFN，最后在它外面加残差。','Learn projections and ReLU, assemble the original FFN, take that FFN from the shelf, then add a residual around it.'),ids:originalPrologue},
  {id:'foundations',label:L('词向量与归一化','Inputs and normalization'),title:L('基础准备 · 词向量、位置与归一化','Foundations · Embeddings, positions and normalization'),description:L('把词变成带位置的特征，再学习归一化，以及原版“先相加，再归一化”的结构。后面的完整层会反复用到它们。','Turn tokens into position-aware features, then learn normalization and the original add-then-normalize pattern. Complete layers will reuse these building blocks.'),ids:['embedding','positions','layernorm','pack-ffn','add-norm']},
  {id:'attention',label:L('搭出注意力','Build attention'),title:L('注意力 · 从单头扩展到多头','Attention · From one head to several'),description:L('先学 Q/K 怎样匹配、V 怎样提供内容，再拼成单头。第 10 关扩展头的数量，后面的编码器会复用这套结构。','Learn how Q/K match and V supplies content, then assemble one head. Level 10 adds more heads; the encoder will reuse that structure.'),ids:['qkv','scores','softmax','pack-scores','weighted-sum','self-attention','multihead']},
  {id:'encoder',label:L('组装编码器','Assemble the encoder'),title:L('编码器 · 准备输入，再组装整层','Encoder · Prepare the input, then assemble the layer'),description:L('第 11 关换用每词四个特征的输入；第 12 关沿用已学的双头结构，配上相应尺寸的权重，和 FFN、残差、LayerNorm 组成一层。','Level 11 prepares four features per token. Level 12 reuses the two-head structure with matching weight sizes, then combines it with the FFN, residuals and LayerNorm into one layer.'),ids:['wider-features','encoder-layer'],connections:{sources:[{label:L('已学的计算','Familiar computations'),text:L('10 多头 + FFN + 残差 + LayerNorm','10 Multi-head + FFN + residuals + LayerNorm')},{label:L('准备的输入','Prepared input'),text:L('11 四维词向量与位置','11 Four-feature embeddings and positions')}],target:{label:L('组合起来','Assemble'),text:L('12 一层编码器','12 One encoder layer')}}},
@@ -455,7 +468,7 @@ M.fusions={
  attention:{kind:'attention',inputs:['R']},
  block:{kind:'modern-block',inputs:['R']}
 };
-const fusionOrigins=Object.fromEntries(Object.entries(M.fusions).map(([id,{kind}])=>[kind,id]));
+const fusionOrigins={};for(const [id,{kind}]of Object.entries(M.fusions))fusionOrigins[kind]??=id;
 M.fusionCopy={
  gathering:L('把刚搭好的网络收成一个组件','Package the network you just built'),
  formed:L('内部计算相同，外面只需一个组件','The same computation, now inside one module'),
@@ -642,7 +655,7 @@ M.levels.qkv.mission=L('把内容向量送到出口','Send the value vectors to 
 M.levels.qkv.description=L('本关只检查出口的 V。Q/K 用于后续的注意力打分，这里不要求放置或接线。','This lesson checks only V at the outlet. Q/K are used for attention scoring in later lessons; placing or connecting them is optional here.');
 M.levels.qkv.summary=M.levels.qkv.description;
 M.levels.softmax.description=L('将已学过的 Q/K 投影和打分接起来，再把分数交给 Softmax。每组权重的和应为 1，本关不遮住未来位置。','Connect the familiar Q/K projections and scoring, then feed the scores to Softmax. Each weight row should sum to 1; this level has no future mask.');
-M.levels.residual.rationale.scope=L('这里先用线性支路练习残差。进入原版基础章后，会把它包在 ReLU FFN 和 Attention 外，再加入 LayerNorm。','Practice the residual with a linear branch here. The original chapter then wraps ReLU FFNs and Attention with residuals and LayerNorm.');
+M.levels.residual.rationale.scope=L('沿用序章 05 的 ReLU FFN 和同一套教学权重，本关只增加残差。原版完整子层还会在相加后接 LayerNorm，后面再学。','Uses Prologue 05’s ReLU FFN and the same teaching weights; only the residual is new. The complete original sublayer also applies LayerNorm after addition, which comes later.');
 M.levels.ffn.description=L('将已学的 SwiGLU 和残差组合起来。R 是原输入，Z = RMSNorm(R) 已准备好；这里比较现代 Pre-LN 与原版先相加后归一化的区别。','Combine SwiGLU with a residual. R is the original input and Z = RMSNorm(R) is ready. Compare modern Pre-LN with the original’s addition before normalization.');
 M.levels.ffn.rationale.text=L('这一现代实现先归一化输入，再算 SwiGLU 修改量并加回 R。它改变了原版的激活、分支结构和归一化位置，不应当当作原版 FFN 的起点。','This modern version normalizes the input first, computes a SwiGLU update and adds it to R. It changes the original activation, branch structure and normalization placement.');
 M.levels.block.title=L('现代解码器的一层','A modern decoder layer');
@@ -855,6 +868,7 @@ M.original={relu,ln,position,embed,wide,project,vocabulary,classicFFN,sequenceFF
   }
   if(!M.levels[levelId]?.original)return null;
   if(id==='down'&&levelId==='original-ffn')return {number:'',seal:I18n.t('归'),english:'DOWN PROJECTION',family:I18n.t('投影'),color:'#637e63',ability:L('把特征组合回两个数','Combine features back into two values'),formula:'F = A × W2',meaning:L('四个输入特征与每列的四个权重相乘再求和，形成两个输出。这里没有门控；输入来自前面接入的投影或 ReLU。','Weight and sum all four input features for each column to form two outputs. There is no gating here; the input comes from the connected projection or ReLU.'),purpose:I18n.t(zeroBias),weight:'4 × 2',trait:I18n.t('线性变换')};
+  if(id==='add'&&levelId==='residual')return {number:'',seal:I18n.t('续'),english:'RESIDUAL ADDITION',family:I18n.t('残差'),color:'#a17949',ability:L('把 FFN 的修改量加回 X','Add the FFN update back to X'),formula:'Y = X + F; F = FFN(X)',input:L('原输入 X 与 FFN 输出 F','Original input X and FFN output F'),output:L('更新结果 Y','Updated result Y'),meaning:L('F 来自上一关用过的原版 FFN，内部仍是 Linear → ReLU → Linear。这里把它与同一份原输入 X 对应相加。例如 [1, 0] + [0.55, 0.35] = [1.55, 0.35]。','F comes from the previous lesson’s original FFN, still Linear → ReLU → Linear inside. Add it feature by feature to the same original input X. For example, [1, 0] + [0.55, 0.35] = [1.55, 0.35].'),purpose:L('FFN 负责算修改量，相加负责更新原输入。修改量为 0 时保持原值；为负时让对应特征减小。相加在 FFN 外，不会替代里面的 ReLU。','The FFN computes the update; addition applies it to the input. A zero update preserves a value and a negative update reduces it. Addition sits outside the FFN and does not replace its ReLU.'),weight:I18n.t('无'),trait:I18n.t('对应位置相加')};
   if(id==='add'&&levelId==='add-norm')return {number:'',seal:I18n.t('续'),english:'RESIDUAL ADDITION',family:I18n.t('残差'),color:'#a17949',ability:L('把 FFN 的修改量加回 X','Add the FFN update back to X'),formula:'R = X + FFN(X)',meaning:M.definitions.add.hint,purpose:L('先相加，再把总和交给 LayerNorm。这样归一化处理的是残差合并后的特征。','Add first, then send the sum to LayerNorm so normalization processes the merged residual features.'),weight:I18n.t('无'),trait:I18n.t('对应位置相加')};
   return null;
  }

@@ -76,7 +76,7 @@ export function cardFor(id,levelId){
   card.meaning=I18n.t("SiLU 是函数名。P 是线性投影算出的输入向量，S 是经过 SiLU 后的输出向量。P 中的每个数各算一次，得到 S 中对应的数。");
   card.purpose=I18n.t("乘一个固定比例会把所有数一起缩放；SiLU 的缩放比例随数值变化。较大的负数被压近 0，较大的正数接近原值，因此它能改变特征之间的数值关系。");
  }
- if(id==='down'&&['residual','down-projection'].includes(levelId)){
+ if(id==='down'&&levelId==='down-projection'){
   card.formula='F = P × Wd';card.input=I18n.t("投影结果 P");card.meaning=I18n.t("接过投影 P 中的 4 个数，乘上 4 × 2 权重矩阵。每个输出由 4 项乘积求和，得到 2 维变换 F。");card.purpose=I18n.t("降维仍是加权求和，四个特征都可以影响每个输出。它把特征宽度变回 2，方便后续模块继续使用。");
  }
  if(id==='down'&&levelId==='plain-ffn'){
@@ -94,10 +94,6 @@ export function cardFor(id,levelId){
  if(id==='multiply'&&levelId==='pairwise'){
   card.ability=I18n.t("把两组数对应相乘");card.formula='Hᵢ = Gᵢ × Uᵢ';card.input=I18n.t("两组投影结果 G 与 U");card.output=I18n.t("相乘结果 H");
   card.purpose=I18n.t("每个输出只取一对输入的乘积，不在不同特征之间求和。例如 [2, 3] 与 [0.5, 2] 对应相乘得到 [1, 6]。");
- }
- if(id==='add'&&levelId==='residual'){
-  card.formula='Y = X + F';card.meaning=I18n.t("X 是原有特征，F 是两块投影算出的修改量。对应位置相加得到 Y：正的修改量让数值增加，负的让它减少。");
-  card.input=I18n.t("原有特征 X 与修改量 F");
  }
  return card;
 }
@@ -128,19 +124,16 @@ export function aggregationExample(M,example,query=2){
 }
 
 export function exampleFor(M,id,levelId='ffn'){
+  if(['workshop','residual'].includes(levelId))return M.extraExample(id,levelId);
   if(['down-projection','plain-ffn','gate-projection','pairwise'].includes(levelId)){
    const input=[1,0],state=M.solutions(levelId),ev=M.evaluate(state,input),node=state.nodes.find(n=>n.id===id);
    const labels={R:'X',project:levelId==='pairwise'?'U':'P',gate:'G',silu:'S',multiply:'H',down:'F'};
    return {sampleIndex:0,exampleSource:['X',input],inputs:node.links.map(k=>[labels[k],ev.values[k]]),output:[labels[id],ev.values[id]],...(id==='silu'?{activation:{feature:2}}:{})};
   }
-  const shared=['gating','swiglu','ffn','residual'].includes(levelId),compare=['gate','project'].includes(id)&&['gating','swiglu','ffn'].includes(levelId),R=shared?[1,0]:[1,1],Z=levelId==='ffn'?M.norm(R):R,P=M.linear(R,M.weights.project);
+  const shared=['gating','swiglu','ffn'].includes(levelId),compare=['gate','project'].includes(id)&&['gating','swiglu','ffn'].includes(levelId),R=shared?[1,0]:[1,1],Z=levelId==='ffn'?M.norm(R):R,P=M.linear(R,M.weights.project);
   const meta={sampleIndex:shared?0:2,exampleSource:[levelId==='ffn'?'R':'X',R]};
   if(id==='project'&&!compare)return {...meta,inputs:[['X',R]],output:['P',P]};
   if(levelId==='activation')return {...meta,inputs:[['P',P]],output:['S',P.map(M.silu)],activation:{feature:2}};
-  if(levelId==='residual'){
-   const F=M.linear(P,M.weights.down);
-   return id==='down'?{...meta,inputs:[['P',P]],output:['F',F]}:{...meta,inputs:[['X',R],['F',F]],output:['Y',R.map((x,i)=>x+F[i])],addition:{feature:0}};
-  }
   const G=M.linear(Z,M.weights.gate),U=M.linear(Z,M.weights.up),S=G.map(M.silu),H=S.map((x,i)=>x*U[i]),F=M.linear(H,M.weights.down),Y=R.map((x,i)=>x+F[i]),source=levelId==='ffn'?'Z':'X';
   const paths={gate:[[[source,Z]],['G',G]],project:[[[source,Z]],['U',U]],silu:[[['G',G]],['S',S]],multiply:[[['S',S],['U',U]],['H',H]],down:[[['H',H]],['F',F]],add:[[['R',R],['F',F]],['Y',Y]]};
   return {...meta,inputs:paths[id][0],output:paths[id][1],...(compare?{comparison:{input:[source,Z],rows:[['U',U],['G',G],['S',S],['H',H]],feature:2}}:{}),...(id==='silu'?{activation:{feature:2,content:U,product:H}}:{}),...(id==='add'?{addition:{feature:0}}:{})};

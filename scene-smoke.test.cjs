@@ -22,8 +22,8 @@ test('a full restart replaces visible residual wires with the tutorial start and
  const board=JSON.stringify(app.api.getState()),connections=doc.querySelectorAll('.port.input.connected').length;
  assert.ok(connections>0);
  doc.querySelector('#progress-restart').onclick();doc.querySelector('#progress-reset-apply').onclick();
- assert.equal(doc.querySelectorAll('.port.input.connected').length,0);assert.equal(doc.querySelectorAll('.node-label').length,3);assert.equal(doc.querySelector('#undo').disabled,true);assert.equal(app.api.getState().sink,null);
- doc.querySelector('#progress-restart-undo').onclick();assert.equal(JSON.stringify(app.api.getState()),board);assert.equal(doc.querySelectorAll('.port.input.connected').length,connections);assert.equal(doc.querySelectorAll('.node-label').length,3);
+ assert.equal(doc.querySelectorAll('.port.input.connected').length,0);assert.equal(doc.querySelectorAll('.node-label').length,0);assert.equal(doc.querySelector('#undo').disabled,true);assert.equal(app.api.getState().sink,null);
+ doc.querySelector('#progress-restart-undo').onclick();assert.equal(JSON.stringify(app.api.getState()),board);assert.equal(doc.querySelectorAll('.port.input.connected').length,connections);assert.equal(doc.querySelectorAll('.node-label').length,2);
 });
 
 test('the ready-to-run full Transformer renders and completes every basic operator without editing',async()=>{
@@ -1090,14 +1090,14 @@ test('extended overview shrinks the board and fades titles, then restores labels
 });
 
 test('small matrices keep their blocks while numbers return when zoomed in',async()=>{
- const app=await boot();app.api.switchLevel('residual');app.api.setState(app.c.NeuralPrologue.solutions('residual'));app.api.getWorld().rebuild();
+ const app=await boot();app.api.switchLevel('original-ffn');app.api.setState(app.c.NeuralPrologue.solutions('original-ffn'));app.api.getWorld().rebuild();
  const state=JSON.stringify(app.api.getState());
  let down;app.scenes.at(-1).traverse(o=>{if(o.userData.node==='down')down=o;});
  const faces=down.children.filter(o=>o.userData.detailText);assert.equal(faces.length,8);
  const wheel=new app.window.Event('wheel',{bubbles:true,cancelable:true});wheel.deltaY=2000;app.document.querySelector('#scene').dispatchEvent(wheel);
  assert.ok(faces.every(o=>!o.visible),'unreadable matrix numbers are hidden');
  assert.ok(down.children.filter(o=>o.geometry?.type==='BoxGeometry'&&o.visible).length>=8,'the colored weight blocks stay visible');
- await app.api.run();assert.equal(app.document.querySelectorAll('#test-results .pass').length,app.c.NeuralPrologue.levels.residual.sampleCount,'abstract rendering does not change the calculation');
+ await app.api.run();assert.equal(app.document.querySelectorAll('#test-results .pass').length,app.c.NeuralPrologue.levels['original-ffn'].sampleCount,'abstract rendering does not change the calculation');
  app.api.getWorld().focus('down');await new Promise(setImmediate);
  assert.ok(faces.every(o=>o.visible),'the close-up restores the actual numbers');
  app.document.querySelector('#card-close').onclick();assert.ok(faces.every(o=>!o.visible),'returning to the distant view restores abstraction immediately');
@@ -1172,17 +1172,17 @@ test('residual cards and the lesson explain baseline plus update with the actual
   app.c.I18n.setPreference(language);
   for(const level of ['residual','ffn']){
    app.api.switchLevel(level);const state=M.solutions(level);app.api.setState(state);app.api.getWorld().rebuild();
-   const saved=JSON.stringify(state),ev=M.evaluate(state,[1,0]),source=level==='residual'?'X':'R';
+   const saved=JSON.stringify(state),ev=M.evaluate(state,[1,0]),source=level==='residual'?'X':'R',update=ev.values[level==='residual'?'relu-ffn':'down'];
    app.api.getWorld().focus('add');const card=doc.querySelector('.card-add-example');assert.ok(card);
-   assert.equal(doc.querySelector('#card-formula').textContent,`Y = ${source} + F`);
-   for(const [symbol,values]of [[source,ev.values.R],['F',ev.values.down],['Y',ev.values.add]]){
+   assert.equal(doc.querySelector('#card-formula').textContent,`Y = ${source} + F`+(level==='residual'?'; F = FFN(X)':''));
+   for(const [symbol,values]of [[source,ev.values.R],['F',update],['Y',ev.values.add]]){
     const cells=[...card.querySelectorAll(`[data-symbol="${symbol}"] i`)];assert.deepEqual(cells.map(c=>Number(c.textContent)),Array.from(values,round));
     assert.deepEqual(cells.flatMap((c,i)=>c.classList.contains('example-focus')?[i]:[]),[0]);
    }
-   assert.equal(Number(card.querySelector('[data-role="baseline"]').textContent),1);assert.equal(Number(card.querySelector('[data-role="update"]').textContent),round(ev.values.down[0]));
+   assert.equal(Number(card.querySelector('[data-role="baseline"]').textContent),1);assert.equal(Number(card.querySelector('[data-role="update"]').textContent),round(update[0]));
    assert.equal(Number(card.querySelector('.card-add-step b').textContent),round(ev.values.add[0]));assert.equal(card.querySelector('.card-add-zero code').textContent,`F = [0, 0] → Y = ${source}`);
    const reason=doc.querySelector('#mission-reason');assert.equal(reason.hidden,false);
-   if(level==='residual')for(const [role,values]of [['baseline',ev.values.R],['update',ev.values.down],['result',ev.values.add]])assert.deepEqual(JSON.parse(reason.querySelector(`[data-role="${role}"] code`).textContent),Array.from(values,round));
+   if(level==='residual')for(const [role,values]of [['baseline',ev.values.R],['update',ev.values['relu-ffn']],['result',ev.values.add]])assert.deepEqual(JSON.parse(reason.querySelector(`[data-role="${role}"] code`).textContent),Array.from(values,round));
    else assert.equal(reason.querySelector('.residual-example'),null);
    if(language==='en'){assert.doesNotMatch(doc.querySelector('#module-card').textContent,/[\u3400-\u9fff]/);assert.doesNotMatch(reason.textContent,/[\u3400-\u9fff]/);}
    doc.querySelector('#card-close').onclick();assert.equal(JSON.stringify(app.api.getState()),saved);
@@ -1191,7 +1191,7 @@ test('residual cards and the lesson explain baseline plus update with the actual
  assert.deepEqual([...app.c.I18n.missing],[]);
 });
 test('all matrix labels switch abstraction together and a close-up preserves the board mode',async()=>{
- const app=await boot();app.api.switchLevel('residual');app.api.setState(app.c.NeuralPrologue.solutions('residual'));app.api.getWorld().rebuild();
+ const app=await boot();app.api.switchLevel('original-ffn');app.api.setState(app.c.NeuralPrologue.solutions('original-ffn'));app.api.getWorld().rebuild();
  const faces=[];app.scenes.at(-1).traverse(o=>{if(o.userData.detailText)faces.push(o);});
  assert.ok(new Set(faces.map(o=>o.userData.detailText.fontFraction)).size>1,'short numbers and decimals have different fitted sizes');
  const wheel=deltaY=>{const e=new app.window.Event('wheel',{bubbles:true,cancelable:true});e.deltaY=deltaY;app.document.querySelector('#scene').dispatchEvent(e);};
@@ -1486,6 +1486,8 @@ test('residual addition joins both actual inputs, shows each sum and gathers the
    for(const bar of bars){assert.equal(bar.userData.value,ev.values.add[bar.userData.feature]);if(out.userData.gather===0)assert.ok(Math.abs(bar.getWorldPosition(new app.c.T.Vector3()).z-(unit.position.z+(bar.userData.feature-.5)*.65))<1e-9);}
   }
  }});
+ // Include a negative FFN update so the addition animation covers both signs.
+ app.c.NeuralPrologue.samples[4].v=[-1,-2];
  app.api.switchLevel('residual');app.api.setState(app.c.NeuralPrologue.solutions('residual'));app.api.getWorld().rebuild();await app.api.run();
  assert.equal(sums.size,10);assert.deepEqual([...cases].sort(),['decrease','increase','zero baseline']);assert.deepEqual([...counts].filter(Boolean).sort(),[1,2]);assert.ok(gathering>0);
  for(const trail of trails.values())assert.ok(trail.every((p,i)=>!i||p.distanceTo(trail[i-1])<.4),'addends move continuously into their sockets');
@@ -1629,7 +1631,7 @@ test('down projection routes four feature blocks to matching weight rows and exp
    if(!intervals.has(d.output))intervals.set(d.output,[]);intervals.get(d.output).push(now);
   });
  }});
- app.api.switchLevel('residual');app.api.setState(app.c.NeuralPrologue.solutions('residual'));app.api.getWorld().rebuild();await app.api.run();
+ app.api.switchLevel('original-ffn');app.api.setState(app.c.NeuralPrologue.solutions('original-ffn'));app.api.getWorld().rebuild();await app.api.run();
  assert.equal(formulas.size,2);assert.equal(rows.size,4,'includes three named samples and the extra validation samples');
  for(const points of trails.values())assert.ok(points.every((p,i)=>!i||p.distanceTo(points[i-1])<.35),'components fan out without teleporting');
  assert.ok(Math.max(...intervals.get(0))<Math.min(...intervals.get(1)),'first output is explained before the others');
@@ -1725,16 +1727,16 @@ test('dragging a module card previews the operator, places one copy and dismisse
  const scene=()=>app.scenes.at(-1),ghost=()=>scene().children.find(o=>o.userData.placementGhost),guide=()=>doc.querySelector('.placement-guide');
  const event=(target,type,properties={})=>{const e=new app.window.Event(type,{bubbles:true,cancelable:true});Object.assign(e,properties);target.dispatchEvent(e);};
  doc.querySelector('#scene').getBoundingClientRect=()=>({left,top:0,width:1400,height:760,right:left+1400,bottom:760});
- assert.equal(guide().hasAttribute('hidden'),false);const card=doc.querySelector('[data-add-module="project"]');
+ assert.equal(guide().hasAttribute('hidden'),false);const card=doc.querySelector('[data-add-module="relu-ffn"]');
  event(card,'pointerdown',{clientX:120,clientY:160});event(doc,'pointermove',{clientX:left+700,clientY:380});
- assert.ok(ghost());assert.ok(ghost().children.length>10,'preview is the matrix module, not a placeholder cube');assert.equal(app.api.getState().nodes.length,0);
+ assert.ok(ghost());assert.ok(ghost().children.length>10,'preview is the packaged FFN module, not a placeholder cube');assert.equal(app.api.getState().nodes.length,0);
  event(doc,'pointerup',{clientX:left+700,clientY:380});card.dispatchEvent(new app.window.Event('click',{bubbles:true}));
  assert.equal(ghost(),undefined);assert.equal(app.api.getState().nodes.length,1);assert.equal(guide().hasAttribute('hidden'),true);assert.equal(doc.querySelector('#module-count').textContent,'1 / 1');
- app.api.chooseOutput('R');app.api.chooseInput('project',0);app.api.chooseOutput('project');app.api.chooseInput('sink',0);await app.api.run();assert.equal(doc.querySelectorAll('#test-results .pass').length,3);
+ app.api.chooseOutput('R');app.api.chooseInput('relu-ffn',0);app.api.chooseOutput('relu-ffn');app.api.chooseInput('sink',0);await app.api.run();assert.equal(doc.querySelectorAll('#test-results .pass').length,5);
  app.document.querySelector('#reset').onclick();assert.equal(guide().hasAttribute('hidden'),false);
- event(doc.querySelector('[data-add-module="project"]'),'pointerdown',{clientX:120,clientY:160});event(doc,'pointermove',{clientX:left+700,clientY:380});event(doc,'pointerup',{clientX:left+1500,clientY:380});assert.equal(ghost(),undefined);assert.equal(app.api.getState().nodes.length,0,'dropping outside does not create or spend a copy');
+ event(doc.querySelector('[data-add-module="relu-ffn"]'),'pointerdown',{clientX:120,clientY:160});event(doc,'pointermove',{clientX:left+700,clientY:380});event(doc,'pointerup',{clientX:left+1500,clientY:380});assert.equal(ghost(),undefined);assert.equal(app.api.getState().nodes.length,0,'dropping outside does not create or spend a copy');
  if(left){
-  event(doc.querySelector('[data-add-module="project"]'),'pointerdown',{clientX:120,clientY:160});event(doc,'pointermove',{clientX:180,clientY:380});event(doc,'pointerup',{clientX:180,clientY:380});
+  event(doc.querySelector('[data-add-module="relu-ffn"]'),'pointerdown',{clientX:120,clientY:160});event(doc,'pointermove',{clientX:180,clientY:380});event(doc,'pointerup',{clientX:180,clientY:380});
   assert.equal(app.api.getState().nodes.length,0,'dropping in the reserved shelf space does not create a component');
  }
  }
@@ -1880,9 +1882,9 @@ test('shelf cards inspect every available kind without placing a node, including
   }
  }
  app.api.switchLevel('workshop');app.api.setState(M.solutions('workshop'));app.api.getWorld().rebuild();app.api.refresh();
- const card=doc.querySelector('[data-add-module="project"]');assert.equal(card.dataset.addDisabled,'true');assert.equal(card.getAttribute('aria-disabled'),'false');
+ const card=doc.querySelector('[data-add-module="relu-ffn"]');assert.equal(card.dataset.addDisabled,'true');assert.equal(card.getAttribute('aria-disabled'),'false');
  const saved=JSON.stringify(app.api.getState());event(card,'dblclick');await new Promise(setImmediate);assert.equal(doc.querySelector('#module-card').open,true);doc.querySelector('#card-close').onclick();assert.equal(JSON.stringify(app.api.getState()),saved);
- await app.api.run();assert.equal(doc.querySelectorAll('#test-results .pass').length,3,'preview did not replace the real operator used for execution');
+ await app.api.run();assert.equal(doc.querySelectorAll('#test-results .pass').length,5,'preview did not replace the real operator used for execution');
 });
 
 test('clicking a placed module offers deletion, preserves other wiring and remains compatible with double-click',async()=>{

@@ -5,6 +5,30 @@ const M=ctx.NeuralPrologue,O=M.original;
 vm.runInContext(fs.readFileSync(__dirname+'/module-cards.js','utf8').replaceAll('export ',''),ctx,{filename:'module-cards.js'});
 const plain=x=>JSON.parse(JSON.stringify(x));
 const close=(a,b,tol=1e-9)=>a?.length===b.length&&a.every((x,i)=>Number.isFinite(x)&&Math.abs(x-b[i])<tol);
+test('prologues assemble an FFN, place that exact package, then add its residual',()=>{
+ assert.deepEqual(plain(M.routes.main.ids.slice(4,7)),['original-ffn','workshop','residual']);
+ for(const [id,stock]of [['workshop',{'relu-ffn':1}],['residual',{'relu-ffn':1,add:1}]]){
+  assert.deepEqual(plain(M.inventory(M.levels[id])),stock);
+  assert.equal(M.initial(id).nodes.length,0);assert.equal(M.initial(id).sink,null);
+  assert.equal(M.moduleLimit(M.levels[id]),Object.keys(stock).length);
+ }
+ assert.equal(M.levels.workshop.placementTutorial,true);
+ const assembled=M.solutions('original-ffn'),placed=M.solutions('workshop'),residual=M.solutions('residual');
+ let differsFromLinear=false;
+ for(const {v:x}of M.samplesFor('residual')){
+  const f=M.evaluate(assembled,x).output,y=x.map((v,i)=>v+f[i]);
+  assert.ok(close(M.evaluate(placed,x).output,f));assert.ok(close(M.reference(x,'workshop'),f));
+  assert.ok(close(M.evaluate(residual,x).output,y));assert.ok(close(M.reference(x,'residual'),y));
+  const linear=M.linear(M.linear(x,M.weights.project),M.weights.down);
+  differsFromLinear||=!close(f,linear);
+ }
+ assert.ok(differsFromLinear,'negative test inputs make omitting ReLU observable');
+ const bypass=plain(residual);bypass.sink='relu-ffn';
+ assert.ok(M.samplesFor('residual').some(({v})=>!close(M.evaluate(bypass,v).output,M.reference(v,'residual'))));
+ const doubleInput=plain(residual);doubleInput.nodes.find(n=>n.id==='add').links=['R','R'];
+ assert.ok(M.samplesFor('residual').some(({v})=>!close(M.evaluate(doubleInput,v).output,M.reference(v,'residual'))));
+ assert.equal(M.packageOrigin('relu-ffn').id,'original-ffn');
+});
 test('the prepared Transformer matches the encoder-decoder with its own fixed vocabulary projection',()=>{
  const id='transformer-demo',l=M.levels[id],s=M.initial(id),d=M.demo;
  assert.equal(l.demonstration,true);assert.equal(l.sampleCount,3);assert.equal(l.buildable,false);
@@ -58,7 +82,7 @@ const differs=(id,edit)=>{const s=M.solutions(id);edit(s);assert.ok(M.samplesFor
 
 test('original concepts are completed before optional modern and engine tracks',()=>{
  assert.equal(M.routes.main.ids.length,31);assert.equal(M.routes.modern.ids.length,13);assert.equal(M.routes.engine.ids.length,9);
- assert.deepEqual(plain(M.routes.main.ids.slice(0,7)),['wire','projection','relu','down-projection','original-ffn','residual','workshop']);
+ assert.deepEqual(plain(M.routes.main.ids.slice(0,7)),['wire','projection','relu','down-projection','original-ffn','workshop','residual']);
  for(const id of M.routes.main.ids){
   const l=M.levels[id];assert.equal(l.original,true);
   assert.ok(!l.nodes.some(k=>['gate','silu','norm','ropeq','ropek','ffnblock','attention','attentionweights'].includes(k)),id+' must not introduce a modern operator');
@@ -92,7 +116,7 @@ test('learned shelves accumulate in teaching order without exposing future opera
  assert.ok(M.removeNode(s,'v'));assert.equal(M.stock(s,'v'),inventory.v);
  const wrong=M.solutions('scores');wrong.nodes.find(n=>n.id==='k').kind='v';
  assert.ok(M.samplesFor('scores').some(({v})=>!close(M.evaluate(wrong,v).output,M.reference(v,'scores'))),'V is a real numerical distractor, not an alternate key projection');
- assert.equal(M.inventory(M.levels.workshop).project,1);assert.equal(Object.keys(M.inventory(M.levels.workshop)).length,1);
+ assert.equal(M.inventory(M.levels.workshop)['relu-ffn'],1);assert.equal(Object.keys(M.inventory(M.levels.workshop)).length,1);
  for(const id of M.routes.engine.ids)assert.deepEqual(Object.keys(M.inventory(M.levels[id])),Array.from(M.levels[id].nodes),'engine shelves keep costed tasks');
 });
 

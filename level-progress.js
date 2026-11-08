@@ -55,6 +55,14 @@ export function createProgress(M,storage){
  function load(id,{resume=false}={}){
   if(M.levels[id]?.demonstration)return M.initial(id);
   const l=M.levels[id],raw=read(key(id)),upgraded=upgradeReadout(raw,id);
+  // These lessons changed from bare projections to the previously assembled
+  // ReLU FFN. Keep the exact old circuit before opening the revised exercise.
+  if(raw?.version===1&&Array.isArray(raw.nodes)&&raw.nodes.some(n=>l.retiredCircuitKinds?.includes(M.nodeKind(n)))){
+   const archive=key(id)+'-before-ffn-reuse',fresh=M.initial(id);
+   if(!read(archive)&&!write(archive,raw))return raw;
+   if(!write(key(id),fresh))return raw;
+   meta.practiceRuns[id]={finished:false};write(metaKey,meta);return fresh;
+  }
   // Keep an exact recovery copy before upgrading old two-feature modules.
   // Existing positions, wiring and completion badges are not reset.
   if(upgraded!==raw&&!read(key(id)+'-before-four-feature-readout')&&!write(key(id)+'-before-four-feature-readout',raw))return raw;
