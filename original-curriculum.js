@@ -358,11 +358,14 @@ for(const id of ['encoder-layer','decoder-self','cross-attention','decoder-layer
  if(id!=='encoder-decoder'){l.sourceDim=l.sinkDim=12;l.shape='3 × 4';}
 }
 lesson('pack-scores',L('用上刚组好的打分模块','Use the scoring module you just built'),['original-weights'],
- L('用组合组件复现注意力权重','Reproduce attention weights with a packaged module'),
- L('上一关已经合成“打分与 Softmax”。本关把它拖上台面并接好输入和出口，复用相同的注意力权重计算；也可以用旧组件搭出相同结果。这里不会再生成一个新组件。','The previous lesson already packaged Scores and Softmax. Place it on the table and connect its input and outlet to reuse the same attention-weight calculation, or build the equivalent result with the earlier parts. This lesson does not create another new module.'),
- L('下一步要学习怎样按比例读取 V。先学会使用已经合成的打分模块，就能把注意力放在新增的内容汇合上。这个组件只输出比例，V 的内容仍留给后续组件读取。','Next you will read V in proportion to attention weights. Practicing the existing scoring module first lets you focus on the new aggregation operation. The module supplies proportions; later modules still need to read V.'),
- L('Q/K → 打分 → Softmax 的计算完全保留，三个位置彼此可见，没有遮罩或 RoPE。封装后的 3 × 3 输出就是前一关的注意力权重。','The Q/K → scores → Softmax computation is preserved. All three positions remain visible, with no mask or RoPE. Its 3 × 3 output is exactly the attention weights from the preceding lesson.'),
- {'original-weights':['R'],sink:'original-weights'},unmaskedWeights,{sinkDim:9,shape:'3 × 2 → 3 × 3',buildable:true,maxModules:6,attentionReadout:true,packages:['original-weights']});
+ L('复现注意力权重 A','Reproduce attention weights A'),
+ L('输入仍是三个词的向量 X。将已学的“打分与 Softmax”接入：它在内部计算 Q/K、匹配分数 S，再用 Softmax 得到与上一关相同的 A。也可以用旧组件搭出相同结果；本关不会再生成一个新组件。','The input is still X, containing the three token vectors. Connect the familiar Scores and Softmax module: inside, it computes Q/K, matching scores S, then Softmax to produce the same A as the previous lesson. You can also use the earlier parts to obtain the same result; this lesson does not create another new module.'),
+ L('出口左侧是发起查询的词，上方是准备读取的词。每个格子是读取该词 V 向量的比例；同一查询的三个比例非负且合计为 1。A 随输入计算出来，不是模型里固定的权重参数。下一关才按这些比例汇合 V。','The outlet lists query tokens on the left and tokens to read across the top. Each cell gives the proportion for reading that token’s V vector. A query’s three proportions are nonnegative and sum to 1. A is computed from the input, not a fixed model parameter. The next lesson uses these proportions to combine V.'),
+ L('例如输入“我 / 爱 / 猫”时，“我”对应约 [0.31, 0.26, 0.43]：下一步汇合时，V我、V爱、V猫所占的比例约为 31%、26%、43%。这里展示的是比例，汇合后的向量要到下一关才计算。','For input I / Love / Cat, the query I has approximately [0.31, 0.26, 0.43]. In the next aggregation step, V_I, V_Love and V_Cat contribute about 31%, 26% and 43%. This outlet shows the proportions; the combined vector is computed in the next lesson.'),
+ {'original-weights':['R'],sink:'original-weights'},unmaskedWeights,{sinkDim:9,shape:'3 × 2 → 3 × 3',buildable:true,maxModules:6,attentionReadout:true,packages:['original-weights'],
+  sourceTitle:L('输入向量矩阵 X','Input vector matrix X'),sourceNames:{R:L('输入矩阵 X','Input matrix X')},routeInput:L('输入矩阵 X','Input matrix X'),sourceNote:L('与上一关相同的 X，重新计算 A','The same X as before; compute A again'),
+  outputTitle:L('注意力权重矩阵 A','Attention-weight matrix A'),outputNote:L('每个数是读取对应词 V 的比例','Each value is a proportion for reading a token’s V'),outputPairAxes:true});
+added['pack-scores'].rationale.title=L('出口的九个数在分配什么？','What do the nine output values allocate?');
 Object.assign(M.levels,added);
 // The FFN reuse exercise already lives in the prologue. Retired links continue
 // at the next real lesson; their saved circuits remain under the old key.
@@ -778,6 +781,12 @@ cards['original-q'].formula='Q = DWq';cards['original-k'].formula='K = EWk';card
 cards['original-q'].meaning=L('从目标 D 的四个特征产生查询 Q，用来决定当前目标位置想从源句取什么信息。','Project queries Q from the target D’s four features to select source information for each target position.');
 for(const id of ['original-k','original-v'])cards[id].meaning=L('从编码器输出 E 的四个特征产生键或值，供目标侧查询匹配和读取。Q 来自目标，K/V 来自源句。','Project keys or values from encoder E’s four features. Target queries match and read them: Q comes from the target, K/V from the source.');
 cards['original-weights'].formula='A = softmax(QKᵀ / √2)';cards.concat.formula='C[p] = [headA[p], headB[p]]';
+Object.assign(cards['original-weights'],{
+ input:L('输入向量矩阵 X','Input vector matrix X'),output:L('注意力权重矩阵 A','Attention-weight matrix A'),
+ ability:L('计算读取各词 V 的比例','Compute the proportions for reading each token’s V'),weight:L('内部 Wq、Wk · 各 2 × 2','Internal Wq, Wk · each 2 × 2'),
+ meaning:L('接收 X，内部先算 Q = XWq、K = XWk，再对匹配分数 S = QKᵀ / √2 做 Softmax，得到 3 × 3 的 A。每个格子表示某个查询词读取某个词 V 向量的比例，同一查询的三个比例合计为 1。','Receives X, computes Q = XWq and K = XWk, then applies Softmax to matching scores S = QKᵀ / √2 to obtain the 3 × 3 matrix A. Each cell is the proportion for a query to read one token’s V vector; the three proportions for each query sum to 1.'),
+ purpose:M.levels['pack-scores'].rationale.takeaway
+});
 for(const id of ['head-a','head-b'])cards[id].formula='head = softmax(QhKhᵀ / √1)Vh';
 cards['self-heads'].formula='MHA(X) = Concat(headA, headB)Wo';cards['masked-heads'].formula='head = softmax(mask(QhKhᵀ / √2))Vh';
 cards['cross-heads'].formula='Q = DWq; K = EWk; V = EWv';cards['cross-add'].formula='C = D + CrossAttention(D, E)';
@@ -871,7 +880,7 @@ cards.mask={number:'',seal:L('遮','Mask'),english:'CAUSAL MASK',family:L('注�
  input:L('Q/K 匹配分数','Q/K matching scores'),output:L('遮住未来后的分数','Scores with future positions masked'),weight:L('无','None'),trait:L('保留自己与过去','Keep self and earlier positions'),stage:0};
 I18n.prepare(cards);
 M.original={relu,ln,position,embed,wide,project,vocabulary,classicFFN,sequenceFFN,head,concat,multi,singleAttention,encoder,decoderSelf,decoder,sourceIds,
- exampleLabels(levelId){return {Oa:L('自注意力更新','Self-attention update'),Om:L('因果注意力更新','Masked attention update'),Oc:L('交叉注意力更新','Cross-attention update'),A:['relu','original-ffn'].includes(levelId)?L('ReLU 输出','ReLU output'):I18n.t('注意力'),E:L('编码器输出','Encoder output'),D:L('目标特征','Target features'),Xs:L('源词向量与位置','Source embeddings and positions'),Xt:L('目标词向量与位置','Target embeddings and positions'),Xp:L('含位置的特征','Position-enriched features'),H_A:L('头 A 的结果','Head A output'),H_B:L('头 B 的结果','Head B output'),C:L('拼接结果','Concatenated features'),X1:levelId==='encoder-layer'?L('交流后的特征','Features after exchange'):L('第一次归一化','First normalized state'),X2:L('交叉注意力后的特征','Features after cross-attention'),R1:L('Attention 残差结果','Attention residual result'),R2:L('FFN 残差结果','FFN residual result'),Rc:L('交叉注意力残差结果','Cross-attention residual result')};},
+ exampleLabels(levelId){return {Oa:L('自注意力更新','Self-attention update'),Om:L('因果注意力更新','Masked attention update'),Oc:L('交叉注意力更新','Cross-attention update'),A:['relu','original-ffn'].includes(levelId)?L('ReLU 输出','ReLU output'):L('注意力权重','Attention weights'),E:L('编码器输出','Encoder output'),D:L('目标特征','Target features'),Xs:L('源词向量与位置','Source embeddings and positions'),Xt:L('目标词向量与位置','Target embeddings and positions'),Xp:L('含位置的特征','Position-enriched features'),H_A:L('头 A 的结果','Head A output'),H_B:L('头 B 的结果','Head B output'),C:L('拼接结果','Concatenated features'),X1:levelId==='encoder-layer'?L('交流后的特征','Features after exchange'):L('第一次归一化','First normalized state'),X2:L('交叉注意力后的特征','Features after cross-attention'),R1:L('Attention 残差结果','Attention residual result'),R2:L('FFN 残差结果','FFN residual result'),Rc:L('交叉注意力残差结果','Cross-attention residual result')};},
  card(id,levelId){
   const generation=generationCard(id,levelId);if(generation)return generation;
   if(cards[id]){
