@@ -14,6 +14,20 @@ function boot(storage=new Map(),hash='',languages=['zh-CN']){
  vm.runInContext(code+`\nworld={relocalize(){},labels(){},rebuild(){},beforeStage(){},setStage(){},clearPackets(){},focused(){return null},async animate(){}};refresh();`,c);
  return {c,document,window,storage,location,navigation,hashchange,eval:code=>vm.runInContext(code,c)};
 }
+test('failure comparisons reveal rounded-away differences without changing numbers or tolerance',()=>{
+ const app=boot();
+ const compare=(a,b,tolerance=1e-9)=>JSON.parse(app.eval(`JSON.stringify(comparisonValues(${JSON.stringify(a)},${JSON.stringify(b)},${tolerance}))`));
+ assert.deepEqual(compare([1,-1],[0,1]),{actual:'[1, -1]',expected:'[0, 1]',expanded:false});
+ const close=compare([.9999500037496875,-.9999500037496875],[.9999986111140047,-.9999986111140046]);
+ assert.equal(close.actual,'[0.999950, -0.999950]');assert.equal(close.expected,'[0.999999, -0.999999]');assert.equal(close.expanded,true);
+ for(const [actual,expected]of [[1,1+1e-8],[1e-8,-1e-8],[0,1e-9]]){
+  const out=compare([actual],[expected]);assert.equal(out.expanded,true);assert.notEqual(out.actual,out.expected);
+ }
+ assert.equal(compare([1],[1+1e-12]).expanded,false,'differences below grading tolerance need no expansion');
+ assert.equal(compare([.001],[.002],.06).expanded,false,'engine tolerances stay unchanged');
+ assert.equal(compare(null,[1]).actual,'未得到输出');
+ assert.equal(compare([1],[1,2]).expanded,false,'width mismatches retain their widths');
+});
 test('retired FFN URLs and saved current selection continue without copying answers or losing saves',()=>{
  const fixture=boot(),M=fixture.c.NeuralPrologue,metaKey='neural-atelier-chapters-v1';
  for(const generation of [0,3])for(const hash of ['', '#pack-ffn']){
@@ -113,6 +127,18 @@ test('embedded browsers fall back to page fullscreen and Escape preserves the ru
  app.eval('busy=true');await button.onclick();assert.equal(button.disabled,false);assert.equal(button.getAttribute('aria-pressed'),'true');assert.equal(doc.querySelector('#game').classList.contains('demo-expanded'),true);assert.equal(app.eval('busy'),true);
  const e=new app.window.Event('keydown');e.key='Escape';doc.dispatchEvent(e);assert.equal(button.getAttribute('aria-pressed'),'false');assert.equal(doc.querySelector('#game').classList.contains('demo-expanded'),false);assert.equal(app.eval('busy'),true);
  await button.onclick();app.eval("busy=false;switchLevel('wire')");assert.equal(doc.body.classList.contains('demo-fullscreen'),false);
+});
+test('QKV distinguishes the computed V matrix from Wv weights in its goal, card and hint',()=>{
+ for(const language of ['zh-CN','en-US']){
+  const app=boot(new Map(),'#qkv',[language]),M=app.c.NeuralPrologue,doc=app.document,before=app.eval('JSON.stringify(state)');
+  assert.equal(M.levels.qkv.outputNote,'V = X × Wᵥ');assert.match(M.levels.qkv.outputTitle,language==='zh-CN'?/值向量矩阵 V/:/Value matrix V/);
+  assert.match(doc.querySelector('.mission').textContent,/Wᵥ/);assert.match(doc.querySelector('#mission-reason').textContent,/3 × 2/);assert.match(doc.querySelector('#mission-reason').textContent,/\[0, 2\]/);
+  assert.deepEqual(JSON.parse(JSON.stringify(M.weights.v)),[[1,0],[0,2]]);assert.deepEqual(JSON.parse(JSON.stringify(M.linear([0,1],M.weights.v))),[0,2],'the displayed example uses the real weight matrix');
+  const card=M.extraCard('v','qkv');assert.equal(card.formula,'V = X × Wᵥ');assert.match(card.meaning,/Wᵥ/);assert.match(card.purpose,/\[0, 2\]/);
+  doc.querySelector('#hint').onclick();assert.match(doc.querySelector('#structure-dialog').textContent,/V = X × Wᵥ/);
+  if(language==='en-US'){assert.doesNotMatch(doc.querySelector('.mission').textContent,/[\u3400-\u9fff]/);assert.doesNotMatch(card.meaning+card.purpose,/[\u3400-\u9fff]/);}
+  assert.equal(app.eval('JSON.stringify(state)'),before);
+ }
 });
 test('QKV passes with only V placed or with Q/K left disconnected, while wrong outlet values fail',async()=>{
  const app=boot();app.eval("switchLevel('qkv');state=M.initial('qkv');M.addNode(state,'v',0,0);M.connect(state,'R','v',0);M.connect(state,'v','sink',0)");
@@ -1021,7 +1047,7 @@ test('every playable lesson has a bilingual structure location, valid focus and 
  }
  app.c.I18n.setPreference('en');
  assert.equal(map.get('causal').flow,'causal');assert.equal(map.get('causal').exit,'softmax');assert.match(map.get('causal').output,/weights A/);
- assert.equal(map.get('qkv').exit,'qkv');assert.match(map.get('qkv').output,/only V/);
+ assert.equal(map.get('qkv').exit,'qkv');assert.match(map.get('qkv').output,/V = X × Wᵥ/);
  assert.equal(map.get('cross-attention').exit,'wo');assert.match(map.get('cross-attention').output,/before residual/);
  app.eval("switchLevel('cross-attention')");
  app.document.querySelector('#hint').onclick();

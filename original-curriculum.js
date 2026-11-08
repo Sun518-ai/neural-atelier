@@ -199,7 +199,9 @@ lesson('add-norm',L('先相加，再归一化','Add first, normalize second'),['
  L('FFN 已封装成一块熟悉的组件。让修改量加回原输入，再把相加后的结果交给 LayerNorm。','The familiar FFN is packaged as one module. Add its update to the original input, then apply LayerNorm to the sum.'),
  L('残差让支路只需学习修改量；LayerNorm 则整理相加后的尺度。两个目的不同，因此原版在每个子层外保留这两步。','The residual lets a branch learn an update, while LayerNorm adjusts the scale after addition. These serve different purposes, so the original wraps each sublayer with both steps.'),
  L('2017 年原版使用 Post-LN：先子层计算，再加残差，最后 LayerNorm。把归一化提前会改变计算，现代 Pre-LN 留到扩展章。','The 2017 model uses Post-LN: sublayer computation, residual addition, then LayerNorm. Moving normalization earlier changes the computation; modern Pre-LN comes in the extensions.'),
- {'relu-ffn':['R'],add:['R','relu-ffn'],layernorm2:['add'],sink:'layernorm2'},x=>ln(plus(x,classicFFN(x))),{scalar:true});
+ {'relu-ffn':['R'],add:['R','relu-ffn'],layernorm2:['add'],sink:'layernorm2'},x=>ln(plus(x,classicFFN(x))),{scalar:true,
+  sourceTitle:L('练习向量 X','Practice vector X'),sourceNames:{R:L('练习向量 X','Practice vector X')},
+  sourceNote:L('本关给定，用于比较残差效果','Given here to compare residual effects')});
 lesson('positions',L('同一个词也有不同位置','The same word at different positions'),['embedding','position'],
  L('把位置加进词向量','Add positions to embeddings'),
  L('查表取词向量，再加入原版的正弦位置编码。改变词的顺序，位置相加后的特征也应改变。','Look up embeddings, then add the original sinusoidal positions. Reordering tokens must change the position-enriched features.'),
@@ -651,8 +653,16 @@ for(const id of groupedLater){
 // Keep the packaged unmasked weights inspectable, but do not offer new copies here.
 M.levels.causal.legacyInventory={'original-weights':M.levels.causal.inventory['original-weights']};
 M.levels.causal.inventory['original-weights']=0;
-M.levels.qkv.mission=L('把内容向量送到出口','Send the value vectors to the outlet');
-M.levels.qkv.description=L('本关只检查出口的 V。Q/K 用于后续的注意力打分，这里不要求放置或接线。','This lesson checks only V at the outlet. Q/K are used for attention scoring in later lessons; placing or connecting them is optional here.');
+M.levels.qkv.mission=L('用权重 Wᵥ 算出值向量矩阵 V','Use weights Wᵥ to compute the value matrix V');
+M.levels.qkv.description=L('X 是三个词的输入向量组成的矩阵。每个词都乘同一块权重 Wᵥ，算出的向量放在一起就是 V。本关只检查这个结果；Q/K 的匹配计算留给后面。','X stacks the input vectors of three tokens. Multiply each token vector by the same weights Wᵥ; their results together form V. This lesson checks that result; Q/K matching comes later.');
+M.levels.qkv.outputTitle=L('值向量矩阵 V','Value matrix V');
+M.levels.qkv.outputNote='V = X × Wᵥ';
+M.levels.qkv.resultNote=L('V 是 X × Wᵥ 算出的结果，每个词各有一个值向量；Wᵥ 才是组件里的权重。','V is the result of X × Wᵥ, with one value vector per token; Wᵥ is the weight matrix inside the module.');
+Object.assign(M.levels.qkv.rationale,{
+ title:L('V 是结果，Wᵥ 才是权重','V is the result; Wᵥ holds the weights'),
+ text:L('V 来自 Value（值）。Wᵥ 是组件内部的权重矩阵，V 是输入经过它计算后的数据。本关 X 和 V 都是 3 × 2：三个词，每个词两个数。到这一步，每个词还在独立计算。','V stands for Value. Wᵥ is the weight matrix inside the module; V is the data computed from the input. Both X and V are 3 × 2 here: three tokens, two values per token. Each token is still processed independently.'),
+ takeaway:L('例如“爱”的输入 [0, 1] 乘本关 Wᵥ = [[1, 0], [0, 2]]，得到值向量 [0, 2]，它仍属于“爱”。后面 Q/K 打分，经 Softmax 变成参考比例，再把各词的 V 按比例相加，词之间才发生信息汇合。','For example, Love starts with [0, 1]. Multiplying by this lesson’s Wᵥ = [[1, 0], [0, 2]] produces its value vector [0, 2], still belonging to Love. Later, Q/K supply scores and Softmax converts them to proportions that weight the sum of the V vectors. That later step mixes information across tokens.')
+});
 M.levels.qkv.summary=M.levels.qkv.description;
 M.levels.softmax.description=L('将已学过的 Q/K 投影和打分接起来，再把分数交给 Softmax。每组权重的和应为 1，本关不遮住未来位置。','Connect the familiar Q/K projections and scoring, then feed the scores to Softmax. Each weight row should sum to 1; this level has no future mask.');
 M.levels.residual.rationale.scope=L('沿用序章 05 的 ReLU FFN 和同一套教学权重，本关只增加残差。原版完整子层还会在相加后接 LayerNorm，后面再学。','Uses Prologue 05’s ReLU FFN and the same teaching weights; only the residual is new. The complete original sublayer also applies LayerNorm after addition, which comes later.');
@@ -690,6 +700,9 @@ M.autoregressiveExample=(input=[0,1,2])=>{
 };
 const previousSamples=M.samplesFor,previousSources=M.sourceValues,previousReference=M.reference,previousSolutions=M.solutions,previousExample=M.extraExample,previousCard=M.extraCard;
 M.samplesFor=id=>{
+ // Two-feature LayerNorm can hide a missing residual behind near-identical
+ // +/-1 outputs. Include sign-changing and zero-update cases, not just epsilon differences.
+ if(id==='add-norm')return [[1,-1],[-1,0],[1,1],[-1,2],[2,-.5]].map((v,i)=>({...previousSamples(id)[i],v}));
  if(['vocabulary-scores','vocabulary'].includes(id))return previousSamples('embedding').map(s=>({...s,v:decoder(position(embed(s.v,4)),memory())}));
  if(!M.levels[id]?.positioned)return previousSamples(id);
  return previousSamples('embedding').map(s=>{const positioned=position(embed(s.v,M.levels[id].wide?4:2));return {...s,v:id==='cross-attention'?decoderSelf(positioned):positioned};});
@@ -902,6 +915,7 @@ function generationCard(id,levelId){
 M.extraCard=(id,levelId)=>{
  const own=M.original.card(id,levelId);if(own)return own;
  const c=previousCard(id,levelId);if(!M.levels[levelId]?.original)return c;
+ if(id==='v')Object.assign(c,{formula:'V = X × Wᵥ',meaning:M.levels.qkv.rationale.text,purpose:M.levels.qkv.rationale.takeaway,input:L('输入矩阵 X','Input matrix X'),output:M.levels.qkv.outputTitle});
  if(id==='output')c.formula='Y = O × Wo';
  if(['residual1','residual2'].includes(id)){c.formula='R = X_sublayer + Sublayer(X_sublayer)';c.meaning=L('加回当前子层自己的输入。相加之后才进入本段的 LayerNorm。','Add back the current sublayer’s own input. LayerNorm follows the addition.');}
  if(levelId==='cross-attention'&&['q','k','v'].includes(id)){c.formula={q:'Q = DWq',k:'K = EWk',v:'V = EWv'}[id];c.meaning=id==='q'?L('从目标 D 产生查询，决定这一步想从源句取什么。','Project queries from target D to select information from the source.'):L('从编码器输出 E 产生键或值，供目标侧查询匹配和读取。','Project keys or values from encoder output E so target queries can match and retrieve source information.');}

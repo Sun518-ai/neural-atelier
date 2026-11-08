@@ -80,6 +80,22 @@ test('QKV accepts only V at the outlet and ignores optional Q/K branches',()=>{
 
 const differs=(id,edit)=>{const s=M.solutions(id);edit(s);assert.ok(M.samplesFor(id).slice(0,M.levels[id].sampleCount).some(t=>{const e=M.evaluate(s,t.v);return e.error||!close(e.output,M.reference(t.v,id));}),id+' must reject this incorrect computation');};
 
+test('add-norm exposes a missing residual with visible differences rather than only epsilon',()=>{
+ const correct=M.solutions('add-norm'),missing=plain(correct);
+ missing.nodes=missing.nodes.filter(n=>n.id!=='add');missing.nodes.find(n=>n.id==='layernorm2').links=['relu-ffn'];
+ const samples=M.samplesFor('add-norm');
+ for(const {v}of samples)assert.ok(close(M.evaluate(correct,v).output,M.reference(v,'add-norm')));
+ for(const {v}of samples.slice(0,2)){
+  const actual=M.evaluate(missing,v).output,expected=M.reference(v,'add-norm');
+  assert.ok(actual.some((x,i)=>Math.abs(x-expected[i])>.9));
+  assert.notDeepEqual(plain(actual.map(x=>Number(x.toFixed(2)))),plain(expected.map(x=>Number(x.toFixed(2)))));
+ }
+ const withoutFFN=plain(correct);withoutFFN.nodes.find(n=>n.id==='layernorm2').links=['R'];
+ assert.ok(samples.some(({v})=>M.evaluate(withoutFFN,v).output.some((x,i)=>Math.abs(x-M.reference(v,'add-norm')[i])>.9)));
+ assert.deepEqual(plain(M.samplesFor('workshop')[0].v),[1,0],'the new samples belong only to add-norm');
+ assert.deepEqual(plain(M.samplesFor('layernorm')[0].v),[1,0]);
+});
+
 test('original concepts are completed before optional modern and engine tracks',()=>{
  assert.equal(M.routes.main.ids.length,30);assert.equal(M.routes.modern.ids.length,13);assert.equal(M.routes.engine.ids.length,9);
  assert.deepEqual(plain(M.routes.main.ids.slice(0,7)),['wire','projection','relu','down-projection','original-ffn','workshop','residual']);

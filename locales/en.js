@@ -1,5 +1,6 @@
 // English copy. Chinese source phrases are stable lookup keys.
 globalThis.AtelierEnglish = {
+  "此处显示更多小数；棋盘上的数字已四舍五入。": "More decimals are shown here; numbers on the board are rounded.",
   "共 {count} 关": "{count} levels",
   "关闭提示": "Close hint",
   "下一条提示": "Next hint",

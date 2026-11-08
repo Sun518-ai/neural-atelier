@@ -3,6 +3,18 @@ import {createProgress} from './level-progress.js?v=ffn-dedup-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
+function comparisonValues(actual,expected,tolerance=1e-9){
+ const a=actual?.map(fmt),e=expected?.map(fmt);let expanded=false;
+ if(a&&e)actual.forEach((value,i)=>{
+  const target=expected[i];
+  if(!Number.isFinite(value)||!Number.isFinite(target)||Math.abs(value-target)<tolerance||a[i]!==e[i])return;
+  let digits=6;
+  while(digits<12&&value.toFixed(digits)===target.toFixed(digits))digits++;
+  a[i]=value.toFixed(digits);e[i]=target.toFixed(digits);expanded=true;
+ });
+ const show=v=>v?'['+v.join(', ')+']':I18n.t('未得到输出');
+ return {actual:show(a),expected:show(e),expanded};
+}
 function animationSchedule(nodes,depths,durationFor,travel,independent){
  const timings=new Map(),depthEnds=[0];
  for(const n of [...nodes].sort((a,b)=>depths[a.id]-depths[b.id])){
@@ -355,7 +367,7 @@ function renderGeneration(){
  $('#demo-transcript').replaceChildren(...[...seed,...generated].map((id,i)=>{const el=document.createElement('span');el.className=i<seed.length?'seed-token':'generated-token';el.textContent=M.math.vocab[id];return el;}));
  $('#demo-transcript').setAttribute('aria-label',I18n.t('完整文字'));
 }
-function refresh(){renderGeneration();refreshPauseControl();$('#progress-reset').disabled=busy;$('#progress-reset-apply').disabled=busy;$('#progress-restart').disabled=busy;$('#progress-restart-undo').disabled=busy;$('#progress-restart-undo').hidden=!progress.canUndoRestart();document.body.classList.toggle('network-running',busy);renderShelf();const t=samples()[sample];const won=levelPassed();$('.route strong').textContent=stage().concept+(won?I18n.t(" · 已通过"):'');$('#next-level').hidden=!(won||progress.completed(stageId))||!stage().next;$('#levels-open').disabled=busy;$('#engine-controls').querySelectorAll('input,select,button').forEach(e=>e.disabled=busy);$('#device-docks').querySelectorAll('button').forEach(e=>e.disabled=busy);$('#sample-name').textContent=t.word;$('#sample-value').textContent=stage().generationRounds?I18n.t('目标输入 · 最近三个词'):stage().sequence?(stage().sourceDim===3?'Token ID '+vector(t.v):I18n.t(stage().sourceDim===12?"3 个位置 × 4 个特征":"3 个位置 × 2 个特征")):vector(t.v);$('#pass-count').textContent=results.filter(r=>r.pass).length+' / '+stage().sampleCount;$('#test-results').innerHTML=results.map((r,i)=>`<div class="test-row ${r.pass?'pass':'fail'}"><span>${r.pass?'✓':'×'} ${samples()[i].word}</span><span>${stage().tokenOutput&&r.actual?M.readTokens(r.actual):stage().sequence?(r.actual?I18n.t("矩阵 ")+shape(r.actual.length):I18n.t("等待输入")):vector(r.actual)}</span></div>`).join('');$('#run').disabled=!world;$('#run').innerHTML=busy?I18n.t("<span>■</span> 停止"):I18n.t("<span>▶</span> 试跑我的网络");$('#undo').disabled=busy||!history.length;$('#reset').disabled=busy;$('#reset').hidden=!!stage().demonstration;$('#undo').hidden=!!stage().demonstration;$('#restore-layout').hidden=!progress.canRestore(stageId,state);$('#restore-layout').disabled=busy;}
+function refresh(){renderGeneration();refreshPauseControl();$('#progress-reset').disabled=busy;$('#progress-reset-apply').disabled=busy;$('#progress-restart').disabled=busy;$('#progress-restart-undo').disabled=busy;$('#progress-restart-undo').hidden=!progress.canUndoRestart();document.body.classList.toggle('network-running',busy);renderShelf();const t=samples()[sample];const won=levelPassed();$('.route strong').textContent=stage().concept+(won?I18n.t(" · 已通过"):'');$('#next-level').hidden=!(won||progress.completed(stageId))||!stage().next;$('#levels-open').disabled=busy;$('#engine-controls').querySelectorAll('input,select,button').forEach(e=>e.disabled=busy);$('#device-docks').querySelectorAll('button').forEach(e=>e.disabled=busy);$('#sample-name').textContent=t.word;$('#sample-value').textContent=stage().generationRounds?I18n.t('目标输入 · 最近三个词'):stage().sequence?(stage().sourceDim===3?'Token ID '+vector(t.v):I18n.t(stage().sourceDim===12?"3 个位置 × 4 个特征":"3 个位置 × 2 个特征")):vector(t.v);$('#pass-count').textContent=results.filter(r=>r.pass).length+' / '+stage().sampleCount;$('#test-results').innerHTML=results.map((r,i)=>`<div class="test-row ${r.pass?'pass':'fail'}"><span>${r.pass?'✓':'×'} ${samples()[i].word}</span><span>${stage().tokenOutput&&r.actual?M.readTokens(r.actual):stage().sequence?(r.actual?I18n.t("矩阵 ")+shape(r.actual.length):I18n.t("等待输入")):(r.pass?vector(r.actual):comparisonValues(r.actual,r.expected).actual)}</span></div>`).join('');$('#run').disabled=!world;$('#run').innerHTML=busy?I18n.t("<span>■</span> 停止"):I18n.t("<span>▶</span> 试跑我的网络");$('#undo').disabled=busy||!history.length;$('#reset').disabled=busy;$('#reset').hidden=!!stage().demonstration;$('#undo').hidden=!!stage().demonstration;$('#restore-layout').hidden=!progress.canRestore(stageId,state);$('#restore-layout').disabled=busy;}
 async function run(){
  closeHint();closeCompletion();world?.clearConnectionError?.();
  if(busy){busy=paused=false;runId++;say(I18n.t("已停止。"));world.clearPackets();world.labels();refresh();return;}
@@ -515,9 +527,9 @@ try{
   addLabel('button','port input '+(state.sink?'connected ':''),String(shape(stage().sinkDim)),{'type':'button','data-input':'sink:0','aria-label':`${I18n.t("本层输出入口，")}${shape(stage().sinkDim)}${state.sink?I18n.t("，已连接"):''}`},()=>point('sink'));
   if(busy&&current?.output&&level===99&&!fault&&!stage().sequence)addLabel('span','node-value',vector(current.output),{},()=>new T.Vector3(stage().sinkX,.6,1.6));
   if(fault){
-   const issue=current?.componentIssue,owner=issue?.id||'sink',pos=()=>point(owner),vf=v=>v?'['+v.map(x=>fmt(x)).join(', ')+']':I18n.t("未得到输出");
+   const issue=current?.componentIssue,owner=issue?.id||'sink',pos=()=>point(owner),comparison=comparisonValues(fault.actual,fault.expected,stage().engine?(stage().limits?.error||.06):1e-9);
    const tokenText=stage().tokenOutput?`${I18n.t("<p class=\"token-verdict\">实际：")}${fault.actual?M.readTokens(fault.actual):I18n.t("未输出")}${I18n.t("<br>目标：")}${M.readTokens(fault.expected)}</p>`:'';
-   const content=issue?`<button type="button" class="fault-close" data-dismiss-result aria-label="${I18n.t('关闭结果提示')}">×</button><strong>${I18n.t('组件用途不匹配')}</strong><p>${issue.message}</p>`:`${I18n.t("<button type=\"button\" class=\"fault-close\" data-dismiss-result aria-label=\"关闭结果提示\" title=\"关闭结果提示\">×</button><strong>最终结果 · ")}${sample<3&&!stage().sequence?I18n.t("位置 ")+sample+I18n.t("（输入“")+samples()[sample].word+'”）':samples()[sample].word}</strong>${tokenText}${I18n.t("<div><span>你的结果</span><b>")}${vf(fault.actual)}${I18n.t("</b></div><div class=\"expected\"><span>预期结果</span><b>")}${vf(fault.expected)}</b></div>`;
+   const content=issue?`<button type="button" class="fault-close" data-dismiss-result aria-label="${I18n.t('关闭结果提示')}">×</button><strong>${I18n.t('组件用途不匹配')}</strong><p>${issue.message}</p>`:`${I18n.t("<button type=\"button\" class=\"fault-close\" data-dismiss-result aria-label=\"关闭结果提示\" title=\"关闭结果提示\">×</button><strong>最终结果 · ")}${sample<3&&!stage().sequence?I18n.t("位置 ")+sample+I18n.t("（输入“")+samples()[sample].word+'”）':samples()[sample].word}</strong>${tokenText}${I18n.t("<div><span>你的结果</span><b>")}${comparison.actual}${I18n.t("</b></div><div class=\"expected\"><span>预期结果</span><b>")}${comparison.expected}</b></div>${comparison.expanded?'<p class="fault-precision-note">'+I18n.t('此处显示更多小数；棋盘上的数字已四舍五入。')+'</p>':''}`;
    addLabel('span','fault-pin','!',{'data-owner':owner,'aria-hidden':'true'},pos);
    addLabel('div','local-fault',content,{'data-owner':owner,'role':'status'},pos);
   }

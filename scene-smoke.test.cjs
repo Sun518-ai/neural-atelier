@@ -16,6 +16,20 @@ async function boot({reduced=true,frameMs=1000,onFrame=()=>{},languages=['zh-CN'
  await vm.runInContext('(async()=>{'+src+'})()',c);
  assert.ok(c.testAPI.getWorld(),'3D boot failed');return {c,document,window,api:c.testAPI,scenes,time:()=>now,setFrameMs:value=>{frameMs=value;},view:()=>view,camera:()=>renderedCamera};
 }
+test('add-norm reports a visible residual difference and preserves precision for close numeric failures',async()=>{
+ const app=await boot(),M=app.c.NeuralPrologue,doc=app.document;app.api.switchLevel('add-norm');
+ const state=M.solutions('add-norm');state.nodes=state.nodes.filter(n=>n.id!=='add');state.nodes.find(n=>n.id==='layernorm2').links=['relu-ffn'];app.api.setState(state);app.api.getWorld().rebuild();
+ const saved=JSON.stringify(state);await app.api.run();
+ let values=[...doc.querySelectorAll('.local-fault div>b')].map(el=>el.textContent);
+ assert.deepEqual(values,['[-1, 1]','[1, -1]']);assert.equal(doc.querySelector('.fault-precision-note'),null);assert.equal(JSON.stringify(state),saved);
+ const originalSamples=M.samplesFor;M.samplesFor=id=>originalSamples(id).map((s,i)=>id==='add-norm'&&i===0?{...s,v:[1,0]}:s);
+ app.api.getWorld().rebuild();await app.api.run();
+ values=[...doc.querySelectorAll('.local-fault div>b')].map(el=>el.textContent);
+ assert.deepEqual(values,['[0.999950, -0.999950]','[0.999999, -0.999999]']);assert.ok(doc.querySelector('.fault-precision-note'));assert.match(doc.querySelector('#test-results .fail').textContent,/0\.999950/);
+ app.c.I18n.setPreference('en');assert.match(doc.querySelector('.fault-precision-note').textContent,/More decimals/);assert.doesNotMatch(doc.querySelector('.local-fault').textContent,/[\u3400-\u9fff]/);
+ doc.querySelector('.fault-close').dispatchEvent(new app.window.Event('click',{bubbles:true}));assert.equal(doc.querySelector('.local-fault'),null);assert.equal(JSON.stringify(state),saved);
+ M.samplesFor=originalSamples;app.api.setState(M.solutions('add-norm'));app.api.getWorld().rebuild();await app.api.run();assert.equal(doc.querySelectorAll('#test-results .pass').length,5);assert.equal(app.api.getFault(),null);
+});
 test('every board can pan with the button or a modifier without moving modules or wiring',async()=>{
  const app=await boot(),doc=app.document,M=app.c.NeuralPrologue,T=app.c.T;
  const fire=(target,type,props={})=>{const e=new app.window.Event(type,{bubbles:true,cancelable:true});Object.assign(e,props);target.dispatchEvent(e);};

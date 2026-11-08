@@ -153,6 +153,7 @@ body{min-width:1080px}#game{max-width:1920px;padding:18px 24px}main{grid-templat
 .local-fault .fault-close{position:absolute;right:5px;top:4px;width:28px;height:28px;min-height:0;padding:0;display:grid;place-items:center;border:0;border-radius:5px;background:transparent;color:#824b3e;font:22px/1 sans-serif;pointer-events:auto;cursor:pointer}.local-fault .fault-close:hover{background:#f3e6db}.local-fault .fault-close:focus-visible{outline:2px solid #824b3e;outline-offset:1px}.local-fault strong{padding-right:24px}
 .local-fault strong{font-size:11px;font-weight:600;display:block;margin-bottom:7px}.local-fault div{display:flex;gap:12px;align-items:baseline;margin-top:5px;font-size:10px;color:#8c6a60}.local-fault div>span{min-width:22px}.local-fault b{font:12px/1.5 ui-monospace,monospace;overflow-wrap:anywhere;color:#9b493b}.local-fault .expected b{color:#456e61}.local-fault p{font-size:11px;color:#8c6a60;max-width:240px;margin:0}.fault-pin[hidden],.local-fault[hidden]{display:none}
 @keyframes fault-in{from{opacity:0;margin-top:6px}to{opacity:1;margin-top:0}}
+.local-fault .fault-precision-note{margin-top:8px;font-size:10px;line-height:1.5}
 @media(prefers-reduced-motion:reduce){.local-fault{animation:none}}
 
 /* Each chapter keeps its own small workbench and saved wiring. */
