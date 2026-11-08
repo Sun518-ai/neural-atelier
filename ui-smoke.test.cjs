@@ -1282,3 +1282,31 @@ test('combined shelf help shows its original chapter with stock guidance and cle
  button=doc.querySelector('[data-add-module="q"]');hover(button);assert.match(tip.textContent,/2 \/ 2/);assert.doesNotMatch(tip.textContent,/[\u3400-\u9fff]|3 ×|From:/);
  app.eval("switchLevel('masked-multihead')");assert.equal(tip.hidden,true);assert.equal(doc.querySelector('[aria-describedby="shelf-tooltip"]'),null);
 });
+
+test('attention package diagrams unpack each head with separate QK and V paths in both languages',()=>{
+ const app=boot(new Map(),'#encoder-layer'),M=app.c.NeuralPrologue,before=app.eval('JSON.stringify(state)');
+ for(const language of ['zh','en']){
+  app.c.I18n.setPreference(language);
+  for(const [kind,headCount,width]of [['self-heads',2,2],['two-head-attention',2,1],['masked-heads',2,2],['cross-heads',2,2],['head-a',1,1],['head-b',1,1]]){
+   const {document:doc}=parseHTML(app.eval(`packageDiagram('${kind}')`)),diagram=doc.querySelector('[data-package]'),heads=[...doc.querySelectorAll('.attention-head')];
+   assert.equal(heads.length,headCount,kind);assert.equal(doc.querySelectorAll('details').length,0,'the internal steps are visible immediately');
+   for(const head of heads){
+    const suffix=head.dataset.head==='1'?'₁':'₂';
+    assert.deepEqual([...head.querySelectorAll('[data-projection]')].map(el=>el.dataset.projection),['Q','K','V']);
+    assert.deepEqual([...head.querySelectorAll('.head-matching [data-head-step]')].map(el=>el.dataset.headStep),kind==='masked-heads'?['score','mask','softmax']:['score','softmax']);
+    const score=head.querySelector('[data-head-step="score"] code').textContent;assert.ok(score.includes('√'+width));assert.ok(score.includes('Q'+suffix+'K'+suffix+'ᵀ'));assert.ok(!score.includes('V'));
+    assert.equal(head.querySelector('.head-value-path').dataset.valueRoute,'V'+suffix,'V bypasses matching and Softmax');
+    assert.equal(head.querySelector('[data-head-step="mix"] code').textContent,'H'+suffix+' = A'+suffix+' × V'+suffix);
+   }
+   assert.equal(doc.querySelectorAll('[data-head-step="concat"]').length,headCount===2?1:0);
+   assert.equal(doc.querySelectorAll('[data-head-step="output"]').length,headCount===2?1:0,'Wo follows concatenation, never inside a single head');
+   if(kind==='cross-heads'){
+    assert.match(heads[0].querySelector('[data-projection="Q"]').textContent,language==='zh'?/目标侧/:/Target/);
+    for(const symbol of ['K','V'])assert.match(heads[0].querySelector('[data-projection="'+symbol+'"]').textContent,language==='zh'?/编码器/:/Encoder/);
+   }
+   if(language==='en')assert.doesNotMatch(diagram.textContent,/[\u3400-\u9fff]/,kind);
+  }
+  const card=M.extraCard('self-heads','encoder-layer');assert.match(card.meaning,language==='zh'?/全部 4 个输入特征/:/all four input features/);
+ }
+ assert.equal(app.eval('JSON.stringify(state)'),before);assert.deepEqual([...app.c.I18n.missing],[]);
+});

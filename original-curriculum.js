@@ -623,6 +623,22 @@ M.packages={
  enffn:pack([['RMSNorm → SwiGLU'],[M.definitions.add.name]],L('把现代 FFN 及外部残差合成一个调度任务，仍保留归一化、两套投影、SiLU、逐元素相乘、降维与相加。','Groups the modern FFN and its residual as one scheduling task. Normalization, both projections, SiLU, elementwise multiplication, down projection and addition all remain inside.'))
 };
 L('内部组成','Inside this module');L('新组合组件','New packaged module');
+M.headDiagramCopy={
+ shared:L('同一份输入分别进入两个头，使用两套投影权重。','Both heads receive the same full input and use separate projection weights.'),
+ single:L('这个头用自己的 Q/K/V 权重处理完整输入。','This head applies its own Q/K/V weights to the full input.'),
+ cross:L('两个头都读取：目标侧特征 → Q；编码器输出 → K/V。','Both heads read target-side features for Q and encoder outputs for K/V.'),
+ projection:L('投影','Projection'),query:L('查询','Query'),key:L('键','Key'),value:L('值','Value'),target:L('目标侧','Target'),memory:L('编码器','Encoder'),
+ score:L('Q/K 匹配打分','Q/K matching scores'),weights:L('Softmax · 读取比例','Softmax · reading weights'),
+ bypass:L('直接送往汇合','Pass to aggregation'),mask:L('遮住未来位置','Mask future positions'),
+ mix:L('按比例汇合 V','Mix V using the weights'),concat:L('按同一个词拼接两头的结果','Concatenate both results for the same token'),
+ output:L('输出投影','Output projection'),
+ roles:L('Q/K 决定从哪里读，V 提供内容；A 是本次计算得到的读取比例。','Q/K decide where to read; V supplies the content. A contains the reading weights computed for this input.')
+};
+for(const [kind,numbers]of Object.entries({'two-head-attention':[1,2],'self-heads':[1,2],'masked-heads':[1,2],'cross-heads':[1,2],'head-a':[1],'head-b':[2]})){
+ const d=M.definitions[kind];
+ M.packages[kind].attentionDiagram={numbers,inputWidth:d.ins[0]/3,headWidth:d.out/3/numbers.length,masked:kind==='masked-heads',cross:kind==='cross-heads'};
+}
+I18n.prepare(M.headDiagramCopy);
 L('来源：','From: ');
 // Provenance follows the first lesson that packages the computation, rather
 // than a later packaging refresher or the currently selected example lesson.
@@ -910,7 +926,7 @@ M.original={relu,ln,position,embed,wide,project,vocabulary,classicFFN,sequenceFF
      c.meaning=L('每个词单独取自己的 4 个特征，减去这 4 个数的均值，再除以标准差。例如 [1, 1, 3, 3] 约变成 [−1, −1, 1, 1]。三个词分别计算，不把不同词混在一起。','For each token, center its four features by their mean and divide by their standard deviation. For example, [1, 1, 3, 3] becomes approximately [−1, −1, 1, 1]. Process the three tokens separately.');
      c.purpose=L('残差相加后，数值的整体偏移和大小可能变化。LayerNorm 先整理这些尺度，再交给下一段。两段用的是同一种运算，本例两块都取 γ = 1、β = 0；真实模型可以分别学习各自的参数。','Residual addition can change the overall offset and scale. LayerNorm adjusts them before the next stage. Both copies use the same operation and γ = 1, β = 0 here; real models may learn different parameters for each copy.');
     }else if(id==='self-heads'){
-     c.meaning=L('沿用前面的双头注意力：每个词分别按两套注意力比例读取整句话的 V，再拼接并经过 Wo。这里输入是每词 4 个特征，每个头处理 2 个；输出仍是 3 个词、每词 4 个特征。','Reuse the two-head attention structure: each token reads V from the whole sentence with two attention patterns, then concatenates the results and applies Wo. Here each token has four features, with two per head; the output still has three tokens with four features each.');
+     c.meaning=L('两个头都读取每个词的全部 4 个输入特征，各用自己的权重投影出 2 维 Q/K/V。每个头独立打分、计算读取比例并汇合 V；最后拼接两头的结果，再经过 Wo，输出仍是 3 个词、每词 4 个特征。','Both heads read all four input features of each token and use their own weights to produce two-feature Q/K/V. Each head independently scores, computes reading weights and mixes V. Concatenate the results and apply Wo; the output still has three tokens with four features each.');
      c.purpose=L('Q/K/V、打分、Softmax、A × V、拼接与 Wo 已经在这块内部。它负责跨词读取内容；残差相加和 LayerNorm 放在外面，由你搭建。','Q/K/V, scoring, Softmax, A × V, concatenation and Wo are inside this module. It reads across tokens; residual addition and LayerNorm remain outside for you to build.');
     }else if(id==='original-ffn-block'){
      c.meaning=L('把交流后的每个词分别送过 Linear → ReLU → Linear：4 个特征扩成 8 个，经 ReLU 再组合回 4 个。所有词用同一套权重，但各自计算；“爱”的 FFN 不会在这一步读取“猫”的向量。','Send each token after exchange through Linear → ReLU → Linear: expand four features to eight, apply ReLU, and combine back to four. All tokens share the weights but are processed independently; Love’s FFN does not read Cats’ vector at this step.');

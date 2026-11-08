@@ -61,8 +61,19 @@ $('#shelf-smaller').onclick=()=>setShelfSize(shelfSize-1);
 $('#shelf-larger').onclick=()=>setShelfSize(shelfSize+1);
 const shape=dim=>stage().shapes?.[dim]||(stage().sequence?({3:I18n.t("3 个 ID"),6:'3 × 2',9:'3 × 3',12:'3 × 4',18:'3 × 6'}[dim]||dim):dim);
 const moduleShape=(kind,dim)=>M.moduleShape?.(kind,dim)??shape(dim);
+function attentionPackageDiagram(kind,p){
+ const d=p.attentionDiagram,c=M.headDiagramCopy,sub=['','₁','₂'];
+ const step=(type,title,formula)=>`<div class="head-step" data-head-step="${type}"><small>${title}</small><code>${formula}</code></div>`;
+ const heads=d.numbers.map(number=>{
+  const s=sub[number],score=d.masked?'S′'+s:'S'+s;
+  return `<section class="attention-head" data-head="${number}"><header><b>${M.definitions[number===1?'head-a':'head-b'].name}</b><small>${c.projection} ${d.inputWidth} → ${d.headWidth}</small></header><div class="head-paths">${[['Q',c.query],['K',c.key],['V',c.value]].map(([symbol,label])=>`<div class="head-projection" data-projection="${symbol}"><small>${label}${d.cross?' ← '+(symbol==='Q'?c.target:c.memory):''}</small><code>${symbol+s}</code></div>`).join('')}<div class="head-matching"><span class="head-qk-join" aria-hidden="true">↘　↙</span>${step('score',c.score,'S'+s+' = Q'+s+'K'+s+'ᵀ / √'+d.headWidth)}${d.masked?'<span class="package-arrow" aria-hidden="true">↓</span>'+step('mask',c.mask,score+' = mask(S'+s+')'):''}<span class="package-arrow" aria-hidden="true">↓</span>${step('softmax',c.weights,'A'+s+' = softmax('+score+')')}<span class="package-arrow" aria-hidden="true">↓</span></div><div class="head-value-path" data-value-route="V${s}"><span aria-hidden="true"></span><code>V${s}</code><small>${c.bypass}</small><span aria-hidden="true">↓</span></div>${step('mix',c.mix,'H'+s+' = A'+s+' × V'+s)}</div></section>`;
+ }).join('');
+ const merge=d.numbers.length===2?`<div class="head-rejoin" aria-hidden="true">↘　↙</div>${step('concat',c.concat,'C = Concat(H₁, H₂) · 3 × '+d.inputWidth)}<span class="package-arrow" aria-hidden="true">↓</span>${step('output',c.output,'C × Wo')}`:'';
+ return `<div class="package-diagram attention-package" data-package="${kind}" data-head-count="${d.numbers.length}"><p class="heads-input">${d.cross?c.cross:d.numbers.length===2?c.shared:c.single}</p><div class="attention-heads">${heads}</div>${merge}<p class="heads-roles">${c.roles}</p></div><p class="package-note">${p.note}</p>`;
+}
 function packageDiagram(kind){
  const p=M.packages?.[kind];if(!p)return '';
+ if(p.attentionDiagram)return attentionPackageDiagram(kind,p);
  return `<div class="package-diagram" data-package="${kind}">${p.stages.map((names,i)=>`${i?'<span class="package-arrow" aria-hidden="true">↓</span>':''}<div class="package-stage">${names.map(name=>`<span>${name}</span>`).join('')}</div>`).join('')}</div><p class="package-note">${p.note}</p>`;
 }
 function encoderPrimer(){
