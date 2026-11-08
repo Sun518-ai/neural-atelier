@@ -2,12 +2,16 @@ export function createProgress(M,storage){
  const legacy='neural-atelier-prologue-v1',metaKey='neural-atelier-chapters-v1';
  const read=key=>{try{return JSON.parse(storage.getItem(key));}catch{return null;}};
  const write=(key,value)=>{try{storage.setItem(key,JSON.stringify(value));return true;}catch{return false;}};
- const saved=read(metaKey),meta={current:M.levels[saved?.current]?saved.current:(read(legacy)?'ffn':'wire'),completed:(Array.isArray(saved?.completed)?saved.completed:[]).filter(id=>M.levels[id]),practiceRuns:{}};
+ const known=id=>Object.hasOwn(M.levels,id)||Object.hasOwn(M.levelRedirects||{},id);
+ const saved=read(metaKey),savedCurrent=M.resolveLevelId?.(saved?.current)||(Object.hasOwn(M.levels,saved?.current)?saved.current:null);
+ // Retired completion badges stay recoverable but do not count toward routes.
+ // Only navigation redirects; never turn an old board into the next lesson's answer.
+ const meta={current:savedCurrent||(read(legacy)?'ffn':'wire'),completed:(Array.isArray(saved?.completed)?saved.completed:[]).filter(known),practiceRuns:{}};
  for(const [id,run]of Object.entries(saved?.practiceRuns||{}))if(M.levels[id]?.practice&&run&&typeof run.finished==='boolean'&&(!run.finished||typeof run.circuit==='string'))meta.practiceRuns[id]={finished:run.finished,...(run.finished?{circuit:run.circuit}:{})};
  const generation=value=>Number.isSafeInteger(value)&&value>=0?value:0;
  meta.generation=generation(saved?.generation);meta.nextGeneration=Math.max(meta.generation,generation(saved?.nextGeneration));
  const backup=saved?.restartBackup;
- if(backup&&generation(backup.generation)===backup.generation&&Array.isArray(backup.completed)&&backup.practiceRuns&&typeof backup.practiceRuns==='object')meta.restartBackup={generation:backup.generation,completed:backup.completed.filter(id=>M.levels[id]),practiceRuns:backup.practiceRuns};
+ if(backup&&generation(backup.generation)===backup.generation&&Array.isArray(backup.completed)&&backup.practiceRuns&&typeof backup.practiceRuns==='object')meta.restartBackup={generation:backup.generation,completed:backup.completed.filter(known),practiceRuns:backup.practiceRuns};
  const key=id=>{const base=id==='ffn'?legacy:`neural-atelier-level-${id}-v1`;return meta.generation?base+'-run-'+meta.generation:base;};
  const completedKey=id=>key(id)+'-completed';
  const placementKey=id=>key(id)+'-before-placement';

@@ -14,6 +14,34 @@ function boot(storage=new Map(),hash='',languages=['zh-CN']){
  vm.runInContext(code+`\nworld={relocalize(){},labels(){},rebuild(){},beforeStage(){},setStage(){},clearPackets(){},focused(){return null},async animate(){}};refresh();`,c);
  return {c,document,window,storage,location,navigation,hashchange,eval:code=>vm.runInContext(code,c)};
 }
+test('retired FFN URLs and saved current selection continue without copying answers or losing saves',()=>{
+ const fixture=boot(),M=fixture.c.NeuralPrologue,metaKey='neural-atelier-chapters-v1';
+ for(const generation of [0,3])for(const hash of ['', '#pack-ffn']){
+  const suffix=generation?'-run-'+generation:'',oldKey='neural-atelier-level-pack-ffn-v1'+suffix,nextKey='neural-atelier-level-add-norm-v1'+suffix;
+  const retired={...M.solutions('workshop'),levelId:'pack-ffn'},next=M.solutions('add-norm');next.sink=null;next.nodes[0].x=.42;
+  const oldRaw=JSON.stringify(retired),nextRaw=JSON.stringify(next),completed=['wire','layernorm','pack-ffn'];
+  const backup={generation:0,completed:['wire','pack-ffn'],practiceRuns:{}};
+  const protectedEntries=[[oldKey,oldRaw],[oldKey+'-completed',oldRaw],[oldKey+'-before-placement',oldRaw],[nextKey,nextRaw],['neural-atelier-language-v1','en'],['neural-atelier-speed-v1','.25']];
+  const storage=new Map([...protectedEntries,[metaKey,JSON.stringify({current:'pack-ffn',completed,generation,nextGeneration:generation,restartBackup:backup})]]),app=boot(storage,hash);
+  assert.equal(app.eval('stageId'),'add-norm');assert.equal(app.location.hash,'#add-norm');assert.equal(app.navigation.length,1);
+  assert.equal(app.eval('progress.current()'),'add-norm');assert.equal(app.eval("progress.completed('pack-ffn')"),true);assert.equal(app.eval("progress.completed('add-norm')"),false);
+  assert.deepEqual(JSON.parse(app.eval('JSON.stringify(state)')),JSON.parse(nextRaw));
+  for(const [key,value]of protectedEntries)assert.equal(storage.get(key),value,key+' preserved');
+  assert.deepEqual(JSON.parse(storage.get(metaKey)).restartBackup,backup);
+  app.eval('levelMenu()');assert.equal(app.document.querySelectorAll('#level-list [data-level]').length,30);assert.equal(app.document.querySelector('[data-level="pack-ffn"]'),null);
+  app.eval("switchLevel('layernorm')");assert.equal(app.eval('stage().next'),'add-norm');app.location.hash='#pack-ffn';app.hashchange();assert.equal(app.eval('stageId'),'add-norm');assert.equal(app.location.hash,'#add-norm');
+  assert.equal(app.eval('progress.restartAll()'),true);assert.equal(app.eval('progress.undoRestart()'),true);assert.equal(app.eval("progress.completed('pack-ffn')"),true);
+  assert.equal(storage.get(oldKey),oldRaw);assert.equal(storage.get(nextKey),nextRaw);
+ }
+});
+test('reuse lessons accept the learned package without repeating its collection animation',async()=>{
+ for(const [id,kind]of [['workshop','relu-ffn'],['pack-scores','original-weights']]){
+  const app=boot(new Map(),'#'+id),doc=app.document;let fusions=0;app.c.recordFusion=()=>fusions++;
+  app.eval('world.fuse=window.recordFusion');assert.equal(app.eval('state.nodes.length'),0);
+  app.eval(`chooseModule('${kind}');placeModule(0,0);chooseOutput('R');chooseInput('${kind}',0);chooseOutput('${kind}');chooseInput('sink',0)`);
+  await app.eval('run()');assert.equal(app.eval('levelPassed()'),true);assert.equal(fusions,0);assert.equal(doc.querySelector('#level-complete').open,true);assert.equal(doc.querySelector('#complete-reward').hidden,true);
+ }
+});
 test('revised FFN lessons archive legacy projection circuits in every save generation',()=>{
  for(const generation of [0,3])for(const id of ['workshop','residual']){
   const key=`neural-atelier-level-${id}-v1`+(generation?'-run-'+generation:''),old={version:1,levelId:id,palette:['project','down','add'],nodes:[{id:'project',kind:'project',x:-2,z:1,links:['R']}],sink:'project'};
@@ -187,7 +215,7 @@ test('partially constructed tables and older complete saves retain their positio
  const legacy=boot(new Map([['neural-atelier-prologue-v1',JSON.stringify(old)]]));assert.equal(legacy.eval('stageId'),'ffn');assert.equal(legacy.eval('state.nodes.length'),6);assert.equal(legacy.eval('state.nodes[0].x'),1.234);assert.equal(legacy.eval('state.sink'),'add');
 });
 test('learning stages preserve level navigation and keep the other tracks separate',()=>{
- const app=boot(new Map(),'', ['en-US']),doc=app.document,M=app.c.NeuralPrologue;app.eval('levelMenu()');assert.equal(doc.querySelectorAll('#level-list [data-level]').length,31);assert.equal(doc.querySelector('#level-list [data-level="placement"]'),null);
+ const app=boot(new Map(),'', ['en-US']),doc=app.document,M=app.c.NeuralPrologue;app.eval('levelMenu()');assert.equal(doc.querySelectorAll('#level-list [data-level]').length,30);assert.equal(doc.querySelector('#level-list [data-level="placement"]'),null);
  assert.deepEqual([...doc.querySelectorAll('#level-list [data-level]')].map(e=>e.dataset.level),Array.from(M.routes.main.ids),'grouping keeps every existing level exactly once and in order');
  assert.equal(doc.querySelectorAll('[data-level-group]').length,6);
  assert.equal(doc.querySelector('#level-tracks').closest('.level-menu-content'),null);
@@ -209,7 +237,7 @@ test('learning stages preserve level navigation and keep the other tracks separa
  assert.equal(doc.querySelector('.level-stage-nav [aria-current="step"]').dataset.levelGroupTarget,'level-group-main-encoder');
  assert.match(doc.querySelector('#level-group-main-encoder .level-group-heading small').textContent,/1 \/ 2/);
  const state=app.eval('JSON.stringify(state)');
- for(const language of ['zh','en']){app.c.I18n.setPreference(language);assert.equal(doc.querySelectorAll('#level-list [data-level]').length,31);assert.equal(app.eval('JSON.stringify(state)'),state);if(language==='en')assert.doesNotMatch(doc.querySelector('#level-menu').textContent,/[\u3400-\u9fff]/);}
+ for(const language of ['zh','en']){app.c.I18n.setPreference(language);assert.equal(doc.querySelectorAll('#level-list [data-level]').length,30);assert.equal(app.eval('JSON.stringify(state)'),state);if(language==='en')assert.doesNotMatch(doc.querySelector('#level-menu').textContent,/[\u3400-\u9fff]/);}
  doc.querySelector('.level-menu-content').scrollTop=700;
  app.document.querySelector('[data-track="engine"]').dispatchEvent(new app.window.Event('click',{bubbles:true}));assert.equal(app.document.querySelectorAll('#level-list [data-level]').length,9);assert.ok(app.document.querySelector('#level-list [data-level="placement"]'));assert.doesNotMatch(app.document.querySelector('#level-menu').textContent,/[\u3400-\u9fff]/);
  assert.equal(doc.querySelector('[data-level-group]'),null);assert.equal(doc.querySelector('#level-list').classList.contains('grouped-levels'),false);
@@ -264,7 +292,7 @@ test('a failed celebration cannot strand a valid completion or take away its rew
 });
 test('all reusable-network milestones celebrate, while fixed prologue rewards are collected for later building lessons',async()=>{
  const app=boot(),M=app.c.NeuralPrologue,doc=app.document,seen=[];let completedPrologue;
- for(const id of ['original-ffn','pack-ffn','pack-scores','plain-ffn','swiglu','ffn','encoder-decoder','block'])assert.ok(M.fusions[id],id+' has a collection milestone');
+ for(const id of ['original-ffn','softmax','plain-ffn','swiglu','ffn','encoder-decoder','block'])assert.ok(M.fusions[id],id+' has a collection milestone');
  app.c.collect=reward=>{seen.push(app.eval('stageId'));assert.equal(app.eval('levelPassed()'),true);assert.ok(!doc.querySelector('#level-complete').open);assert.ok(doc.querySelector('[data-add-module="'+reward.kind+'"]'));};app.eval('world.fuse=window.collect');
  for(const [id,reward]of Object.entries(M.fusions)){
   app.eval(`switchLevel('${id}');state=M.solutions(stageId)`);const saved=app.eval('JSON.stringify(state)'),count=seen.length;
@@ -279,9 +307,9 @@ test('all reusable-network milestones celebrate, while fixed prologue rewards ar
  }
  assert.deepEqual(seen,Object.keys(M.fusions));
  const reload=boot(completedPrologue,'#original-ffn');assert.equal(reload.document.querySelector('#module-shelf').hidden,false);assert.ok(reload.eval('state.nodes.every(n=>n.links.every(x=>x===null))'),'collected rewards do not prewire a new prologue attempt');
- for(const id of ['pack-ffn','pack-scores']){
-  const fresh=boot(new Map(),'#'+id),kind=M.fusions[id].kind;
-  assert.ok(fresh.document.querySelector('[data-add-module="'+kind+'"]'),'the packaging lesson can use the already taught block before passing');
+ for(const [id,kind]of [['workshop','relu-ffn'],['pack-scores','original-weights']]){
+  const fresh=boot(new Map(),'#'+id);
+  assert.ok(fresh.document.querySelector('[data-add-module="'+kind+'"]'),'the reuse lesson can use the already taught block before passing');
   fresh.eval(`chooseModule('${kind}')`);assert.equal(fresh.eval('placeModule(0,0)'),true);
  }
 });
@@ -597,12 +625,12 @@ test('expanded shelves preserve an old circuit, palette order and completion bad
  assert.ok(app.document.querySelector('[data-add-module="v"]'));assert.equal(app.document.querySelector('[data-add-module="softmax"]'),null);
 });
 
-test('packaging introductions explain the old operations in both languages',()=>{
- for(const language of ['zh-CN','en-US'])for(const [id,kind]of [['pack-ffn','relu-ffn'],['pack-scores','original-weights']]){
+test('scoring reuse explains the existing module in both languages',()=>{
+ for(const language of ['zh-CN','en-US'])for(const [id,kind]of [['pack-scores','original-weights']]){
   const app=boot(new Map(),'#'+id,[language]),doc=app.document;
   assert.equal(app.eval('state.nodes.length'),0);assert.equal(app.eval('state.sink'),null);
   assert.ok(doc.querySelector('.package-primer[open]'));assert.ok(doc.querySelector('[data-package="'+kind+'"]'));
-  assert.match(doc.querySelector('#mission-reason-example').textContent,id==='pack-ffn'?/ReLU/:/QKᵀ/);
+  assert.match(doc.querySelector('#mission-reason-example').textContent,/QKᵀ/);
   if(language==='en-US')assert.doesNotMatch(doc.querySelector('.mission').textContent,/[\u3400-\u9fff]/);
  }
 });
@@ -974,7 +1002,7 @@ test('causal guidance explains visibility and score provenance; the screenshot b
 
 test('every playable lesson has a bilingual structure location, valid focus and a distinct outlet contract',()=>{
  const app=boot(),M=app.c.NeuralPrologue,map=M.structureMap;
- const ids=Object.values(M.routes).flatMap(r=>Array.from(r.ids));assert.equal(ids.length,59);assert.deepEqual(new Set(Object.keys(map.lessons)),new Set(ids));
+ const ids=Object.values(M.routes).flatMap(r=>Array.from(r.ids));assert.equal(ids.length,58);assert.deepEqual(new Set(Object.keys(map.lessons)),new Set(ids));
  for(const lang of ['zh','en']){
   app.c.I18n.setPreference(lang);
   for(const id of ids){
@@ -1162,8 +1190,8 @@ test('the hint button opens the full optional reference and closes without chang
  app.eval("switchLevel('transformer-demo')");assert.equal(button.hidden,false);assert.equal(button.disabled,false);button.onclick();assert.ok(dialog.open);
  app.c.I18n.setPreference('en');assert.equal(doc.querySelector('#structure-title').textContent,'Level hint');assert.doesNotMatch(doc.querySelector('#structure-dialog-content').textContent,/[\u3400-\u9fff]/);
  doc.querySelector('#structure-close').onclick();app.eval("switchLevel('wire');state=M.solutions('wire')");button.onclick();await app.eval('run()');assert.equal(dialog.open,false);assert.equal(app.eval('levelPassed()'),true);
- app.eval('renderLevelMenu()');assert.match(doc.querySelector('#level-track-main').textContent,/31 levels/);
- app.c.I18n.setPreference('zh');app.eval('renderLevelMenu()');assert.match(doc.querySelector('#level-track-main').textContent,/共 31 关/);
+ app.eval('renderLevelMenu()');assert.match(doc.querySelector('#level-track-main').textContent,/30 levels/);
+ app.c.I18n.setPreference('zh');app.eval('renderLevelMenu()');assert.match(doc.querySelector('#level-track-main').textContent,/共 30 关/);
 });
 
 test('masked head explanation distinguishes whole heads from Q and K using real independent reading weights',()=>{

@@ -355,19 +355,17 @@ for(const id of ['encoder-layer','decoder-self','cross-attention','decoder-layer
  const links=solutions[id];solutions[id]=Object.fromEntries(Object.entries(links).map(([k,v])=>[rename(k),Array.isArray(v)?v.map(rename):rename(v)]));
  if(id!=='encoder-decoder'){l.sourceDim=l.sinkDim=12;l.shape='3 × 4';}
 }
-lesson('pack-ffn',L('把三步收进一个组件','Package three steps as one module'),['relu-ffn'],
- L('用组合组件复现刚学过的 FFN','Reproduce the familiar FFN with a packaged module'),
- L('台面仍然是空的。组件架多了一块“原版 FFN”：它内部保留线性投影、ReLU、降维投影。自己放置并接线，让出口得到与这三步相同的结果；也可以用旧组件重新搭一遍。','The table is empty. The shelf now includes Original FFN: it contains the linear projection, ReLU and down projection. Place and wire it to reproduce those three steps, or rebuild them with the familiar modules.'),
- L('网络变大后，可以把反复使用的一段计算收成组件，台面上只留下输入和输出。内部的权重、ReLU 和计算顺序都没有改变。','As a network grows, a reusable computation can become one module with input and output ports. Its weights, ReLU and operation order remain unchanged.'),
- L('这是计算图的封装，不是把三步乘成一块矩阵。ReLU 仍在中间按输入的正负工作；新旧接法应对所有测试输入给出相同结果。','This packages a computation graph; it does not multiply the three steps into one matrix. ReLU still acts on the signs of its inputs. Both versions must agree for every test input.'),
- {'relu-ffn':['R'],sink:'relu-ffn'},classicFFN,{scalar:true,buildable:true,maxModules:5,packages:['relu-ffn']});
-lesson('pack-scores',L('把匹配过程收进一个组件','Package the matching computation'),['original-weights'],
+lesson('pack-scores',L('用上刚组好的打分模块','Use the scoring module you just built'),['original-weights'],
  L('用组合组件复现注意力权重','Reproduce attention weights with a packaged module'),
- L('把输入送进“打分与 Softmax”，再把结果接到出口。它内部仍由 Q/K 投影、缩放点积和 Softmax 组成。旧组件都还在，也可以自己接出相同的计算。','Send the input through Scores and Softmax and wire its result to the outlet. Inside are Q/K projections, scaled dot products and Softmax. The familiar modules remain available for an equivalent circuit.'),
- L('下一步要学习怎样按比例读取 V，先把已经学过的匹配计算收在一起。这个组件只输出比例；V 的内容尚未被读取。','The next lesson reads V in proportion to attention weights. Packaging the familiar matching computation lets us focus on that new operation. This module outputs proportions; it has not read any value content.'),
+ L('上一关已经合成“打分与 Softmax”。本关把它拖上台面并接好输入和出口，复用相同的注意力权重计算；也可以用旧组件搭出相同结果。这里不会再生成一个新组件。','The previous lesson already packaged Scores and Softmax. Place it on the table and connect its input and outlet to reuse the same attention-weight calculation, or build the equivalent result with the earlier parts. This lesson does not create another new module.'),
+ L('下一步要学习怎样按比例读取 V。先学会使用已经合成的打分模块，就能把注意力放在新增的内容汇合上。这个组件只输出比例，V 的内容仍留给后续组件读取。','Next you will read V in proportion to attention weights. Practicing the existing scoring module first lets you focus on the new aggregation operation. The module supplies proportions; later modules still need to read V.'),
  L('Q/K → 打分 → Softmax 的计算完全保留，三个位置彼此可见，没有遮罩或 RoPE。封装后的 3 × 3 输出就是前一关的注意力权重。','The Q/K → scores → Softmax computation is preserved. All three positions remain visible, with no mask or RoPE. Its 3 × 3 output is exactly the attention weights from the preceding lesson.'),
  {'original-weights':['R'],sink:'original-weights'},unmaskedWeights,{sinkDim:9,shape:'3 × 2 → 3 × 3',buildable:true,maxModules:6,attentionReadout:true,packages:['original-weights']});
 Object.assign(M.levels,added);
+// The FFN reuse exercise already lives in the prologue. Retired links continue
+// at the next real lesson; their saved circuits remain under the old key.
+M.levelRedirects={...(M.levelRedirects||{}),'pack-ffn':'add-norm'};
+M.resolveLevelId=id=>{const target=Object.hasOwn(M.levelRedirects,id)?M.levelRedirects[id]:id;return Object.hasOwn(M.levels,target)?target:null;};
 // Old scoring saves may contain parts that were formerly taught before this
 // lesson. Preserve those placed parts without offering them early on the shelf.
 M.levels['vocabulary-scores'].legacyInventory={'original-head':4,'target-embed':2,'original-transformer':2};
@@ -382,8 +380,9 @@ for(const [ids,prefix,board]of [[originalPrologue,L('序章 / ','Prologue / '),'
  if(l.original){delete l.initialLinks;delete l.initialSink;}
 });
 // Bridge lessons have their own labels so existing chapter numbers and hashes stay stable.
-const bridges={'add-norm':'pack-ffn','weighted-sum':'pack-scores','decoder-self':'masked-multihead'};
-for(const [i,id]of Object.values(bridges).entries())Object.assign(M.levels[id],{chapter:L('组件组合 / 0'+(i+1),'Packaging / 0'+(i+1)),boardText:'PACKAGING / 0'+(i+1),original:true});
+const bridges={'weighted-sum':'pack-scores','decoder-self':'masked-multihead'};
+Object.assign(M.levels['pack-scores'],{chapter:L('组件复用 / 01','Module reuse / 01'),boardText:'MODULE REUSE / 01',original:true});
+Object.assign(M.levels['masked-multihead'],{chapter:L('组件组合 / 01','Packaging / 01'),boardText:'PACKAGING / 01',original:true});
 M.routes.main={name:L('主线 · 原版基础','Main · Original Transformer'),description:L('先用 ReLU FFN、LayerNorm 和正弦位置编码打基础，再从单头、多头搭到编码器与解码器。所有起点都需要自己连线。','Start with ReLU FFNs, LayerNorm and sinusoidal positions, then build from single heads to multi-head attention and the encoder–decoder. Every starting circuit needs your wiring.'),ids:[...originalPrologue,...originalNetwork.flatMap(id=>bridges[id]?[bridges[id],id]:[id])]};
 M.routes.modern={name:L('扩展 · 现代模型','Extensions · Modern models'),description:L('学过原版后再比较：SiLU 与 SwiGLU 改了 FFN，RMSNorm 与 Pre-LN 改了归一化，RoPE 改了位置的用法。旧关卡与存档仍可继续。','After the original, compare how SiLU and SwiGLU change FFNs, RMSNorm and Pre-LN change normalization, and RoPE changes position handling. Existing levels and saves remain available.'),ids:modern};
 M.routes={main:M.routes.main,modern:M.routes.modern,engine:M.routes.engine};
@@ -393,7 +392,7 @@ for(const [track,route]of Object.entries(M.routes))route.ids.forEach((id,i)=>{M.
 M.routes.main.description=L('从组件到完整模型：先搭编码器，再搭解码器，最后连接两端。输入准备、组件扩展和结构组装会分别标明。','Build from components to a complete model: assemble the encoder, build the decoder, then connect them. Input preparation, component extensions and assembly are labeled separately.');
 M.routes.main.groups=[
  {id:'workbench',label:L('动手入门','Getting started'),title:L('序章 · 学会动手搭网络','Prologue · Learn to build'),description:L('先学投影与 ReLU，再搭出原版 FFN；从组件架取用这个 FFN，最后在它外面加残差。','Learn projections and ReLU, assemble the original FFN, take that FFN from the shelf, then add a residual around it.'),ids:originalPrologue},
- {id:'foundations',label:L('词向量与归一化','Inputs and normalization'),title:L('基础准备 · 词向量、位置与归一化','Foundations · Embeddings, positions and normalization'),description:L('把词变成带位置的特征，再学习归一化，以及原版“先相加，再归一化”的结构。后面的完整层会反复用到它们。','Turn tokens into position-aware features, then learn normalization and the original add-then-normalize pattern. Complete layers will reuse these building blocks.'),ids:['embedding','positions','layernorm','pack-ffn','add-norm']},
+ {id:'foundations',label:L('词向量与归一化','Inputs and normalization'),title:L('基础准备 · 词向量、位置与归一化','Foundations · Embeddings, positions and normalization'),description:L('把词变成带位置的特征，再学习归一化，以及原版“先相加，再归一化”的结构。后面的完整层会反复用到它们。','Turn tokens into position-aware features, then learn normalization and the original add-then-normalize pattern. Complete layers will reuse these building blocks.'),ids:['embedding','positions','layernorm','add-norm']},
  {id:'attention',label:L('搭出注意力','Build attention'),title:L('注意力 · 从单头扩展到多头','Attention · From one head to several'),description:L('先学 Q/K 怎样匹配、V 怎样提供内容，再拼成单头。第 10 关扩展头的数量，后面的编码器会复用这套结构。','Learn how Q/K match and V supplies content, then assemble one head. Level 10 adds more heads; the encoder will reuse that structure.'),ids:['qkv','scores','softmax','pack-scores','weighted-sum','self-attention','multihead']},
  {id:'encoder',label:L('组装编码器','Assemble the encoder'),title:L('编码器 · 准备输入，再组装整层','Encoder · Prepare the input, then assemble the layer'),description:L('第 11 关换用每词四个特征的输入；第 12 关沿用已学的双头结构，配上相应尺寸的权重，和 FFN、残差、LayerNorm 组成一层。','Level 11 prepares four features per token. Level 12 reuses the two-head structure with matching weight sizes, then combines it with the FFN, residuals and LayerNorm into one layer.'),ids:['wider-features','encoder-layer'],connections:{sources:[{label:L('已学的计算','Familiar computations'),text:L('10 多头 + FFN + 残差 + LayerNorm','10 Multi-head + FFN + residuals + LayerNorm')},{label:L('准备的输入','Prepared input'),text:L('11 四维词向量与位置','11 Four-feature embeddings and positions')}],target:{label:L('组合起来','Assemble'),text:L('12 一层编码器','12 One encoder layer')}}},
  {id:'decoder',label:L('开始搭解码器','Build the decoder'),title:L('开始搭解码器 · 限制读取，再接入源句','Start the decoder · Limit reading, then bring in the source'),description:L('先用第 13 关与组合关准备好因果注意力，再连续搭解码器：14 整理目标前文，15 读取源句，16 加入 FFN 并组装整层。','Prepare causal attention in level 13 and the packaging lesson, then build the decoder: 14 processes target context, 15 reads the source, and 16 adds the FFN and assembles the layer.'),ids:['causal','masked-multihead','decoder-self','cross-attention','decoder-layer'],connections:{sources:[{label:L('目标侧','Target side'),text:L('13 遮罩 → 组合双头 → 14 残差与归一化','13 Mask → Package both heads → 14 Residual and normalization')},{label:L('源句侧','Source side'),text:L('12 编码器的输出','12 Encoder output')}],target:{label:L('在这里汇合','Meet here'),text:L('15 交叉注意力','15 Cross-attention')}}},
@@ -451,12 +450,10 @@ for(const id of [...originalNetwork,...Object.values(bridges)]){const l=M.levels
 // The engine track uses its own costed tasks, not raw arithmetic operators.
 const sequenceKind=kind=>Math.max(...M.definitions[kind].ins,M.definitions[kind].out)>4;
 // A reward has exactly the same inputs, weights and output as its lesson.
-// New rewards appear after a win; packaging bridges may use an already taught block.
+// Each new package has one introduction. Reuse lessons do not award it again.
 M.fusions={
  'original-ffn':{kind:'relu-ffn',inputs:['R']},
- 'pack-ffn':{kind:'relu-ffn',inputs:['R']},
  softmax:{kind:'original-weights',inputs:['R']},
- 'pack-scores':{kind:'original-weights',inputs:['R']},
  'self-attention':{kind:'single-attention',inputs:['R']},
  multihead:{kind:'two-head-attention',inputs:['R']},
  'wider-features':{kind:'source-embed',inputs:['R']},

@@ -1942,7 +1942,7 @@ test('scoring cards explain the divisor and compare downstream Softmax using rea
 test('shelf cards inspect every available kind without placing a node, including exhausted stock',async()=>{
  const app=await boot({languages:['en-US']}),doc=app.document,M=app.c.NeuralPrologue;doc.querySelector('#welcome').close();
  const event=(target,type,properties={})=>{const e=new app.window.Event(type,{bubbles:true,cancelable:true});Object.assign(e,properties);target.dispatchEvent(e);};
- for(const level of ['workshop','scores','pack-ffn','pack-scores','multihead','encoder-layer','encoder-decoder','ffn','attention','block']){
+ for(const level of ['workshop','scores','add-norm','pack-scores','multihead','encoder-layer','encoder-decoder','ffn','attention','block']){
   app.api.switchLevel(level);const saved=JSON.stringify(app.api.getState()),view=app.view();
   for(const kind of Object.keys(M.inventory(M.levels[level]))){
    if(M.shelfKind(M.levels[level],kind)!==kind){assert.ok(doc.querySelector(`[data-add-module="${M.shelfKind(M.levels[level],kind)}"]`),'identical operators share a real shelf entry');continue;}

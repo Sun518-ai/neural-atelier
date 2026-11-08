@@ -81,7 +81,7 @@ test('QKV accepts only V at the outlet and ignores optional Q/K branches',()=>{
 const differs=(id,edit)=>{const s=M.solutions(id);edit(s);assert.ok(M.samplesFor(id).slice(0,M.levels[id].sampleCount).some(t=>{const e=M.evaluate(s,t.v);return e.error||!close(e.output,M.reference(t.v,id));}),id+' must reject this incorrect computation');};
 
 test('original concepts are completed before optional modern and engine tracks',()=>{
- assert.equal(M.routes.main.ids.length,31);assert.equal(M.routes.modern.ids.length,13);assert.equal(M.routes.engine.ids.length,9);
+ assert.equal(M.routes.main.ids.length,30);assert.equal(M.routes.modern.ids.length,13);assert.equal(M.routes.engine.ids.length,9);
  assert.deepEqual(plain(M.routes.main.ids.slice(0,7)),['wire','projection','relu','down-projection','original-ffn','workshop','residual']);
  for(const id of M.routes.main.ids){
   const l=M.levels[id];assert.equal(l.original,true);
@@ -122,7 +122,7 @@ test('learned shelves accumulate in teaching order without exposing future opera
 
 test('collected modules compute the same complete circuit, with the original input and output widths',()=>{
  for(const [id,reward]of Object.entries(M.fusions)){
-  const level=M.levels[id],definition=M.definitions[reward.kind],packed=M.initial(level.buildable?id:'pack-ffn');packed.nodes=[];packed.sink=null;
+  const level=M.levels[id],definition=M.definitions[reward.kind],packed=M.initial(level.buildable?id:'workshop');packed.nodes=[];packed.sink=null;
   assert.equal(definition.out,level.sinkDim);
   assert.deepEqual(Array.from(definition.ins),Array.from(reward.inputs,()=>level.sourceDim||2));
   assert.ok(M.addNode(packed,reward.kind,0,0),id);
@@ -141,9 +141,22 @@ test('collected modules compute the same complete circuit, with the original inp
  assert.ok(close(M.operations['swiglu-residual']([r,z]),r.map((x,i)=>x+f[i])),'R and Z remain independent inputs, with normalization outside this package');
 });
 
-test('packaging bridges require wiring and accept numerically equivalent expanded graphs',()=>{
+test('each packaged component has one introduction and FFN reuse stays in the prologue',()=>{
+ const rewards=Object.values(M.fusions).map(r=>r.kind);
+ assert.equal(new Set(rewards).size,rewards.length);
+ assert.equal(M.packageOrigin('relu-ffn').id,'original-ffn');
+ assert.equal(M.packageOrigin('original-weights').id,'softmax');
+ assert.equal(M.fusions.workshop,undefined);assert.equal(M.fusions['pack-scores'],undefined);
+ assert.equal(M.levels['pack-ffn'],undefined);assert.equal(M.resolveLevelId('pack-ffn'),'add-norm');
+ assert.equal(M.resolveLevelId('unknown'),null);assert.equal(M.resolveLevelId('constructor'),null);
+ assert.equal(M.levels.layernorm.next,'add-norm');
+ const ffnOnly=M.solutions('workshop');ffnOnly.levelId='add-norm';
+ assert.ok(M.samplesFor('add-norm').some(({v})=>!close(M.evaluate(ffnOnly,v).output,M.reference(v,'add-norm'))),'the next lesson needs residual addition and normalization to match its actual target');
+});
+
+test('scoring module reuse requires wiring and accepts numerically equivalent expanded graphs',()=>{
  const main=Array.from(M.routes.main.ids);
- for(const [id,before,after,expanded]of [['pack-ffn','layernorm','add-norm','original-ffn'],['pack-scores','softmax','weighted-sum','softmax']]){
+ for(const [id,before,after,expanded]of [['pack-scores','softmax','weighted-sum','softmax']]){
   assert.equal(main[main.indexOf(id)-1],before);assert.equal(main[main.indexOf(id)+1],after);
   const initial=M.initial(id);assert.equal(initial.nodes.length,0);assert.equal(initial.sink,null);assert.ok(M.evaluate(initial,M.samplesFor(id)[0].v).error);
   const packed=M.solutions(id),unpacked=M.solutions(expanded);unpacked.levelId=id;

@@ -1,5 +1,5 @@
 import {cardFor,exampleFor,scoreComparison,aggregationExample} from './module-cards.js?v=ffn-progression-1';
-import {createProgress} from './level-progress.js?v=ffn-progression-1';
+import {createProgress} from './level-progress.js?v=ffn-dedup-1';
 const M=window.NeuralPrologue,$=s=>document.querySelector(s),clone=x=>JSON.parse(JSON.stringify(x));
 const fmt=x=>x===-Infinity?'−∞':Number.isFinite(x)?Number(x.toFixed(2)).toString():'?';
 const vector=v=>v?'['+v.map(fmt).join(', ')+']':I18n.t("等待输入");
@@ -20,7 +20,7 @@ I18n.prepare({definitions:M.definitions,levels:M.levels,routes:M.routes,controls
 for(const id of Object.keys(M.levels))I18n.prepare(M.samplesFor(id));
 I18n.activate();
 const progress=createProgress(M,localStorage);
-function levelFromHash(){try{const id=decodeURIComponent((window.location?.hash||'').slice(1));return Object.prototype.hasOwnProperty.call(M.levels,id)?id:null;}catch{return null;}}
+function levelFromHash(){try{const id=decodeURIComponent((window.location?.hash||'').slice(1));return M.resolveLevelId(id);}catch{return null;}}
 function writeLevelHash(id,replace=false){
  const loc=window.location,nav=window.history;if(!loc||!nav||loc.hash==='#'+id)return;
  nav[replace?'replaceState':'pushState'](null,'',loc.pathname+loc.search+'#'+id);
@@ -200,8 +200,8 @@ function stageChrome(){
   return `<tr><td>${vector(input)}</td><td><span data-factor="content">${fmt(u)}</span> × <span data-factor="scale">${fmt(s)}</span> ≈ <strong data-factor="result">${fmt(u*s)}</strong></td></tr>`;
  }).join('')}</tbody></table>`:'';
  if(c.packages?.length){
-  const introduction=c.id==='pack-ffn'||c.id==='pack-scores';
-  $('#mission-reason-example').innerHTML+=c.packages.map(kind=>`<details class="package-primer" ${introduction?'open':''}><summary>${c.packageLabel||I18n.t('新组合组件')} · ${M.definitions[kind].name}</summary>${packageDiagram(kind)}</details>`).join('');
+  const introduction=c.id==='pack-scores';
+  $('#mission-reason-example').innerHTML+=c.packages.map(kind=>`<details class="package-primer" ${introduction?'open':''}><summary>${c.packageLabel||(c.id==='pack-scores'?I18n.t('已收录组件'):I18n.t('新组合组件'))} · ${M.definitions[kind].name}</summary>${packageDiagram(kind)}</details>`).join('');
  }
  $('#mission-reason-example').hidden=!$('#mission-reason-example').hasChildNodes();
  $('.route').innerHTML=`${c.routeInput?'<span>'+c.routeInput+'</span><i>→</i>':I18n.t("<span>输入 token</span><i>→</i>")}${c.id==='ffn'?I18n.t("<span>归一化输入 · 已就绪</span><i>→</i>"):''}<strong>${c.concept}</strong><i>→</i><span>${c.outputTitle}${I18n.t("</span><span class=\"route-tail\">教学缩尺 ")}${c.shape}</span>`;
@@ -230,6 +230,7 @@ function levelMenu(fromHome=false){
 }
 function enterSelectedLevel(){document.body.dataset.screen='game';$('#level-menu').close();$('#run').focus?.({preventScroll:true});}
 function switchLevel(id,fromHash=false){
+ id=M.resolveLevelId(id);
  if(busy||!M.levels[id])return;closeCompletion();if(id===stageId){enterSelectedLevel();return;}
  save();world?.beforeStage();stageId=id;state=progress.load(id);progress.select(id);
  demoSamples=null;history=[];selected=pending=current=fault=selectedWire=placing=actionNode=lastFusionKind=null;engineReport=null;results=[];sample=0;level=99;
