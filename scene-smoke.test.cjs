@@ -2235,3 +2235,27 @@ test('generation module cards show computed words and the retained context in bo
   }
  }
 });
+
+test('failed module placement shows a localized drop-point toast for clicks and drags without consuming stock',async()=>{
+ for(const language of ['zh-CN','en-US']){
+  const timers=noticeTimers(),app=await boot({timers,languages:[language]}),doc=app.document,M=app.c.NeuralPrologue,T=app.c.T;
+  doc.querySelector('#welcome').close();app.api.switchLevel('ffn');app.api.chooseModule('project');assert.equal(app.api.placeModule(-3,0),true);
+  const host=doc.querySelector('#scene'),world=app.api.getWorld(),saved=JSON.stringify(app.api.getState()),stock=M.stock(app.api.getState(),'project');
+  host.getBoundingClientRect=()=>({left:0,top:0,width:1400,height:760,right:1400,bottom:760});
+  const fire=(target,type,props={})=>{const e=new app.window.Event(type,{bubbles:true,cancelable:true});Object.assign(e,props);target.dispatchEvent(e);};
+  const drop=()=>{const p=new T.Vector3(-3,0,0).project(app.camera());return {clientX:(p.x+1)*700,clientY:(1-p.y)*380};};
+  const check=()=>{const toast=doc.querySelector('.connection-toast');assert.ok(toast);assert.equal(toast.dataset.errorKind,'placement');assert.equal(toast.getAttribute('role'),'status');assert.equal(toast.parentElement.id,'labels');assert.match(toast.textContent,language==='en-US'?/Module not placed.*empty spot/:/组件未放置.*这里放不下/);assert.equal(doc.querySelector('.port.rejected'),null);assert.equal(JSON.stringify(app.api.getState()),saved);assert.equal(M.stock(app.api.getState(),'project'),stock);return toast;};
+  app.api.chooseModule('project');fire(host,'pointerdown',drop());let toast=check();
+  Object.defineProperties(toast,{offsetWidth:{value:260},offsetHeight:{value:70}});world.labels();
+  const before=[toast.style.left,toast.style.top];fire(host,'wheel',{deltaY:150});assert.notDeepEqual([toast.style.left,toast.style.top],before,'notice follows its world-space drop point');
+  assert.equal(doc.querySelectorAll('.connection-toast').length,1);timers.tick(3599);check();timers.tick(1);assert.equal(doc.querySelector('.connection-toast'),null);
+  fire(doc.querySelector('[data-add-module="project"]'),'pointerdown',{clientX:60,clientY:100});fire(doc,'pointermove',drop());fire(doc,'pointerup',drop());timers.tick(0);check();
+  assert.ok(!app.scenes.at(-1).children.some(o=>o.userData.placementGhost),'drag preview is cleared but the rejection remains');
+  fire(doc,'keydown',{key:'Escape'});assert.equal(doc.querySelector('.connection-toast'),null);assert.equal(timers.pending,0);
+  app.api.chooseModule('project');const bounds=M.bounds(M.levels.ffn);assert.equal(app.api.placeModule(bounds.right+2,bounds.front+2),false);toast=check();
+  Object.defineProperties(toast,{offsetWidth:{value:260},offsetHeight:{value:70}});world.labels();
+  assert.ok(parseFloat(toast.style.left)>=12&&parseFloat(toast.style.left)<=1400-260-12);assert.ok(parseFloat(toast.style.top)>=12&&parseFloat(toast.style.top)<=760-70-12);
+  assert.equal(app.api.placeModule(2,0),true,'a rejected click can be retried at a valid spot');assert.equal(doc.querySelector('.connection-toast'),null);assert.equal(timers.pending,0);assert.equal(app.api.getState().nodes.length,2);
+  assert.deepEqual([...app.c.I18n.missing],[]);
+ }
+});

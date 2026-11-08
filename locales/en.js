@@ -858,6 +858,7 @@ globalThis.AtelierEnglish = {
   "，选择连线": ", select wire",
   "点台面放置组件；Esc 取消。": "Click the workbench to place the module. Esc cancels.",
   "这里放不下，换一处空位。": "Choose an empty spot with enough room.",
+  "组件未放置": "Module not placed",
   "组件已放置。": "Module placed.",
   "组件已收回，相关连线已移除。": "Module returned; its wires were removed.",
   "已打乱摆放，连线保持不变。": "Layout shuffled. Your wiring is preserved.",

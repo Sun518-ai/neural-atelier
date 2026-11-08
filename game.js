@@ -352,7 +352,7 @@ function renderShelf(){
  world?.syncShelf?.();
 }
 function chooseModule(kind){if(busy||!stage().buildable||!shelfUnlocked(kind)||!M.canAdd(state,kind)||world?.focused())return;pending=selectedWire=actionNode=null;placing=kind;world?.clearConnectionError?.();world?.clearPreview?.();world?.labels();say(I18n.t("拖到台面松开；也可以点空位放下。"));}
-function placeModule(x,z){if(!placing||busy)return false;const next=clone(state);if(!M.addNode(next,placing,x,z)){say(I18n.t("这里放不下，换一处空位。"),'error');return false;}checkpoint();selected=next.nodes.at(-1).id;state=next;placing=null;world?.clearPlacement?.();changed();say(I18n.t("组件已放置。"));return true;}
+function placeModule(x,z){if(!placing||busy)return false;const next=clone(state);if(!M.addNode(next,placing,x,z)){const message=I18n.t("这里放不下，换一处空位。");say(message,'error');world?.showPlacementError?.(message,x,z);return false;}checkpoint();selected=next.nodes.at(-1).id;state=next;placing=null;world?.clearPlacement?.();changed();say(I18n.t("组件已放置。"));return true;}
 function hideShelfTooltip(){
  const tip=$('#shelf-tooltip');tip.hidden=true;
  document.querySelector('[aria-describedby="shelf-tooltip"]')?.removeAttribute('aria-describedby');
@@ -485,17 +485,25 @@ try{
   connectionNotice?.el.remove();connectionNotice=null;
   overlay.querySelectorAll('.port.rejected').forEach(el=>el.classList.remove('rejected'));
  }
- function showConnectionError(message,to,port){
-  clearConnectionError();if(to!=='sink'&&!state.nodes.some(n=>n.id===to))return;
+ function showSceneError(heading,message,anchor){
+  clearConnectionError();
   const el=document.createElement('div');el.className='connection-toast';el.setAttribute('role','status');el.setAttribute('aria-live','polite');el.setAttribute('aria-atomic','true');
-  const title=document.createElement('strong'),text=document.createElement('span');title.textContent=I18n.t('连线未接上');text.textContent=message;el.append(title,text);overlay.appendChild(el);
-  const notice={el,to,port};connectionNotice=notice;render();
+  const title=document.createElement('strong'),text=document.createElement('span');title.textContent=heading;text.textContent=message;el.append(title,text);overlay.appendChild(el);
+  const notice={el,...anchor};el.dataset.errorKind=anchor.position?'placement':'connection';connectionNotice=notice;render();
   connectionTimer=setTimeout(()=>{if(connectionNotice===notice)clearConnectionError();},3600);
  }
+ function showConnectionError(message,to,port){
+  if(to!=='sink'&&!state.nodes.some(n=>n.id===to)){clearConnectionError();return;}
+  showSceneError(I18n.t('连线未接上'),message,{to,port});
+ }
+ function showPlacementError(message,x,z){
+  if(!Number.isFinite(x)||!Number.isFinite(z))return;
+  showSceneError(I18n.t('组件未放置'),message,{position:new T.Vector3(x,0,z)});
+ }
  function syncConnectionError(w,h){
-  if(!connectionNotice)return;const {el,to,port}=connectionNotice;
-  const target=overlay.querySelector(`[data-input="${to}:${port}"]`);target?.classList.add('rejected');
-  const [x,y]=project(point(to,'in',port)),width=el.offsetWidth,height=el.offsetHeight,gap=(target?.offsetHeight||30)/2+12;
+  if(!connectionNotice)return;const {el,to,port,position}=connectionNotice;
+  const target=position?null:overlay.querySelector(`[data-input="${to}:${port}"]`);target?.classList.add('rejected');
+  const [x,y]=project(position||point(to,'in',port)),width=el.offsetWidth,height=el.offsetHeight,gap=(target?.offsetHeight||30)/2+12;
   const left=Math.max(12,Math.min(w-width-12,x-width/2)),above=y-height-gap>=12;
   el.style.left=left+'px';el.style.top=Math.max(12,Math.min(h-height-12,above?y-height-gap:y+gap))+'px';
   el.dataset.side=above?'above':'below';el.style.setProperty('--tip-x',Math.max(16,Math.min(width-16,x-left))+'px');
@@ -1280,5 +1288,5 @@ try{
  function beforeStage(){clearConnectionError();if(focusId)leaveFocus();cancelAnimationFrame(cameraFrame);transitioning=false;host.setAttribute('aria-busy','false');drag=lastTap=null;clearPreview();clearPlacement();clearPackets();elements=[];overlay.replaceChildren();}
  function setStage(){followSeed=null;followZoom=null;setFollow(!!stage().floating);cameraPan=false;$('#demo-pan').setAttribute('aria-pressed','false');art.surroundings(samples(),stage(),scenePalette());yaw=.05;pitch=.8;zoom=stage().zoom;cameraTarget.set(0,0,0);rebuild();}
  function relocalize(){clearConnectionError();art.surroundings(samples(),stage(),scenePalette());rebuild();packets.forEach(p=>{p.el.querySelector('.packet-title').textContent=p.motion==='feedback'?I18n.t('接回输入'):packetIdentity(p.el.dataset.from);if(p.sequenceProjection)p.updateEquation(p.column,p.projectionRow);if(p.motion==='wire'&&(definition(p.el.dataset.from)?.type==='pick'||kindOf(p.el.dataset.from)==='feedback'))p.cells.textContent=M.readTokens(p.values);if(p.appending){p.cells.textContent=M.readTokens(p.input);p.after.textContent=M.readTokens(p.output);}if(p.selection&&p.progress!=null){p.after.textContent=M.readTokens(p.output);p.updateSelection(art.selectionFrame(p.progress,p.input.length/p.output.length,p.output.length));p.outputLabels.forEach(({el},j)=>el.textContent=M.math.vocab[p.output[j]]);}if(p.normalizing&&p.progress!=null)p.updateRMS(normalizationFrame(p.progress,p.centering));if(p.tokenOperation&&p.progress!=null)p.updateToken(art.tokenFrame(p.progress,p.tokenOperation));if(p.motion==='process'&&p.progress!=null)art.processing(p.node.id,p.progress,p.input,p.output,p.color,{sequence:!!stage().sequence,detailed:p.detailed,paired:p.paired,other:p.other,words:p.words?.(),valueWords:p.valueWords?.()});});render();}
- new ResizeObserver(render).observe(host);world={relocalize,labels,rebuild,animate,feedback,finishDemo,fuse,skipFusion:()=>finishFusion(true),clearPackets,showConnectionError,clearConnectionError,clearPreview,clearPlacement,previewAt,previewPlacement,focus,focusShelf,focused:()=>focusId,beforeStage,setStage,syncShelf:()=>syncPlacementGuide(host.clientWidth,host.clientHeight)};$('#loading').hidden=true;rebuild();refresh();
+ new ResizeObserver(render).observe(host);world={relocalize,labels,rebuild,animate,feedback,finishDemo,fuse,skipFusion:()=>finishFusion(true),clearPackets,showConnectionError,showPlacementError,clearConnectionError,clearPreview,clearPlacement,previewAt,previewPlacement,focus,focusShelf,focused:()=>focusId,beforeStage,setStage,syncShelf:()=>syncPlacementGuide(host.clientWidth,host.clientHeight)};$('#loading').hidden=true;rebuild();refresh();
 }catch(e){$('#loading').innerHTML=I18n.t("<strong>3D 台面没有加载成功，请刷新重试。</strong>");say(I18n.t("页面尚未开始运行。"),'error');console.error(e);}
